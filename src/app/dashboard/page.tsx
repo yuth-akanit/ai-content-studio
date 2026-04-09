@@ -51,56 +51,16 @@ export default function DashboardPage() {
 
   async function loadDashboard() {
     try {
-      // Try to get profile
-      const profilesRes = await fetch('/api/profiles');
-      const profiles = await profilesRes.json();
-      const profile = Array.isArray(profiles) && profiles.length > 0 ? profiles[0] : null;
-
-      if (!profile) {
-        setData({
-          stats: { total: 0, byPlatform: {}, byType: {}, recentCount: 0 },
-          recentContents: [],
-          campaigns: [],
-          hasProfile: false,
-          profileId: null,
-        });
-        setLoading(false);
-        return;
+      const res = await fetch('/api/dashboard');
+      const dashboardData = await res.json();
+      
+      if (dashboardData.error) {
+        throw new Error(dashboardData.error);
       }
 
-      // Load content and campaigns
-      const [contentRes, campaignsRes] = await Promise.all([
-        fetch(`/api/content?profile_id=${profile.id}&limit=5`),
-        fetch(`/api/campaigns?profile_id=${profile.id}`),
-      ]);
-
-      const contentData = await contentRes.json();
-      const campaigns = await campaignsRes.json();
-
-      // Calculate stats from contents
-      const allContentsRes = await fetch(`/api/content?profile_id=${profile.id}&limit=1000`);
-      const allContents = await allContentsRes.json();
-      const contents: GeneratedContent[] = allContents.data || [];
-
-      const byPlatform: Record<string, number> = {};
-      const byType: Record<string, number> = {};
-      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-      let recentCount = 0;
-
-      contents.forEach((c) => {
-        byPlatform[c.platform] = (byPlatform[c.platform] || 0) + 1;
-        byType[c.content_type] = (byType[c.content_type] || 0) + 1;
-        if (c.created_at >= sevenDaysAgo) recentCount++;
-      });
-
-      setData({
-        stats: { total: contents.length, byPlatform, byType, recentCount },
-        recentContents: contentData.data || [],
-        campaigns: Array.isArray(campaigns) ? campaigns : [],
-        hasProfile: true,
-        profileId: profile.id,
-      });
-    } catch {
+      setData(dashboardData);
+    } catch (err) {
+      console.error('Failed to load dashboard:', err);
       setData({
         stats: { total: 0, byPlatform: {}, byType: {}, recentCount: 0 },
         recentContents: [],
