@@ -3,6 +3,8 @@ import { getDefaultProfile } from '@/lib/repositories/profiles';
 import { getContentStats, getContents } from '@/lib/repositories/content';
 import { getCampaigns } from '@/lib/repositories/campaigns';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   try {
     // 1. Get default profile
