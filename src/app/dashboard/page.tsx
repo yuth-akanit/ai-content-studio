@@ -93,6 +93,7 @@ export default function DashboardPage() {
   }
 
   if (loading && !data) return <LoadingSpinner text={THAI_UI_LABELS.loading_dashboard} />;
+  if (!data) return null;
 
   const platformEntries = Object.entries(data.stats.byPlatform).sort((a, b) => b[1] - a[1]);
 
