@@ -274,16 +274,6 @@ export async function POST(request: NextRequest) {
       allComments.push(...content.output_payload.suggested_comments);
     }
 
-    const results: {
-      page_id: string;
-      page_name: string;
-      provider: string;
-      success: boolean;
-      post_id?: string;
-      error?: string;
-      comments_posted?: number;
-    }[] = [];
-
     const results = await Promise.all(pages.map(async (page) => {
       const token = page.meta?.access_token || page.access_token;
       const isInstagram = page.meta?.is_instagram === true;
