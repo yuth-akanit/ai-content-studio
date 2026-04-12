@@ -17,7 +17,7 @@ export async function getContents(
   profileId: string,
   filters: ContentFilters = {},
   fields: string = '*'
-): Promise<{ data: GeneratedContent[]; count: number }> {
+): Promise<{ data: any[]; count: number }> {
   const db = getSupabaseServerClient();
   let query = db
     .from(TABLE)
