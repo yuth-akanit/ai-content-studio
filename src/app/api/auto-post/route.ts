@@ -284,69 +284,79 @@ export async function POST(request: NextRequest) {
       comments_posted?: number;
     }[] = [];
 
-    for (const page of pages) {
+    const results = await Promise.all(pages.map(async (page) => {
       const token = page.meta?.access_token || page.access_token;
       const isInstagram = page.meta?.is_instagram === true;
 
-      if (isInstagram) {
-        // Instagram Content Publishing API
-        const postResult = await postToInstagram(
-          token,
-          page.external_id,
-          message,
-          image_urls,
-        );
+      try {
+        if (isInstagram) {
+          const postResult = await postToInstagram(
+            token,
+            page.external_id,
+            message,
+            image_urls,
+          );
 
-        results.push({
-          page_id: page.id,
-          page_name: page.name,
-          provider: 'instagram',
-          success: postResult.success,
-          post_id: postResult.id,
-          error: postResult.error,
-          comments_posted: 0,
-        });
-      } else if (page.provider === 'facebook') {
-        // Facebook Page Feed API
-        const postResult = await postToFacebookPage(
-          token,
-          page.external_id,
-          message,
-          image_urls,
-        );
+          return {
+            page_id: page.id,
+            page_name: page.name,
+            provider: 'instagram',
+            success: postResult.success,
+            post_id: postResult.id,
+            error: postResult.error,
+            comments_posted: 0,
+          };
+        } else if (page.provider === 'facebook') {
+          const postResult = await postToFacebookPage(
+            token,
+            page.external_id,
+            message,
+            image_urls,
+          );
 
-        let commentsPosted = 0;
+          let commentsPosted = 0;
 
-        if (postResult.success && postResult.id && allComments.length > 0) {
-          for (const comment of allComments) {
-            const commentResult = await postCommentToFacebook(
-              token,
-              postResult.id,
-              comment,
-            );
-            if (commentResult.success) commentsPosted++;
+          if (postResult.success && postResult.id && allComments.length > 0) {
+            // Comments can still be sequential within a page if order matters, 
+            // but we could also parallelize them if needed.
+            for (const comment of allComments) {
+              const commentResult = await postCommentToFacebook(
+                token,
+                postResult.id,
+                comment,
+              );
+              if (commentResult.success) commentsPosted++;
+            }
           }
-        }
 
-        results.push({
-          page_id: page.id,
-          page_name: page.name,
-          provider: page.provider,
-          success: postResult.success,
-          post_id: postResult.id,
-          error: postResult.error,
-          comments_posted: commentsPosted,
-        });
-      } else {
-        results.push({
+          return {
+            page_id: page.id,
+            page_name: page.name,
+            provider: page.provider,
+            success: postResult.success,
+            post_id: postResult.id,
+            error: postResult.error,
+            comments_posted: commentsPosted,
+          };
+        } else {
+          return {
+            page_id: page.id,
+            page_name: page.name,
+            provider: page.provider,
+            success: false,
+            error: `Provider "${page.provider}" auto-posting not yet supported`,
+          };
+        }
+      } catch (err) {
+        return {
           page_id: page.id,
           page_name: page.name,
           provider: page.provider,
           success: false,
-          error: `Provider "${page.provider}" auto-posting not yet supported`,
-        });
+          error: err instanceof Error ? err.message : 'Unknown error',
+        };
       }
-    }
+    }));
 
     // Log the posting activity
     const { error: logError } = await supabase.from('post_logs').insert(

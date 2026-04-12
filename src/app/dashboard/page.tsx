@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useProfile } from '@/context/profile-context';
 import { PageHeader } from '@/components/shared/page-header';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -42,6 +43,7 @@ interface DashboardData {
 }
 
 export default function DashboardPage() {
+  const { profile, loading: profileLoading } = useProfile();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -73,10 +75,9 @@ export default function DashboardPage() {
     }
   }
 
-  if (loading) return <LoadingSpinner text={THAI_UI_LABELS.loading_dashboard} />;
-  if (!data) return null;
-
-  if (!data.hasProfile) {
+  if (profileLoading && !data) return <LoadingSpinner text={THAI_UI_LABELS.loading_dashboard} />;
+  
+  if (!profileLoading && !profile) {
     return (
       <div>
         <PageHeader title={THAI_UI_LABELS.dashboard} description="AI Content Studio for Service Business" />
@@ -90,6 +91,8 @@ export default function DashboardPage() {
       </div>
     );
   }
+
+  if (loading && !data) return <LoadingSpinner text={THAI_UI_LABELS.loading_dashboard} />;
 
   const platformEntries = Object.entries(data.stats.byPlatform).sort((a, b) => b[1] - a[1]);
 

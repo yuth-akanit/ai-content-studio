@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, Suspense } from 'react';
+import { useProfile } from '@/context/profile-context';
 import { useSearchParams } from 'next/navigation';
 import { PageHeader } from '@/components/shared/page-header';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -65,8 +66,7 @@ function GeneratePageInner() {
     const contentType = searchParams.get('type') as ContentType || 'promotion_post';
     return { ...defaultInput, platform, content_type: contentType };
   });
-  const [profileId, setProfileId] = useState<string | null>(null);
-  const [profileLoading, setProfileLoading] = useState(true);
+  const { profile, loading: profileLoading } = useProfile();
   const [generating, setGenerating] = useState(false);
   const [result, setResult] = useState<{ content: GeneratedContent; output: ContentOutput } | null>(null);
   const [campaigns, setCampaigns] = useState<{ id: string; name: string }[]>([]);
@@ -78,9 +78,14 @@ function GeneratePageInner() {
   const [analyzingImage, setAnalyzingImage] = useState(false);
 
   useEffect(() => {
-    loadProfile();
     loadSocialPages();
   }, []);
+
+  useEffect(() => {
+    if (profile?.id) {
+      loadCampaigns(profile.id);
+    }
+  }, [profile?.id]);
 
   async function loadSocialPages() {
     try {
@@ -94,21 +99,13 @@ function GeneratePageInner() {
     }
   }
 
-  async function loadProfile() {
+  async function loadCampaigns(pid: string) {
     try {
-      const res = await fetch('/api/profiles');
-      const profiles = await res.json();
-      if (Array.isArray(profiles) && profiles.length > 0) {
-        setProfileId(profiles[0].id);
-        // Load campaigns
-        const campRes = await fetch(`/api/campaigns?profile_id=${profiles[0].id}`);
-        const camps = await campRes.json();
-        if (Array.isArray(camps)) setCampaigns(camps);
-      }
-    } catch {
-      // No profile
-    } finally {
-      setProfileLoading(false);
+      const campRes = await fetch(`/api/campaigns?profile_id=${pid}`);
+      const camps = await campRes.json();
+      if (Array.isArray(camps)) setCampaigns(camps);
+    } catch (err) {
+      console.error('Failed to load campaigns', err);
     }
   }
 
@@ -146,7 +143,7 @@ function GeneratePageInner() {
   }
 
   async function handleGenerate() {
-    if (!profileId) {
+    if (!profile?.id) {
       toast.error('Please create a business profile first');
       return;
     }
@@ -181,7 +178,7 @@ function GeneratePageInner() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          business_profile_id: profileId,
+          business_profile_id: profile.id,
           project_id: selectedCampaign || undefined,
           input: {
             ...input,
@@ -235,7 +232,7 @@ function GeneratePageInner() {
 
   if (profileLoading) return <LoadingSpinner text="Loading..." />;
 
-  if (!profileId) {
+  if (!profile?.id) {
     return (
       <div>
         <PageHeader title="สร้างคอนเทนต์" />
@@ -570,9 +567,28 @@ function GeneratePageInner() {
         {/* Output */}
         <div>
           {generating && (
-            <Card className="bg-white/80 backdrop-blur-lg border border-white/40 shadow-xl rounded-2xl overflow-hidden">
-              <CardContent className="py-24 animate-pulse">
-                <LoadingSpinner text="AI กำลังร่างคอนเทนต์ พิมพ์แฮชแท็ก และจัดรูปแบบ SEO ให้คุณ..." />
+            <Card className="bg-white/80 backdrop-blur-lg border border-white/40 shadow-xl rounded-2xl overflow-hidden animate-pulse">
+              <CardContent className="p-6 space-y-6">
+                <div className="flex items-center gap-2 mb-4">
+                  <Skeleton className="h-6 w-24 rounded-full" />
+                  <Skeleton className="h-6 w-32 rounded-full" />
+                </div>
+                <div className="space-y-3">
+                  <Skeleton className="h-8 w-3/4" />
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-4 w-2/3" />
+                </div>
+                <div className="pt-6 space-y-2">
+                  <Skeleton className="h-4 w-20" />
+                  <Skeleton className="h-24 w-full rounded-xl" />
+                </div>
+                <div className="pt-4">
+                  <Skeleton className="h-10 w-full rounded-button" />
+                </div>
+                <div className="text-center pt-4">
+                  <p className="text-xs text-blue-600 animate-bounce font-medium">AI กำลังร่างคอนเทนต์และจัดรูปแบบตามหลัก SEO ให้คุณ...</p>
+                </div>
               </CardContent>
             </Card>
           )}

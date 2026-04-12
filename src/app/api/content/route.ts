@@ -10,6 +10,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'profile_id is required' }, { status: 400 });
     }
 
+    const fields = searchParams.get('fields') || 'id,business_profile_id,project_id,platform,platform_variant,content_type,topic,service_type,output_payload,language,tone,content_goal,post_length,asset_type,visual_direction,status,created_at';
+
     const result = await getContents(profileId, {
       platform: searchParams.get('platform') || undefined,
       content_type: searchParams.get('content_type') || undefined,
@@ -18,7 +20,7 @@ export async function GET(request: NextRequest) {
       search: searchParams.get('search') || undefined,
       limit: searchParams.get('limit') ? parseInt(searchParams.get('limit')!) : 20,
       offset: searchParams.get('offset') ? parseInt(searchParams.get('offset')!) : 0,
-    });
+    }, fields);
 
     return NextResponse.json(result);
   } catch (error) {

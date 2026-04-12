@@ -1,11 +1,13 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useProfile } from '@/context/profile-context';
 import { PageHeader } from '@/components/shared/page-header';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import { PlatformBadge } from '@/components/shared/platform-badge';
 import { LoadingSpinner } from '@/components/shared/loading-spinner';
 import { EmptyState } from '@/components/shared/empty-state';
@@ -38,10 +40,10 @@ import {
 import { THAI_UI_LABELS } from '@/lib/constants/thai-labels';
 
 export default function LibraryPage() {
+  const { profile, loading: profileLoading } = useProfile();
   const [contents, setContents] = useState<GeneratedContent[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [profileId, setProfileId] = useState<string | null>(null);
   const [selectedContent, setSelectedContent] = useState<GeneratedContent | null>(null);
 
   // Filters
@@ -71,26 +73,14 @@ export default function LibraryPage() {
   }, [page, platformFilter, typeFilter, search]);
 
   useEffect(() => {
-    (async () => {
-      const res = await fetch('/api/profiles');
-      const profiles = await res.json();
-      if (Array.isArray(profiles) && profiles.length > 0) {
-        setProfileId(profiles[0].id);
-      } else {
-        setLoading(false);
-      }
-    })();
-  }, []);
-
-  useEffect(() => {
-    if (profileId) loadContents(profileId);
-  }, [profileId, loadContents]);
+    if (profile?.id) loadContents(profile.id);
+  }, [profile?.id, loadContents]);
 
   async function handleDelete(id: string) {
     try {
       await fetch(`/api/content/${id}`, { method: 'DELETE' });
       toast.success(THAI_UI_LABELS.content_deleted);
-      if (profileId) loadContents(profileId);
+      if (profile?.id) loadContents(profile.id);
     } catch {
       toast.error(THAI_UI_LABELS.failed_to_delete);
     }
@@ -104,7 +94,7 @@ export default function LibraryPage() {
         body: JSON.stringify({ status: 'archived' }),
       });
       toast.success(THAI_UI_LABELS.content_archived);
-      if (profileId) loadContents(profileId);
+      if (profile?.id) loadContents(profile.id);
     } catch {
       toast.error(THAI_UI_LABELS.failed_to_archive);
     }
@@ -119,7 +109,7 @@ export default function LibraryPage() {
     toast.success(THAI_UI_LABELS.copied_to_clipboard);
   }
 
-  if (!profileId && !loading) {
+  if (!profile?.id && !profileLoading) {
     return (
       <div>
         <PageHeader title={THAI_UI_LABELS.content_library} />
@@ -183,7 +173,25 @@ export default function LibraryPage() {
       </div>
 
       {loading ? (
-        <LoadingSpinner text={THAI_UI_LABELS.loading_content} />
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {[...Array(6)].map((_, i) => (
+            <Card key={i} className="h-[250px] animate-pulse">
+              <CardContent className="pt-4 space-y-4">
+                <div className="flex justify-between items-center">
+                  <Skeleton className="h-5 w-20" />
+                  <Skeleton className="h-4 w-15" />
+                </div>
+                <Skeleton className="h-6 w-full" />
+                <Skeleton className="h-4 w-3/4" />
+                <div className="space-y-2 pt-2">
+                  <Skeleton className="h-3 w-full" />
+                  <Skeleton className="h-3 w-full" />
+                  <Skeleton className="h-3 w-1/2" />
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       ) : contents.length === 0 ? (
         <EmptyState
           icon={Library}

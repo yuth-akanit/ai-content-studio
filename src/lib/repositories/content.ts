@@ -16,11 +16,12 @@ export interface ContentFilters {
 export async function getContents(
   profileId: string,
   filters: ContentFilters = {},
+  fields: string = '*'
 ): Promise<{ data: GeneratedContent[]; count: number }> {
   const db = getSupabaseServerClient();
   let query = db
     .from(TABLE)
-    .select('*', { count: 'exact' })
+    .select(fields, { count: 'exact' })
     .eq('business_profile_id', profileId)
     .order('created_at', { ascending: false });
 

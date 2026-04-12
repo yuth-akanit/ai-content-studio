@@ -18,6 +18,8 @@ export const metadata: Metadata = {
   description: "Generate high-converting marketing content for service businesses",
 };
 
+import { ProfileProvider } from "@/context/profile-context";
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -29,7 +31,9 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        <AppShell>{children}</AppShell>
+        <ProfileProvider>
+          <AppShell>{children}</AppShell>
+        </ProfileProvider>
       </body>
     </html>
   );
