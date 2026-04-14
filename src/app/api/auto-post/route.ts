@@ -103,6 +103,26 @@ async function postToInstagram(
       return { id: '', success: false, error: 'Instagram requires at least one image' };
     }
 
+    // Helper to check processing status
+    const waitForMediaProcessing = async (containerId: string) => {
+      let isReady = false;
+      let attempt = 0;
+      while (!isReady && attempt < 10) {
+        await new Promise(resolve => setTimeout(resolve, 3000)); // wait 3s
+        const statusRes = await fetch(
+          `https://graph.facebook.com/v22.0/${containerId}?fields=status_code&access_token=${accessToken}`
+        );
+        const statusData = await statusRes.json();
+        if (statusData.status_code === 'FINISHED') {
+          isReady = true;
+        } else if (statusData.status_code === 'ERROR') {
+          throw new Error('Instagram failed to process the image container');
+        }
+        attempt++;
+      }
+      if (!isReady) throw new Error('Timeout waiting for Instagram media processing');
+    };
+
     // Single image post
     if (imageUrls.length === 1) {
       // Step 1: Create media container
@@ -120,6 +140,8 @@ async function postToInstagram(
       );
       const createData = await createRes.json();
       if (createData.error) return { id: '', success: false, error: createData.error.message };
+
+      await waitForMediaProcessing(createData.id);
 
       // Step 2: Publish
       const publishRes = await fetch(
@@ -173,6 +195,8 @@ async function postToInstagram(
     );
     const carouselData = await carouselRes.json();
     if (carouselData.error) return { id: '', success: false, error: carouselData.error.message };
+
+    await waitForMediaProcessing(carouselData.id);
 
     const publishRes = await fetch(
       `https://graph.facebook.com/v22.0/${igUserId}/media_publish`,
@@ -228,6 +252,61 @@ async function postCommentToFacebook(
   }
 }
 
+async function postToLineOA(
+  accessToken: string,
+  message: string,
+  imageUrls?: string[],
+): Promise<{ id: string; success: boolean; error?: string }> {
+  try {
+    const messages: any[] = [];
+
+    // Add images first (max 4 to leave room for text)
+    if (imageUrls && imageUrls.length > 0) {
+      for (const url of imageUrls.slice(0, 4)) {
+        messages.push({
+          type: 'image',
+          originalContentUrl: url,
+          previewImageUrl: url, // For simplicity using same URL
+        });
+      }
+    }
+
+    // Add the main text message
+    // Note: LINE text messages have a 5000 character limit
+    messages.push({
+      type: 'text',
+      text: message.slice(0, 5000),
+    });
+
+    const response = await fetch('https://api.line.me/v2/bot/message/broadcast', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ messages: messages.slice(0, 5) }), // LINE limit is 5 per broadcast
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      return {
+        id: '',
+        success: false,
+        error: data.message || `LINE API Error (${response.status})`,
+      };
+    }
+
+    return { id: 'line-broadcast', success: true };
+  } catch (error) {
+    return {
+      id: '',
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+  }
+}
+
 export async function POST(request: NextRequest) {
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -242,6 +321,36 @@ export async function POST(request: NextRequest) {
         { error: 'content_id, page_ids, and message are required' },
         { status: 400 },
       );
+    }
+
+    // Convert any base64 image URLs to public storage URLs (required by Instagram)
+    let publicImageUrls = image_urls;
+    if (image_urls && image_urls.some((url: string) => url.startsWith('data:'))) {
+      publicImageUrls = await Promise.all(image_urls.map(async (url: string) => {
+        if (!url.startsWith('data:')) return url;
+        const matches = url.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+        if (!matches || matches.length !== 3) return url;
+        const contentType = matches[1];
+        const base64Data = matches[2];
+        const buffer = Buffer.from(base64Data, 'base64');
+        const ext = contentType.split('/')[1] || 'jpg';
+        const filename = `content_${Date.now()}_${Math.random().toString(36).substring(7)}.${ext}`;
+        
+        const { error: uploadError } = await supabase.storage
+          .from('content-images')
+          .upload(filename, buffer, { contentType });
+          
+        if (uploadError) {
+          console.error('Error uploading image to storage:', uploadError);
+          return url;
+        }
+        
+        const { data: { publicUrl } } = supabase.storage
+          .from('content-images')
+          .getPublicUrl(filename);
+          
+        return publicUrl;
+      }));
     }
 
     // Fetch the social pages from the database
@@ -284,7 +393,7 @@ export async function POST(request: NextRequest) {
             token,
             page.external_id,
             message,
-            image_urls,
+            publicImageUrls,
           );
 
           return {
@@ -301,7 +410,7 @@ export async function POST(request: NextRequest) {
             token,
             page.external_id,
             message,
-            image_urls,
+            publicImageUrls,
           );
 
           let commentsPosted = 0;
@@ -327,6 +436,22 @@ export async function POST(request: NextRequest) {
             post_id: postResult.id,
             error: postResult.error,
             comments_posted: commentsPosted,
+          };
+        } else if (page.provider === 'line') {
+          const postResult = await postToLineOA(
+            token,
+            message,
+            publicImageUrls,
+          );
+
+          return {
+            page_id: page.id,
+            page_name: page.name,
+            provider: 'line',
+            success: postResult.success,
+            post_id: postResult.id,
+            error: postResult.error,
+            comments_posted: 0,
           };
         } else {
           return {

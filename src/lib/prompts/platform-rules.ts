@@ -101,6 +101,42 @@ export const platformRules: Record<Platform, PlatformRule> = {
     ],
     maxLength: 300,
   },
+  line_voom: {
+    platform: 'line_voom',
+    description: 'LINE VOOM (Timeline) post',
+    outputFields: ['title', 'body', 'cta', 'hashtags'],
+    style: [
+      'Visual and social tone',
+      'Short and concise to avoid Read More truncation',
+      'Use vertical layout with bullet points',
+      'Emoji-rich for engagement',
+    ],
+    constraints: [
+      'Caption under 1000 characters',
+      'First 4 lines must be very engaging',
+      'Include LINE OA contact link clearly',
+      'Hashtags: 5-8 relevant ones',
+    ],
+    maxLength: 1000,
+  },
+  google_business: {
+    platform: 'google_business',
+    description: 'Google Business Profile (GMB) post',
+    outputFields: ['title', 'body', 'cta'],
+    style: [
+      'Professional and informative',
+      'Local-SEO focused',
+      'Action-oriented (Reserve/Call/Learn More)',
+      'Clear value proposition',
+    ],
+    constraints: [
+      'Best length is 150-300 characters',
+      'Include keywords for local search',
+      'Clear call to action with phone number',
+      'Avoid high-frequency emojis, keep it professional',
+    ],
+    maxLength: 1500,
+  },
   website: {
     platform: 'website',
     description: 'Website service page / landing page / blog content',

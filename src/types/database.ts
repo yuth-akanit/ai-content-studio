@@ -130,7 +130,7 @@ export interface PlatformPreset {
 // Enums and constants
 // ============================================================
 
-export const PLATFORMS = ['facebook', 'instagram', 'line_oa', 'tiktok', 'website', 'other'] as const;
+export const PLATFORMS = ['facebook', 'instagram', 'line_oa', 'line_voom', 'tiktok', 'google_business', 'website', 'other'] as const;
 export type Platform = typeof PLATFORMS[number];
 
 export const CONTENT_TYPES = [
@@ -284,12 +284,7 @@ export interface ContentOutput {
   service_areas?: string[];
   faq?: FAQItem[];
   first_comment?: string;
-  platform_versions?: {
-    facebook?: string;
-    line_oa?: string;
-    instagram?: string;
-    tiktok?: string;
-  };
+  platform_versions?: Partial<Record<Platform, string>>;
 }
 
 export interface CarouselSlide {
@@ -325,8 +320,10 @@ export interface ContentVariation {
 export const PLATFORM_LABELS: Record<Platform, string> = {
   facebook: 'Facebook',
   instagram: 'Instagram',
-  line_oa: 'LINE OA',
+  line_oa: 'LINE OA (Broadcast)',
+  line_voom: 'LINE VOOM (Timeline)',
   tiktok: 'TikTok',
+  google_business: 'Google Business',
   website: 'Website',
   other: 'Other Platform',
 };
@@ -335,7 +332,9 @@ export const PLATFORM_VARIANTS: Record<Platform, string[]> = {
   facebook: ['post', 'story', 'ad', 'event'],
   instagram: ['post', 'carousel', 'reel', 'story'],
   line_oa: ['broadcast', 'rich_message', 'coupon'],
+  line_voom: ['post', 'dynamic_video'],
   tiktok: ['short_video', 'duet_idea', 'series'],
+  google_business: ['update', 'offer', 'event'],
   website: ['service_page', 'landing_page', 'blog', 'faq_page'],
   other: ['custom'],
 };

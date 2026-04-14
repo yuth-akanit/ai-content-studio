@@ -15,7 +15,7 @@ export async function GET(req: Request) {
         provider: 'facebook',
         external_id: '26508624952160629',
         meta: { 
-          access_token: 'IGAAZAvbtpZCxB1BZAGJNQXFvQ2RxYnktdTNTRFptZAGsyZAzZAsLVo0X1pCNV9CUkF5RGd2bGw2NzNiY0huSWpwSDRQNzhJWVAta29sbUxpeC1VYnJBbTlRNHozMXZAtOG5QNV9yNnZAWT1laeUJub0tyZAi1rSWsxaXdreHJjQ0RoYk9lawZDZD',
+          access_token: 'IGAAZAvbtpZCxB1BZAFpNOF9sNEVfcVp6YkROeW5lVy03ZAFVsdERWZAUdMblBHTGozZAE9tODREZAThzekFmdS0zOS1wRUE4aWdmcUVQY1BfMmVjSzBraEpVWDRvOUNIY19CU1cxTXFlMGtnRHpiRHdMZAlY4X1ExVWJiOVMzNXdIMk5QawZDZD',
           fb_page_id: '1811371763155997',
           is_instagram: true
         }
@@ -25,7 +25,7 @@ export async function GET(req: Request) {
         provider: 'facebook',
         external_id: '35452386951011683',
         meta: { 
-          access_token: 'IGAAZAvbtpZCxB1BZAFk0OGVia09PemdHdW1BTTE3bGZAhMGFIQUJBMmVwT014WXo4UEpmS2xpZAG9RRGlHclZA6d1RWV3F6TDV6cGl5Q1puR0FKVFpTcjhNcVpSTmtLVzBwTUt2NENUYi1nTDFkZAHlwWldMVzRSbk80ZAXhNLVdBYklpWQZDZD',
+          access_token: 'IGAAZAvbtpZCxB1BZAFo5OER0MTJIRV9XUm9aSlZAjMkpkeTFOLU5VVzVtOC1wWDlPc1B5YUk4WmE4ajNNd1VXaWRnM1M0bUZANTVM4Y3J3OTJmTmdXVXZAqMi1zdzhQT0dHU1JiNmExeGNBdDktVHI0bVJSUG9ub0ZAidW91UmdTZA3AwMAZDZD',
           fb_page_id: '1811371763155997',
           is_instagram: true
         }

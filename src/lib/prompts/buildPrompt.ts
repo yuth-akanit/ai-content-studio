@@ -52,21 +52,34 @@ QUALITY RULES:
 - tiktok version must be short, punchy, curiosity-driven.
 
 FACEBOOK POST STRUCTURE (CRITICAL — platform_versions.facebook MUST follow this exact layout):
-You MUST NOT write any title or headline at the top. You MUST copy the mandatory contact details exact block into the section 7.
 
-[Section 1: HOOK] 1-2 lines questions or pain-point statement that grabs attention. Use emojis.
+⛔ ABSOLUTE RULE #1: NO HEADLINE/TITLE AT THE TOP.
+The very first line of platform_versions.facebook MUST be the hook (a question or pain-point emoji statement).
+DO NOT start with the business name, service name, or any title-like text.
+❌ WRONG: "บริการซ่อมแอร์ด่วนจาก PAA Air Service\n🔧 เปิดแอร์แล้วไม่เย็น?"
+❌ WRONG: "บริการซ่อมแอร์เพื่อความเย็นสบาย\n❄️ แอร์ไม่เย็น?"
+✅ RIGHT: "🔧 เปิดแอร์แล้วไม่มีความเย็น? ให้ PAA Air Service ช่วยคุณ!"
+✅ RIGHT: "❄️ แอร์ไม่เย็นมีแต่ลม? หรือมีน้ำรั่วซึม?"
+
+⛔ ABSOLUTE RULE #2: ONLY ONE CTA — NO DUPLICATE.
+You MUST write exactly ONE CTA line (Section 6), then the contact block, then hashtags. NOTHING ELSE after the contact block except hashtags.
+❌ WRONG: "...สนใจจองคิว ติดต่อทาง DM\n👉 LINE OA: ...\n...\nสนใจจองคิว ทักมาทาง DM!\n#ซ่อมแอร์..."
+✅ RIGHT: "...สนใจจองคิว ทักมาทาง DM หรือติดต่อด้านล่าง!\n\n👉 LINE OA: ...\n...\n\n#ซ่อมแอร์..."
+
+EXACT LAYOUT:
+[Section 1: HOOK] 1-2 lines questions or pain-point statement that grabs attention. Use emojis. THIS IS THE FIRST LINE — no title before it.
 [Section 2: CONTEXT] Service summary with location keywords. Example: "บริการล้างแอร์แบริ่ง...โดย PAA Air Service"
 
 บริการของเรา:
-✅ [Specific Service 1]
-✅ [Specific Service 2]
-✅ [Specific Service 3]
-✅ [Specific Service 4]
+✅ [Specific Service 1 (with detail in parentheses)]
+✅ [Specific Service 2 (with detail in parentheses)]
+✅ [Specific Service 3 (with detail in parentheses)]
+✅ [Specific Service 4 (with detail in parentheses)]
 
 📍 พื้นที่บริการ: [4-6 specific districts/landmarks]
 
 [Section 5: TRUST] 1-2 lines on experience, warranty, quality.
-[Section 6: CTA] 1-2 lines inviting the user to book or contact via DM.
+[Section 6: CTA] 1-2 lines — THIS IS THE ONLY CTA IN THE ENTIRE POST.
 
 [Section 7: CONTACT BLOCK] — YOU MUST INCLUDE THIS EXACT BLOCK:
 👉 LINE OA: ${profile.contact_line ? (profile.contact_line.startsWith('http') ? profile.contact_line : `https://line.me/R/ti/p/${profile.contact_line.startsWith('@') ? profile.contact_line : '@' + profile.contact_line}`) : 'https://page.line.me/paairservice'}
@@ -74,7 +87,7 @@ You MUST NOT write any title or headline at the top. You MUST copy the mandatory
 📞 โทร: ${profile.contact_phone || '084-282-4465'}
 ✉️ อีเมล: ${profile.contact_email || 'admin@paaair.com'}
 
-[Section 8: HASHTAGS] 8-10 hashtags separated by spaces.
+[Section 8: HASHTAGS] 8-10 hashtags separated by spaces. NOTHING ELSE after this.
 
 CONTENT LENGTH RULES (CRITICAL):
 - platform_versions.facebook MUST be at least 400 characters (Thai). Short posts are UNACCEPTABLE.
@@ -110,18 +123,20 @@ CRITICAL OUTPUT RULES:
   "cta": "string (Short CTA sentence only, e.g. 'สนใจจองคิว ทักมาทาง DM หรือติดต่อด้านล่าง!' — DO NOT include the contact block here, it is already in the facebook version Section 7)",
   "first_comment": "string (For Facebook)",
   "platform_versions": {
-    "facebook": "string (MUST start directly with the hook, NO title/headline at the top. YOU MUST INCLUDE THE EXACT CONTACT BLOCK DEFINED ABOVE. NO DUPLICATE CTA)",
-    "line_oa": "string",
-    "instagram": "string",
-    "tiktok": "string"
+    "facebook": "string (MUST start with emoji+hook on line 1. ABSOLUTELY NO title/headline before the hook. ONLY ONE CTA in entire text. NO text after contact block except hashtags.)",
+    "line_oa": "string (Start directly with hook. NO title/headline. Short and punchy.)",
+    "instagram": "string (Start directly with hook. NO title/headline. Use lots of spaces/emojis. Put hashtags at the end.)",
+    "line_voom": "string (Start with strong hook. Vertical layout. Mention LINE OA link.)",
+    "google_business": "string (Professional. Short and informative. Best for Local SEO.)",
+    "tiktok": "string (Shortest variant. No title/headline. Heavy focus on video action.)"
   }
 }
-3. Include a "variations" array with 2 alternative versions following the same schema fragment.
-4. All text content must be in Thai (ภาษาไทย).
+3. All text content must be in Thai (ภาษาไทย).
 5. Do NOT omit any field.
 6. The "facebook" value in platform_versions MUST use \\n for line breaks and MUST follow the layout.
-7. DO NOT include the "headline" inside the "facebook" text. Start directly with the hook.
-8. ALWAYS include the EXACT contact block defined above into the facebook text. Do NOT make up URLs or emails. DO NOT leave it out. DO NOT put a duplicate CTA after the contact block.`;
+7. DO NOT include the "headline" inside the "facebook" text. The very first characters MUST be an emoji followed by the hook question/statement.
+8. ALWAYS include the EXACT contact block defined above into the facebook text. Do NOT make up URLs or emails. DO NOT leave it out.
+9. AFTER the contact block (✉️ line), the ONLY thing allowed is a blank line followed by hashtags. NO additional CTA, NO additional text, NO closing statement. Violating this is a critical error.`;
 }
 
 function buildUserPrompt(
@@ -230,13 +245,9 @@ function buildUserPrompt(
     parts.push(`CRITICAL INSTRUCTION: You MUST explicitly use the visual details described above in your content body. Do NOT write a generic post. Directly describe what is seen in the picture (e.g., if it shows a dirty pipe, mention cleaning dirty pipes; if it shows a temperature gauge, mention checking temperatures). Tie the image's specific problem/action to your service offering.`);
   }
 
-  // Platform-specific output structure reminder
-  const platformRule = getPlatformRule(input.platform);
-  parts.push(`\n=== REQUIRED OUTPUT FIELDS ===`);
-  parts.push(`Return a JSON object with these fields: ${platformRule.outputFields.join(', ')}`);
-  parts.push(`Also include: "variations" array with 2 alternative versions`);
-  parts.push(`Also include: "suggested_comments" array with 2-3 engaging comment replies`);
-  parts.push(`Also include: "hashtags" array with exactly 8-10 relevant hashtag strings`);
+  // Language
+  parts.push(`\n=== FINAL REQUIREMENT ===`);
+  parts.push(`Return ONLY valid JSON matching the exact schema in the system prompt. DO NOT return markdown blocks like \`\`\`json. Just the raw JSON object.`);
   parts.push(`Language: ${input.language === 'th' ? 'Thai (ภาษาไทย)' : 'English'}`);
 
   return parts.join('\n');

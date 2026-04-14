@@ -3,8 +3,10 @@ import { Platform, ContentType, ContentGoal, Tone, PostLength } from '@/types/da
 export const THAI_PLATFORM_LABELS: Record<Platform, string> = {
   facebook: 'เฟซบุ๊ก (Facebook)',
   instagram: 'อินสตาแกรม (Instagram)',
-  line_oa: 'ไลน์ (LINE OA)',
+  line_oa: 'ไลน์ (LINE OA - Broadcast)',
+  line_voom: 'ไลน์ วูม (LINE VOOM)',
   tiktok: 'ติ๊กต็อก (TikTok)',
+  google_business: 'กูเกิล บิสเนส (Google Business)',
   website: 'เว็บไซต์ (Website)',
   other: 'สื่ออื่น ๆ',
 };
@@ -106,6 +108,8 @@ export const THAI_UI_LABELS = {
   facebook_version: 'ฉบับ Facebook',
   line_oa_version: 'ฉบับ LINE OA',
   instagram_version: 'ฉบับ Instagram',
+  line_voom_version: 'ฉบับ LINE VOOM',
+  google_business_version: 'ฉบับ Google Business',
   tiktok_version: 'ฉบับ TikTok',
   first_comment: 'ความคิดเห็นแรก (First Comment)',
   content_angle: 'มุมมองเนื้อหา (Content Angle)',

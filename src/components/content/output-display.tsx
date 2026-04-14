@@ -67,13 +67,32 @@ export function OutputDisplay({ output, platform, contentId, imageUrls }: Output
   function cleanPostText(text: string, headline?: string): string {
     let lines = text.split('\n');
 
-    // 1. Strip headline from the top if the AI included it
+    // 1. Strip headline/title from the top if the AI included it
     if (headline) {
       const h = headline.trim();
       let firstNonEmpty = 0;
       while (firstNonEmpty < lines.length && lines[firstNonEmpty].trim() === '') firstNonEmpty++;
-      if (firstNonEmpty < lines.length && lines[firstNonEmpty].trim() === h) {
-        lines.splice(firstNonEmpty, 1);
+      if (firstNonEmpty < lines.length) {
+        const firstLine = lines[firstNonEmpty].trim();
+        // Exact match or the first line contains the headline
+        if (firstLine === h || firstLine.includes(h)) {
+          lines.splice(firstNonEmpty, 1);
+        }
+      }
+    }
+
+    // 1b. Strip generic title-like first lines (e.g. "บริการซ่อมแอร์ด่วนจาก PAA Air Service")
+    {
+      let firstNonEmpty = 0;
+      while (firstNonEmpty < lines.length && lines[firstNonEmpty].trim() === '') firstNonEmpty++;
+      if (firstNonEmpty < lines.length) {
+        const firstLine = lines[firstNonEmpty].trim();
+        // Detect title-like patterns: starts with "บริการ" without emoji, or is a short non-emoji line
+        const startsWithEmoji = /^[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{FE00}-\u{FEFF}\u{1F900}-\u{1F9FF}\u{2700}-\u{27BF}\u{E000}-\u{F8FF}\u{200D}\u{FE0F}\u{20E3}\u{2328}\u{23CF}\u{23E9}-\u{23F3}\u{23F8}-\u{23FA}✅❄️🔧📣⚡💨🏠❓⛔☀️🌡️]/u.test(firstLine);
+        const looksLikeTitle = !startsWithEmoji && firstLine.length < 60 && !firstLine.includes('?') && !firstLine.includes('？');
+        if (looksLikeTitle) {
+          lines.splice(firstNonEmpty, 1);
+        }
       }
     }
 
@@ -83,10 +102,13 @@ export function OutputDisplay({ output, platform, contentId, imageUrls }: Output
       return !trimmed.startsWith('Q:') && !trimmed.startsWith('A:') && !trimmed.startsWith('Q：') && !trimmed.startsWith('A：');
     });
 
-    // 3. Remove duplicate CTA after contact block (after ✉️ email line)
+    // 3. Remove everything after contact block except blank lines and hashtags
+    // Detect email line by multiple emoji variants (AI may use ✉️, 📫, 📧, 📩, etc.)
+    const emailEmojis = ['✉️', '📫', '📧', '📩', '📬', '📪', '✉'];
     let emailLineIdx = -1;
     for (let i = 0; i < lines.length; i++) {
-      if (lines[i].trim().startsWith('✉️')) {
+      const trimmed = lines[i].trim();
+      if (emailEmojis.some(e => trimmed.startsWith(e)) && (trimmed.includes('อีเมล') || trimmed.includes('email') || trimmed.includes('@'))) {
         emailLineIdx = i;
       }
     }
@@ -106,20 +128,28 @@ export function OutputDisplay({ output, platform, contentId, imageUrls }: Output
   }
 
   function buildPreviewText(): string {
-    if (output.platform_versions?.facebook) {
-      const fb = cleanPostText(output.platform_versions.facebook, output.headline);
-      return hashtagLine ? `${fb}\n\n${hashtagLine}` : fb;
+    const platformVersion = output.platform_versions?.[platform as Platform] || output.platform_versions?.facebook;
+    
+    if (platformVersion) {
+      const cleaned = cleanPostText(platformVersion, output.headline);
+      // Only append hashtags if the cleaned text doesn't already contain them
+      const alreadyHasHashtags = cleaned.split('\n').some(line => line.trim().startsWith('#'));
+      return (hashtagLine && !alreadyHasHashtags) ? `${cleaned}\n\n${hashtagLine}` : cleaned;
     }
     if (output.caption_main) {
-      const body = cleanPostText(output.caption_main);
-      return `${output.headline || ''}\n\n${body}\n\n${output.cta || ''}${hashtagLine ? '\n\n' + hashtagLine : ''}`;
+      const cleaned = cleanPostText(output.caption_main, output.headline);
+      const alreadyHasHashtags = cleaned.split('\n').some(line => line.trim().startsWith('#'));
+      return (hashtagLine && !alreadyHasHashtags) ? `${cleaned}\n\n${hashtagLine}` : cleaned;
     }
+    const body = output.body ? cleanPostText(output.body, output.headline || output.title) : '';
+    const alreadyHasHashtags = body.split('\n').some(line => line.trim().startsWith('#'));
+    
+    // We do NOT append output.cta here because AI always merges CTA into the body
     const parts = [
-      output.title,
+      output.title, // Only included if cleanPostText didn't strip it from body
       output.opening_hook,
-      output.body,
-      output.cta,
-      hashtagLine || null
+      body,
+      (hashtagLine && !alreadyHasHashtags) ? hashtagLine : null
     ].filter(Boolean);
     return parts.join('\n\n');
   }
@@ -176,7 +206,8 @@ export function OutputDisplay({ output, platform, contentId, imageUrls }: Output
       if (data.success) {
         toast.success(`${THAI_UI_LABELS.post_success} (${data.posted}/${data.total})`);
       } else {
-        toast.error(data.error || THAI_UI_LABELS.post_failed);
+        const errorMsg = data.results?.find((r: any) => !r.success)?.error || data.error || THAI_UI_LABELS.post_failed;
+        toast.error(`โพสต์ไม่สำเร็จ: ${errorMsg}`);
       }
     } catch {
       toast.error(THAI_UI_LABELS.post_failed);
@@ -202,6 +233,8 @@ export function OutputDisplay({ output, platform, contentId, imageUrls }: Output
                 {output.platform_versions.facebook && <TabsTrigger value="facebook" className="data-[state=active]:bg-white">{THAI_PLATFORM_LABELS.facebook}</TabsTrigger>}
                 {output.platform_versions.line_oa && <TabsTrigger value="line_oa" className="data-[state=active]:bg-white">{THAI_PLATFORM_LABELS.line_oa}</TabsTrigger>}
                 {output.platform_versions.instagram && <TabsTrigger value="instagram" className="data-[state=active]:bg-white">{THAI_PLATFORM_LABELS.instagram}</TabsTrigger>}
+                {output.platform_versions.line_voom && <TabsTrigger value="line_voom" className="data-[state=active]:bg-white">{THAI_PLATFORM_LABELS.line_voom}</TabsTrigger>}
+                {output.platform_versions.google_business && <TabsTrigger value="google_business" className="data-[state=active]:bg-white">{THAI_PLATFORM_LABELS.google_business}</TabsTrigger>}
                 {output.platform_versions.tiktok && <TabsTrigger value="tiktok" className="data-[state=active]:bg-white">{THAI_PLATFORM_LABELS.tiktok}</TabsTrigger>}
               </TabsList>
               
@@ -229,6 +262,18 @@ export function OutputDisplay({ output, platform, contentId, imageUrls }: Output
                   <div className="space-y-4">
                     <ContentBlock label={THAI_PLATFORM_LABELS.instagram} content={output.platform_versions.instagram} />
                     {output.hashtags && <div className="text-xs text-blue-600">{output.hashtags.join(' ')}</div>}
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="line_voom" className="mt-0">
+                  <div className="space-y-4">
+                    <ContentBlock label={THAI_UI_LABELS.line_voom_version} content={output.platform_versions.line_voom} />
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="google_business" className="mt-0">
+                  <div className="space-y-4">
+                    <ContentBlock label={THAI_UI_LABELS.google_business_version} content={output.platform_versions.google_business} />
                   </div>
                 </TabsContent>
                 
