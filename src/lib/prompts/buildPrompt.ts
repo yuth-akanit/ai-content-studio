@@ -10,7 +10,7 @@ export interface BuiltPrompt {
   promptVersion: string;
 }
 
-const PROMPT_VERSION = 'v1.0';
+const PROMPT_VERSION = 'v1.1';
 
 function buildSystemPrompt(
   profile: BusinessProfile,
@@ -243,6 +243,18 @@ function buildUserPrompt(
     parts.push(`\n=== IMAGE CONTEXT ===`);
     parts.push(`The user provided an image. AI Vision Analysis: ${input.image_analysis}`);
     parts.push(`CRITICAL INSTRUCTION: You MUST explicitly use the visual details described above in your content body. Do NOT write a generic post. Directly describe what is seen in the picture (e.g., if it shows a dirty pipe, mention cleaning dirty pipes; if it shows a temperature gauge, mention checking temperatures). Tie the image's specific problem/action to your service offering.`);
+  }
+
+  if (input.video_analysis) {
+    parts.push(`\n=== VIDEO CONTEXT ===`);
+    parts.push(`The user provided a video. Key-frame visual analysis: ${input.video_analysis}`);
+    parts.push(`CRITICAL INSTRUCTION: You MUST ground the content in the actual scenes from the video. Describe visible actions, equipment condition, technician workflow, before/after evidence, or customer pain point shown in the footage. Do NOT write a generic service post if the video analysis provides concrete details.`);
+  }
+
+  if (input.video_transcript) {
+    parts.push(`\n=== VIDEO TRANSCRIPT / AUDIO NOTES ===`);
+    parts.push(`Use this spoken content or operator notes from the video as context: ${input.video_transcript}`);
+    parts.push(`CRITICAL INSTRUCTION: If transcript details are useful, blend them naturally with the visual analysis to create a post that clearly comes from this exact video.`);
   }
 
   // Language

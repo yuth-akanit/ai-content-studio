@@ -23,6 +23,8 @@ export const generationInputSchema = z.object({
   image_urls: z.array(z.string()).optional(),
   video_url: z.string().optional(),
   image_analysis: z.string().optional(),
+  video_analysis: z.string().optional(),
+  video_transcript: z.string().optional(),
 });
 
 export type GenerationInputSchema = z.infer<typeof generationInputSchema>;

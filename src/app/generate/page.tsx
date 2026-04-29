@@ -69,6 +69,7 @@ const ALLOWED_VIDEO_MIME_TYPES = [
   'video/x-m4v',
   'video/webm',
 ];
+const VIDEO_KEYFRAME_TIMESTAMPS = [0.2, 0.5, 0.8];
 
 function formatBytes(bytes: number): string {
   if (bytes >= 1024 * 1024) {
@@ -99,6 +100,64 @@ function readFileAsDataUrl(
   });
 }
 
+function waitForVideoEvent(
+  video: HTMLVideoElement,
+  eventName: 'loadedmetadata' | 'seeked',
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const handleResolve = () => {
+      cleanup();
+      resolve();
+    };
+    const handleError = () => {
+      cleanup();
+      reject(new Error(`Video ${eventName} failed`));
+    };
+    const cleanup = () => {
+      video.removeEventListener(eventName, handleResolve);
+      video.removeEventListener('error', handleError);
+    };
+
+    video.addEventListener(eventName, handleResolve, { once: true });
+    video.addEventListener('error', handleError, { once: true });
+  });
+}
+
+async function extractVideoKeyframes(videoSrc: string): Promise<string[]> {
+  const video = document.createElement('video');
+  video.src = videoSrc;
+  video.muted = true;
+  video.playsInline = true;
+  video.crossOrigin = 'anonymous';
+
+  await waitForVideoEvent(video, 'loadedmetadata');
+
+  const duration = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : 1;
+  const canvas = document.createElement('canvas');
+  const width = video.videoWidth || 640;
+  const height = video.videoHeight || 360;
+  const maxWidth = 960;
+  const ratio = width > maxWidth ? maxWidth / width : 1;
+  canvas.width = Math.max(1, Math.round(width * ratio));
+  canvas.height = Math.max(1, Math.round(height * ratio));
+  const ctx = canvas.getContext('2d');
+
+  if (!ctx) {
+    throw new Error('Unable to prepare canvas for video frame extraction');
+  }
+
+  const frames: string[] = [];
+  for (const timestampRatio of VIDEO_KEYFRAME_TIMESTAMPS) {
+    const targetTime = Math.min(Math.max(duration * timestampRatio, 0), Math.max(duration - 0.05, 0));
+    video.currentTime = targetTime;
+    await waitForVideoEvent(video, 'seeked');
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    frames.push(canvas.toDataURL('image/jpeg', 0.82));
+  }
+
+  return frames;
+}
+
 function GeneratePageInner() {
   const searchParams = useSearchParams();
   const [input, setInput] = useState<GenerationInput>(() => {
@@ -121,6 +180,12 @@ function GeneratePageInner() {
   const [videoUploadError, setVideoUploadError] = useState('');
   const [videoUploading, setVideoUploading] = useState(false);
   const [analyzingImage, setAnalyzingImage] = useState(false);
+  const [analyzingVideo, setAnalyzingVideo] = useState(false);
+  const [videoKeyframes, setVideoKeyframes] = useState<string[]>([]);
+  const [extractingKeyframes, setExtractingKeyframes] = useState(false);
+  const [transcribingVideo, setTranscribingVideo] = useState(false);
+  const [videoTranscriptError, setVideoTranscriptError] = useState('');
+  const [videoTranscript, setVideoTranscript] = useState('');
 
   useEffect(() => {
     loadSocialPages();
@@ -193,6 +258,11 @@ function GeneratePageInner() {
 
     setVideoUploadError('');
     setVideoUploadProgress(0);
+    setVideoKeyframes([]);
+    setVideoTranscript('');
+    setVideoTranscriptError('');
+    setExtractingKeyframes(false);
+    setTranscribingVideo(false);
 
     if (imageFiles.length > 0) {
       setVideoUploadError('กรุณาลบรูปภาพก่อน แล้วค่อยอัปโหลดวิดีโอ');
@@ -228,6 +298,42 @@ function GeneratePageInner() {
       setVideoFile(file);
       setVideoPreview(preview);
       setVideoUploadProgress(100);
+
+      setExtractingKeyframes(true);
+      setVideoTranscriptError('');
+      try {
+        const frames = await extractVideoKeyframes(preview);
+        setVideoKeyframes(frames);
+      } catch (error) {
+        console.error('Keyframe extraction failed', error);
+        setVideoKeyframes([]);
+        toast.error('สร้าง key frames จากวิดีโอไม่สำเร็จ');
+      } finally {
+        setExtractingKeyframes(false);
+      }
+
+      setTranscribingVideo(true);
+      try {
+        const formData = new FormData();
+        formData.append('video', file);
+        const transcriptionRes = await fetch('/api/transcribe-video', {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!transcriptionRes.ok) {
+          const errorData = await transcriptionRes.json().catch(() => ({}));
+          throw new Error(errorData.error || 'Auto transcription failed');
+        }
+
+        const transcriptionData = await transcriptionRes.json();
+        setVideoTranscript(transcriptionData.transcript || '');
+      } catch (error) {
+        console.error('Video transcription failed', error);
+        setVideoTranscriptError('ถอดเสียงอัตโนมัติไม่สำเร็จ คุณยังพิมพ์โน้ตหรือคำพูดจากวิดีโอเองได้');
+      } finally {
+        setTranscribingVideo(false);
+      }
     } catch {
       setVideoUploadError('ไม่สามารถอ่านไฟล์วิดีโอได้ กรุณาลองไฟล์ใหม่อีกครั้ง');
       toast.error('ไม่สามารถอ่านไฟล์วิดีโอได้');
@@ -242,6 +348,12 @@ function GeneratePageInner() {
     setVideoUploadProgress(0);
     setVideoUploadError('');
     setVideoUploading(false);
+    setAnalyzingVideo(false);
+    setExtractingKeyframes(false);
+    setTranscribingVideo(false);
+    setVideoKeyframes([]);
+    setVideoTranscriptError('');
+    setVideoTranscript('');
   }
 
   async function handleGenerate() {
@@ -255,6 +367,7 @@ function GeneratePageInner() {
 
     try {
       let image_analysis = '';
+      let video_analysis = '';
 
       if (imageFiles.length > 0) {
         setAnalyzingImage(true);
@@ -262,7 +375,7 @@ function GeneratePageInner() {
           const visionRes = await fetch('/api/vision', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ image_urls: imagePreviews }),
+            body: JSON.stringify({ image_urls: imagePreviews, context_type: 'image' }),
           });
           if (visionRes.ok) {
             const visionData = await visionRes.json();
@@ -275,6 +388,27 @@ function GeneratePageInner() {
         }
       }
 
+      if (videoPreview) {
+        setAnalyzingVideo(true);
+        try {
+          const keyframes = videoKeyframes.length > 0 ? videoKeyframes : await extractVideoKeyframes(videoPreview);
+          const visionRes = await fetch('/api/vision', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ image_urls: keyframes, context_type: 'video' }),
+          });
+          if (visionRes.ok) {
+            const visionData = await visionRes.json();
+            video_analysis = visionData.analysis;
+          }
+        } catch (err) {
+          console.error('Video analysis failed', err);
+          toast.error('วิเคราะห์วิดีโอไม่สำเร็จ ระบบจะสร้างคอนเทนต์โดยอิงจากข้อมูลที่กรอกแทน');
+        } finally {
+          setAnalyzingVideo(false);
+        }
+      }
+
       const res = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -284,6 +418,8 @@ function GeneratePageInner() {
           input: {
             ...input,
             image_analysis: image_analysis || undefined,
+            video_analysis: video_analysis || undefined,
+            video_transcript: videoTranscript.trim() || undefined,
             image_urls: imagePreviews.length > 0 ? imagePreviews : undefined,
             video_url: videoPreview || undefined,
           },
@@ -452,6 +588,8 @@ function GeneratePageInner() {
                           <span>ขนาด {videoFile ? formatBytes(videoFile.size) : '-'}</span>
                           <span>MIME {videoFile?.type || '-'}</span>
                           <span>นามสกุล .{videoFile ? getFileExtension(videoFile.name) : '-'}</span>
+                          <span>{extractingKeyframes ? 'กำลังดึง key frames' : 'พร้อม preview key frames'}</span>
+                          <span>{transcribingVideo ? 'กำลังถอดเสียง' : videoTranscript ? 'มี transcript อัตโนมัติ' : 'ยังไม่มี transcript'}</span>
                         </div>
                       </div>
                     </div>
@@ -517,6 +655,60 @@ function GeneratePageInner() {
                   <div className="text-[11px] text-indigo-800 leading-relaxed">
                     Production note: ควรแยก bucket สำหรับวิดีโอด้วย `SUPABASE_CONTENT_VIDEO_BUCKET`, เปิด public read หรือ signed delivery ให้ Meta ดึงไฟล์ได้, และตั้ง bucket image เดิมผ่าน `SUPABASE_CONTENT_IMAGE_BUCKET` เพื่อไม่ปน media type ใน production
                   </div>
+                </div>
+
+                {videoPreview && (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-gray-700 font-medium">ตัวอย่าง Key Frames จากวิดีโอ</Label>
+                      <span className="text-xs text-gray-400">
+                        {extractingKeyframes ? 'กำลังเตรียม...' : `${videoKeyframes.length}/${VIDEO_KEYFRAME_TIMESTAMPS.length} เฟรม`}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-3">
+                      {videoKeyframes.map((frame, index) => (
+                        <div key={index} className="rounded-xl overflow-hidden border border-gray-200 bg-white shadow-sm">
+                          <img src={frame} alt={`Video keyframe ${index + 1}`} className="h-24 w-full object-cover" />
+                          <div className="px-2 py-1 text-[11px] text-gray-500">
+                            Scene {index + 1}
+                          </div>
+                        </div>
+                      ))}
+                      {extractingKeyframes && videoKeyframes.length === 0 && (
+                        <>
+                          {VIDEO_KEYFRAME_TIMESTAMPS.map((_, index) => (
+                            <div key={index} className="rounded-xl border border-dashed border-gray-200 bg-gray-50 h-32 flex items-center justify-center text-xs text-gray-400">
+                              เตรียมเฟรม {index + 1}
+                            </div>
+                          ))}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <Label className="text-gray-700 font-medium">บทพูดหรือโน้ตจากวิดีโอ</Label>
+                    <span className="text-xs text-gray-400">
+                      {transcribingVideo ? 'กำลังถอดเสียงอัตโนมัติ...' : videoTranscript ? 'ระบบถอดเสียงแล้ว แก้ไขต่อได้' : 'ใส่เพิ่มเองได้ถ้าต้องการ'}
+                    </span>
+                  </div>
+                  <Textarea
+                    value={videoTranscript}
+                    onChange={(e) => setVideoTranscript(e.target.value)}
+                    placeholder="ระบบจะพยายามถอดเสียงอัตโนมัติให้ ถ้าต้องการเติมบริบท เช่น ช่างกำลังล้างคอยล์เย็น, มีคราบสกปรก, ก่อน-หลังล้างต่างกันอย่างไร สามารถแก้ไขหรือเติมเองได้"
+                    rows={4}
+                    className="resize-none"
+                  />
+                  {videoTranscriptError && (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                      {videoTranscriptError}
+                    </div>
+                  )}
+                  <p className="text-xs text-gray-500 leading-relaxed">
+                    ถ้าไม่มี transcript ระบบจะยังใช้ภาพ key frames จากวิดีโอในการสรุปบริบทให้ก่อนสร้างคอนเทนต์
+                  </p>
                 </div>
               </div>
               {/* Social Page Selection (High Priority) */}
@@ -757,12 +949,16 @@ function GeneratePageInner() {
           <Button
             className="w-full h-12 text-base bg-blue-600 hover:bg-blue-700"
             onClick={handleGenerate}
-            disabled={generating}
+            disabled={generating || extractingKeyframes || transcribingVideo}
           >
-            {generating ? (
+            {generating || extractingKeyframes || transcribingVideo ? (
               <>
                 <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-                กำลังสร้างคอนเทนต์...
+                {generating
+                  ? 'กำลังสร้างคอนเทนต์...'
+                  : extractingKeyframes
+                    ? 'กำลังเตรียม key frames...'
+                    : 'กำลังถอดเสียงอัตโนมัติ...'}
               </>
             ) : (
               <>

@@ -239,6 +239,8 @@ export interface GenerationInput {
   image_urls?: string[];
   video_url?: string;
   image_analysis?: string;
+  video_analysis?: string;
+  video_transcript?: string;
 }
 
 export interface ContentOutput {
