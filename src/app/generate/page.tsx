@@ -9,6 +9,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { LoadingSpinner } from '@/components/shared/loading-spinner';
 import { EmptyState } from '@/components/shared/empty-state';
@@ -63,6 +64,7 @@ const defaultInput: GenerationInput = {
 
 const MAX_VIDEO_SIZE_BYTES = 100 * 1024 * 1024;
 const ALLOWED_VIDEO_EXTENSIONS = ['mp4', 'mov', 'm4v', 'webm'];
+const MIN_USABLE_TRANSCRIPT_LENGTH = 8;
 const ALLOWED_VIDEO_MIME_TYPES = [
   'video/mp4',
   'video/quicktime',
@@ -81,6 +83,23 @@ function formatBytes(bytes: number): string {
 function getFileExtension(filename: string): string {
   const parts = filename.toLowerCase().split('.');
   return parts.length > 1 ? parts.pop() || '' : '';
+}
+
+function normalizeTranscript(value: string): string {
+  return value.replace(/\s+/g, ' ').trim();
+}
+
+function isUsableTranscript(value: string): boolean {
+  return normalizeTranscript(value).length >= MIN_USABLE_TRANSCRIPT_LENGTH;
+}
+
+type VideoGenerationMode = 'keyframes_only' | 'keyframes_plus_transcript' | null;
+
+interface VideoKeyframe {
+  imageUrl: string;
+  timestampSeconds: number;
+  timestampLabel: string;
+  percentLabel: string;
 }
 
 function readFileAsDataUrl(
@@ -123,7 +142,28 @@ function waitForVideoEvent(
   });
 }
 
-async function extractVideoKeyframes(videoSrc: string): Promise<string[]> {
+function formatVideoTimestamp(seconds: number): string {
+  const safeSeconds = Math.max(0, Math.floor(seconds));
+  const minutes = Math.floor(safeSeconds / 60);
+  const remainingSeconds = safeSeconds % 60;
+  return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+}
+
+function formatUpdatedAtLabel(date: Date | null): string {
+  if (!date) return '';
+
+  return new Intl.DateTimeFormat('th-TH', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).format(date);
+}
+
+function formatPercentLabel(ratio: number): string {
+  return `${Math.round(ratio * 100)}%`;
+}
+
+async function extractVideoKeyframes(videoSrc: string): Promise<VideoKeyframe[]> {
   const video = document.createElement('video');
   video.src = videoSrc;
   video.muted = true;
@@ -146,13 +186,18 @@ async function extractVideoKeyframes(videoSrc: string): Promise<string[]> {
     throw new Error('Unable to prepare canvas for video frame extraction');
   }
 
-  const frames: string[] = [];
+  const frames: VideoKeyframe[] = [];
   for (const timestampRatio of VIDEO_KEYFRAME_TIMESTAMPS) {
     const targetTime = Math.min(Math.max(duration * timestampRatio, 0), Math.max(duration - 0.05, 0));
     video.currentTime = targetTime;
     await waitForVideoEvent(video, 'seeked');
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    frames.push(canvas.toDataURL('image/jpeg', 0.82));
+    frames.push({
+      imageUrl: canvas.toDataURL('image/jpeg', 0.82),
+      timestampSeconds: targetTime,
+      timestampLabel: formatVideoTimestamp(targetTime),
+      percentLabel: formatPercentLabel(timestampRatio),
+    });
   }
 
   return frames;
@@ -181,11 +226,30 @@ function GeneratePageInner() {
   const [videoUploading, setVideoUploading] = useState(false);
   const [analyzingImage, setAnalyzingImage] = useState(false);
   const [analyzingVideo, setAnalyzingVideo] = useState(false);
-  const [videoKeyframes, setVideoKeyframes] = useState<string[]>([]);
+  const [videoKeyframes, setVideoKeyframes] = useState<VideoKeyframe[]>([]);
   const [extractingKeyframes, setExtractingKeyframes] = useState(false);
   const [transcribingVideo, setTranscribingVideo] = useState(false);
   const [videoTranscriptError, setVideoTranscriptError] = useState('');
   const [videoTranscript, setVideoTranscript] = useState('');
+  const [videoAnalysisSummary, setVideoAnalysisSummary] = useState('');
+  const [videoAnalysisError, setVideoAnalysisError] = useState('');
+  const [useTranscriptForGeneration, setUseTranscriptForGeneration] = useState(true);
+  const [generationVideoMode, setGenerationVideoMode] = useState<VideoGenerationMode>(null);
+  const [videoAnalysisUpdatedAt, setVideoAnalysisUpdatedAt] = useState<Date | null>(null);
+  const [videoTranscriptUpdatedAt, setVideoTranscriptUpdatedAt] = useState<Date | null>(null);
+  const [generationAnalysisUsedAt, setGenerationAnalysisUsedAt] = useState<Date | null>(null);
+
+  const normalizedTranscript = normalizeTranscript(videoTranscript);
+  const hasTranscriptText = normalizedTranscript.length > 0;
+  const hasUsableTranscript = isUsableTranscript(videoTranscript);
+  const shouldUseTranscriptForGeneration = useTranscriptForGeneration && hasUsableTranscript;
+  const transcriptStatusText = transcribingVideo
+    ? 'กำลังถอดเสียงอัตโนมัติ...'
+    : hasUsableTranscript
+      ? 'มี transcript อัตโนมัติ'
+      : hasTranscriptText
+        ? 'เสียงไม่ชัด ใช้ key frames อย่างเดียว'
+        : 'ใช้ key frames อย่างเดียว';
 
   useEffect(() => {
     loadSocialPages();
@@ -216,6 +280,93 @@ function GeneratePageInner() {
       if (Array.isArray(camps)) setCampaigns(camps);
     } catch (err) {
       console.error('Failed to load campaigns', err);
+    }
+  }
+
+  async function analyzeVideoFrames(keyframes: VideoKeyframe[]): Promise<string> {
+    const visionRes = await fetch('/api/vision', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        image_urls: keyframes.map((frame) => frame.imageUrl),
+        context_type: 'video',
+      }),
+    });
+
+    if (!visionRes.ok) {
+      const errorData = await visionRes.json().catch(() => ({}));
+      throw new Error(errorData.error || 'Video analysis failed');
+    }
+
+    const visionData = await visionRes.json();
+    return visionData.analysis || '';
+  }
+
+  async function transcribeVideoFile(file: File): Promise<string> {
+    const formData = new FormData();
+    formData.append('video', file);
+    const transcriptionRes = await fetch('/api/transcribe-video', {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!transcriptionRes.ok) {
+      const errorData = await transcriptionRes.json().catch(() => ({}));
+      throw new Error(errorData.error || 'Auto transcription failed');
+    }
+
+    const transcriptionData = await transcriptionRes.json();
+    return transcriptionData.transcript || '';
+  }
+
+  async function handleRefreshKeyframes() {
+    if (!videoPreview) return;
+
+    setExtractingKeyframes(true);
+    setAnalyzingVideo(true);
+    setVideoAnalysisError('');
+
+    try {
+      const frames = await extractVideoKeyframes(videoPreview);
+      setVideoKeyframes(frames);
+      const analysis = await analyzeVideoFrames(frames);
+      setVideoAnalysisSummary(analysis);
+      setVideoAnalysisUpdatedAt(new Date());
+      toast.success('วิเคราะห์ key frames ใหม่เรียบร้อยแล้ว');
+    } catch (error) {
+      console.error('Keyframe refresh failed', error);
+      setVideoAnalysisSummary('');
+      setVideoAnalysisError('วิเคราะห์ key frames ใหม่ไม่สำเร็จ กรุณาลองอีกครั้ง');
+      toast.error('วิเคราะห์ key frames ใหม่ไม่สำเร็จ');
+    } finally {
+      setExtractingKeyframes(false);
+      setAnalyzingVideo(false);
+    }
+  }
+
+  async function handleRefreshTranscript() {
+    if (!videoFile) return;
+
+    setTranscribingVideo(true);
+    setVideoTranscriptError('');
+    try {
+      const transcript = await transcribeVideoFile(videoFile);
+      setVideoTranscript(transcript);
+      setVideoTranscriptUpdatedAt(new Date());
+      if (transcript && !isUsableTranscript(transcript)) {
+        setVideoTranscriptError('เสียงในคลิปสั้นหรือไม่ชัดพอ ระบบจะใช้ key frames จากวิดีโอเป็นหลักในการสร้างคอนเทนต์');
+        setUseTranscriptForGeneration(false);
+      } else {
+        setUseTranscriptForGeneration(true);
+      }
+      toast.success('ถอด transcript ใหม่เรียบร้อยแล้ว');
+    } catch (error) {
+      console.error('Transcript refresh failed', error);
+      setVideoTranscriptError('ถอดเสียงอัตโนมัติไม่สำเร็จ คุณยังพิมพ์โน้ตหรือคำพูดจากวิดีโอเองได้');
+      setUseTranscriptForGeneration(false);
+      toast.error('ถอด transcript ใหม่ไม่สำเร็จ');
+    } finally {
+      setTranscribingVideo(false);
     }
   }
 
@@ -261,8 +412,15 @@ function GeneratePageInner() {
     setVideoKeyframes([]);
     setVideoTranscript('');
     setVideoTranscriptError('');
+    setVideoAnalysisSummary('');
+    setVideoAnalysisError('');
     setExtractingKeyframes(false);
     setTranscribingVideo(false);
+    setUseTranscriptForGeneration(true);
+    setGenerationVideoMode(null);
+    setVideoAnalysisUpdatedAt(null);
+    setVideoTranscriptUpdatedAt(null);
+    setGenerationAnalysisUsedAt(null);
 
     if (imageFiles.length > 0) {
       setVideoUploadError('กรุณาลบรูปภาพก่อน แล้วค่อยอัปโหลดวิดีโอ');
@@ -304,6 +462,19 @@ function GeneratePageInner() {
       try {
         const frames = await extractVideoKeyframes(preview);
         setVideoKeyframes(frames);
+        setAnalyzingVideo(true);
+        setVideoAnalysisError('');
+        try {
+          const analysis = await analyzeVideoFrames(frames);
+          setVideoAnalysisSummary(analysis);
+          setVideoAnalysisUpdatedAt(new Date());
+        } catch (error) {
+          console.error('Video analysis preview failed', error);
+          setVideoAnalysisSummary('');
+          setVideoAnalysisError('สรุปภาพจากวิดีโอล่วงหน้าไม่สำเร็จ แต่ยังสร้างคอนเทนต์จาก key frames ได้ตอน generate');
+        } finally {
+          setAnalyzingVideo(false);
+        }
       } catch (error) {
         console.error('Keyframe extraction failed', error);
         setVideoKeyframes([]);
@@ -314,23 +485,19 @@ function GeneratePageInner() {
 
       setTranscribingVideo(true);
       try {
-        const formData = new FormData();
-        formData.append('video', file);
-        const transcriptionRes = await fetch('/api/transcribe-video', {
-          method: 'POST',
-          body: formData,
-        });
-
-        if (!transcriptionRes.ok) {
-          const errorData = await transcriptionRes.json().catch(() => ({}));
-          throw new Error(errorData.error || 'Auto transcription failed');
+        const transcript = await transcribeVideoFile(file);
+        setVideoTranscript(transcript);
+        setVideoTranscriptUpdatedAt(new Date());
+        if (transcript && !isUsableTranscript(transcript)) {
+          setVideoTranscriptError('เสียงในคลิปสั้นหรือไม่ชัดพอ ระบบจะใช้ key frames จากวิดีโอเป็นหลักในการสร้างคอนเทนต์');
+          setUseTranscriptForGeneration(false);
+        } else {
+          setUseTranscriptForGeneration(true);
         }
-
-        const transcriptionData = await transcriptionRes.json();
-        setVideoTranscript(transcriptionData.transcript || '');
       } catch (error) {
         console.error('Video transcription failed', error);
         setVideoTranscriptError('ถอดเสียงอัตโนมัติไม่สำเร็จ คุณยังพิมพ์โน้ตหรือคำพูดจากวิดีโอเองได้');
+        setUseTranscriptForGeneration(false);
       } finally {
         setTranscribingVideo(false);
       }
@@ -354,6 +521,13 @@ function GeneratePageInner() {
     setVideoKeyframes([]);
     setVideoTranscriptError('');
     setVideoTranscript('');
+    setVideoAnalysisSummary('');
+    setVideoAnalysisError('');
+    setUseTranscriptForGeneration(true);
+    setGenerationVideoMode(null);
+    setVideoAnalysisUpdatedAt(null);
+    setVideoTranscriptUpdatedAt(null);
+    setGenerationAnalysisUsedAt(null);
   }
 
   async function handleGenerate() {
@@ -390,23 +564,25 @@ function GeneratePageInner() {
 
       if (videoPreview) {
         setAnalyzingVideo(true);
+        setVideoAnalysisError('');
         try {
           const keyframes = videoKeyframes.length > 0 ? videoKeyframes : await extractVideoKeyframes(videoPreview);
-          const visionRes = await fetch('/api/vision', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ image_urls: keyframes, context_type: 'video' }),
-          });
-          if (visionRes.ok) {
-            const visionData = await visionRes.json();
-            video_analysis = visionData.analysis;
-          }
+          video_analysis = await analyzeVideoFrames(keyframes);
+          setVideoAnalysisSummary(video_analysis);
+          const analysisUsedAt = new Date();
+          setVideoAnalysisUpdatedAt(analysisUsedAt);
+          setGenerationAnalysisUsedAt(analysisUsedAt);
         } catch (err) {
           console.error('Video analysis failed', err);
+          setVideoAnalysisSummary('');
+          setVideoAnalysisError('สรุปภาพจากวิดีโอไม่สำเร็จ ระบบจะอิงจากข้อมูลที่กรอกและ key frames เท่าที่มีแทน');
+          setGenerationAnalysisUsedAt(null);
           toast.error('วิเคราะห์วิดีโอไม่สำเร็จ ระบบจะสร้างคอนเทนต์โดยอิงจากข้อมูลที่กรอกแทน');
         } finally {
           setAnalyzingVideo(false);
         }
+      } else {
+        setGenerationAnalysisUsedAt(null);
       }
 
       const res = await fetch('/api/generate', {
@@ -419,7 +595,7 @@ function GeneratePageInner() {
             ...input,
             image_analysis: image_analysis || undefined,
             video_analysis: video_analysis || undefined,
-            video_transcript: videoTranscript.trim() || undefined,
+            video_transcript: shouldUseTranscriptForGeneration ? normalizedTranscript : undefined,
             image_urls: imagePreviews.length > 0 ? imagePreviews : undefined,
             video_url: videoPreview || undefined,
           },
@@ -432,6 +608,13 @@ function GeneratePageInner() {
       }
 
       const data = await res.json();
+      setGenerationVideoMode(
+        videoPreview
+          ? shouldUseTranscriptForGeneration
+            ? 'keyframes_plus_transcript'
+            : 'keyframes_only'
+          : null,
+      );
       setResult({
         content: data.content,
         output: data.content.output_payload,
@@ -589,7 +772,7 @@ function GeneratePageInner() {
                           <span>MIME {videoFile?.type || '-'}</span>
                           <span>นามสกุล .{videoFile ? getFileExtension(videoFile.name) : '-'}</span>
                           <span>{extractingKeyframes ? 'กำลังดึง key frames' : 'พร้อม preview key frames'}</span>
-                          <span>{transcribingVideo ? 'กำลังถอดเสียง' : videoTranscript ? 'มี transcript อัตโนมัติ' : 'ยังไม่มี transcript'}</span>
+                          <span>{transcriptStatusText}</span>
                         </div>
                       </div>
                     </div>
@@ -668,9 +851,13 @@ function GeneratePageInner() {
                     <div className="grid grid-cols-3 gap-3">
                       {videoKeyframes.map((frame, index) => (
                         <div key={index} className="rounded-xl overflow-hidden border border-gray-200 bg-white shadow-sm">
-                          <img src={frame} alt={`Video keyframe ${index + 1}`} className="h-24 w-full object-cover" />
-                          <div className="px-2 py-1 text-[11px] text-gray-500">
-                            Scene {index + 1}
+                          <img src={frame.imageUrl} alt={`Video keyframe ${index + 1}`} className="h-24 w-full object-cover" />
+                          <div className="px-2 py-1 text-[11px] text-gray-500 flex items-center justify-between gap-2">
+                            <span>Scene {index + 1}</span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-gray-400">{frame.percentLabel}</span>
+                              <span className="font-medium text-gray-600">{frame.timestampLabel}</span>
+                            </div>
                           </div>
                         </div>
                       ))}
@@ -690,17 +877,82 @@ function GeneratePageInner() {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between gap-3">
                     <Label className="text-gray-700 font-medium">บทพูดหรือโน้ตจากวิดีโอ</Label>
-                    <span className="text-xs text-gray-400">
-                      {transcribingVideo ? 'กำลังถอดเสียงอัตโนมัติ...' : videoTranscript ? 'ระบบถอดเสียงแล้ว แก้ไขต่อได้' : 'ใส่เพิ่มเองได้ถ้าต้องการ'}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      {videoTranscriptUpdatedAt && (
+                        <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+                          transcript updated {formatUpdatedAtLabel(videoTranscriptUpdatedAt)}
+                        </span>
+                      )}
+                      <span className="text-xs text-gray-400">
+                        {transcribingVideo
+                          ? 'กำลังถอดเสียงอัตโนมัติ...'
+                          : hasUsableTranscript
+                            ? 'ระบบถอดเสียงแล้ว แก้ไขต่อได้'
+                            : hasTranscriptText
+                              ? 'ข้อความสั้นเกินใช้ ระบบจะพึ่ง key frames เป็นหลัก'
+                              : 'ใส่เพิ่มเองได้ถ้าต้องการ'}
+                      </span>
+                    </div>
                   </div>
                   <Textarea
                     value={videoTranscript}
-                    onChange={(e) => setVideoTranscript(e.target.value)}
+                    onChange={(e) => {
+                      const nextValue = e.target.value;
+                      const usable = isUsableTranscript(nextValue);
+                      setVideoTranscript(nextValue);
+                      if (usable) {
+                        setVideoTranscriptError('');
+                        setUseTranscriptForGeneration(true);
+                      } else if (normalizeTranscript(nextValue).length > 0) {
+                        setVideoTranscriptError('ข้อความใน transcript ยังสั้นเกินใช้ ระบบจะใช้ key frames จากวิดีโอเป็นหลัก');
+                        setUseTranscriptForGeneration(false);
+                      } else {
+                        setVideoTranscriptError('');
+                        setUseTranscriptForGeneration(false);
+                      }
+                    }}
                     placeholder="ระบบจะพยายามถอดเสียงอัตโนมัติให้ ถ้าต้องการเติมบริบท เช่น ช่างกำลังล้างคอยล์เย็น, มีคราบสกปรก, ก่อน-หลังล้างต่างกันอย่างไร สามารถแก้ไขหรือเติมเองได้"
                     rows={4}
                     className="resize-none"
                   />
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleRefreshTranscript}
+                      disabled={!videoFile || transcribingVideo}
+                    >
+                      <RefreshCw className={`h-3 w-3 mr-1 ${transcribingVideo ? 'animate-spin' : ''}`} />
+                      วิเคราะห์ transcript ใหม่
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleRefreshKeyframes}
+                      disabled={!videoPreview || extractingKeyframes || analyzingVideo}
+                    >
+                      <RefreshCw className={`h-3 w-3 mr-1 ${(extractingKeyframes || analyzingVideo) ? 'animate-spin' : ''}`} />
+                      วิเคราะห์ key frames ใหม่
+                    </Button>
+                  </div>
+                  <div className="flex items-start justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-3">
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium text-slate-700">ใช้ transcript นี้ในการเขียน</p>
+                      <p className="text-xs text-slate-500 leading-relaxed">
+                        {hasUsableTranscript
+                          ? 'เปิดไว้เพื่อให้ AI ใช้เสียง/คำพูดจากคลิปร่วมกับ key frames'
+                          : 'ตอนนี้ transcript ยังไม่พร้อมใช้งาน ระบบจะสร้างคอนเทนต์จาก key frames เป็นหลัก'}
+                      </p>
+                    </div>
+                    <Switch
+                      checked={shouldUseTranscriptForGeneration}
+                      disabled={!hasUsableTranscript}
+                      onCheckedChange={(checked) => setUseTranscriptForGeneration(checked)}
+                      aria-label="Use transcript for generation"
+                    />
+                  </div>
                   {videoTranscriptError && (
                     <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
                       {videoTranscriptError}
@@ -710,6 +962,49 @@ function GeneratePageInner() {
                     ถ้าไม่มี transcript ระบบจะยังใช้ภาพ key frames จากวิดีโอในการสรุปบริบทให้ก่อนสร้างคอนเทนต์
                   </p>
                 </div>
+
+                {videoPreview && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <Label className="text-gray-700 font-medium">Video Analysis Summary</Label>
+                      <div className="flex items-center gap-2">
+                        {videoAnalysisUpdatedAt && (
+                          <span className="inline-flex items-center rounded-full border border-blue-200 bg-white/90 px-2 py-0.5 text-[11px] font-medium text-blue-700">
+                            analysis updated {formatUpdatedAtLabel(videoAnalysisUpdatedAt)}
+                          </span>
+                        )}
+                        <span className="text-xs text-gray-400">
+                          {analyzingVideo
+                            ? 'กำลังสรุปจาก key frames...'
+                            : videoAnalysisSummary
+                              ? 'พร้อมใช้ใน generation'
+                              : 'จะสรุปอัตโนมัติเมื่อกด generate'}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="rounded-xl border border-blue-100 bg-blue-50/60 px-4 py-3">
+                      {analyzingVideo ? (
+                        <div className="flex items-center gap-2 text-sm text-blue-800">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          กำลังวิเคราะห์สิ่งที่เกิดขึ้นในคลิปจาก key frames...
+                        </div>
+                      ) : videoAnalysisSummary ? (
+                        <p className="text-sm leading-relaxed text-blue-950 whitespace-pre-wrap">
+                          {videoAnalysisSummary}
+                        </p>
+                      ) : (
+                        <p className="text-sm leading-relaxed text-blue-800">
+                          ระบบจะสรุปว่าคลิปกำลังทำอะไร, มีเครื่องมือหรือปัญหาอะไร, และมุมการตลาดที่ตรงกับภาพจริงก่อนสร้างคอนเทนต์
+                        </p>
+                      )}
+                    </div>
+                    {videoAnalysisError && (
+                      <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                        {videoAnalysisError}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
               {/* Social Page Selection (High Priority) */}
               <div>
@@ -1000,13 +1295,32 @@ function GeneratePageInner() {
 
           {result && !generating && (
             <div className="space-y-4">
-              <div className="flex items-center gap-2 justify-end">
+              <div className="flex flex-wrap items-center gap-2 justify-between">
+                <div className="flex items-center gap-2">
+                  {generationVideoMode === 'keyframes_only' && (
+                    <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-800">
+                      ใช้ข้อมูลวิดีโอ: key frames only
+                    </span>
+                  )}
+                  {generationVideoMode === 'keyframes_plus_transcript' && (
+                    <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-800">
+                      ใช้ข้อมูลวิดีโอ: key frames + transcript
+                    </span>
+                  )}
+                  {generationAnalysisUsedAt && (
+                    <span className="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-medium text-blue-800">
+                      ล่าสุดใช้ analysis เวลา {formatUpdatedAtLabel(generationAnalysisUsedAt)}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 justify-end">
                 <Button variant="outline" size="sm" onClick={handleGenerate}>
                   <RefreshCw className="h-3 w-3 mr-1" /> สร้างใหม่
                 </Button>
                 <Button size="sm" onClick={handleSave}>
                   <Save className="h-3 w-3 mr-1" /> บันทึก
                 </Button>
+                </div>
               </div>
               <OutputDisplay
                 output={result.output}
