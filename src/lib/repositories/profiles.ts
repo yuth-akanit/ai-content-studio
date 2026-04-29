@@ -30,10 +30,14 @@ export async function getProfileById(id: string): Promise<BusinessProfile | null
 }
 
 export async function getDefaultProfile(): Promise<BusinessProfile | null> {
+  return getDefaultProfileByFields('*');
+}
+
+export async function getDefaultProfileByFields(fields: string): Promise<BusinessProfile | null> {
   const db = getSupabaseServerClient();
   const { data, error } = await db
     .from(TABLE)
-    .select('*')
+    .select(fields)
     .order('created_at', { ascending: true })
     .limit(1)
     .single();

@@ -273,6 +273,9 @@ export default function LibraryPage() {
             <OutputDisplay
               output={selectedContent.output_payload}
               platform={selectedContent.platform}
+              contentId={selectedContent.id}
+              imageUrls={selectedContent.input_payload?.image_urls}
+              videoUrl={selectedContent.input_payload?.video_url}
             />
           )}
         </DialogContent>

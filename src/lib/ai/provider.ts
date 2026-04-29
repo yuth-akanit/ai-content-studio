@@ -4,6 +4,7 @@ export interface AIProviderConfig {
   model: string;
   maxTokens?: number;
   temperature?: number;
+  responseFormat?: 'json_object' | 'text';
 }
 
 export interface AIMessage {
@@ -46,7 +47,9 @@ class OpenAICompatibleProvider implements AIProvider {
         messages,
         max_tokens: cfg.maxTokens || 4096,
         temperature: cfg.temperature ?? 0.7,
-        response_format: { type: 'json_object' },
+        ...(cfg.responseFormat === 'json_object'
+          ? { response_format: { type: 'json_object' } }
+          : {}),
       }),
     });
 
@@ -89,6 +92,7 @@ export function getAIProvider(): AIProvider {
     model,
     maxTokens: 4096,
     temperature: 0.7,
+    responseFormat: 'json_object',
   });
 
   return providerInstance;

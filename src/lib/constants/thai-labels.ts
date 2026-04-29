@@ -267,4 +267,9 @@ export const THAI_UI_LABELS = {
   post_with_image: 'โพสต์พร้อมรูปภาพ',
   comments_will_be_posted: 'คอมเมนต์แนะนำจะถูกโพสต์อัตโนมัติ',
   copy_comment: 'คัดลอกคอมเมนต์',
+  ai_chat: 'AI ผู้ช่วยอัจฉริยะ',
+  chat_placeholder: 'พิมพ์ข้อความถาม AI ที่นี่...',
+  clear_chat: 'ล้างบทสนทนา',
+  chat_processing: 'AI กำลังประมวลผล...',
+  chat_welcome: 'สวัสดีครับ! ผมเป็น AI ผู้ช่วยส่วนตัวของคุณ มีอะไรให้ผมช่วยแนะนำหรือช่วยเขียน Content ในวันนี้ไหมครับ?',
 };

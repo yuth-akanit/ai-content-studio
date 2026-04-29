@@ -21,6 +21,7 @@ export const generationInputSchema = z.object({
   visual_direction: z.string().optional(),
   content_goal: z.string().optional(),
   image_urls: z.array(z.string()).optional(),
+  video_url: z.string().optional(),
   image_analysis: z.string().optional(),
 });
 

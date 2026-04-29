@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { normalizeImageUrls, normalizeVideoUrl } from '@/lib/server/media-storage';
 
 export const dynamic = 'force-dynamic';
 
@@ -8,6 +9,23 @@ interface PostRequest {
   page_ids: string[];
   message: string;
   image_urls?: string[];
+  video_url?: string;
+}
+
+type ErrorType = 'preflight' | 'storage' | 'meta_publish';
+type ErrorStage =
+  | 'preflight_validation'
+  | 'supabase_storage_upload'
+  | 'meta_publish_facebook'
+  | 'meta_publish_instagram'
+  | 'meta_publish_line';
+
+interface PostResult {
+  id: string;
+  success: boolean;
+  error?: string;
+  error_type?: ErrorType;
+  error_stage?: ErrorStage;
 }
 
 async function postToFacebookPage(
@@ -15,8 +33,40 @@ async function postToFacebookPage(
   pageExternalId: string,
   message: string,
   imageUrls?: string[],
-): Promise<{ id: string; success: boolean; error?: string }> {
+  videoUrl?: string,
+): Promise<PostResult> {
   try {
+    if (videoUrl && imageUrls?.length) {
+      return {
+        id: '',
+        success: false,
+        error: 'Facebook auto-post currently supports either images or one video per post, not both',
+        error_type: 'preflight',
+        error_stage: 'preflight_validation',
+      };
+    }
+
+    if (videoUrl) {
+      const endpoint = `https://graph.facebook.com/v22.0/${pageExternalId}/videos`;
+      const formData = new FormData();
+      formData.append('access_token', pageAccessToken);
+      formData.append('description', message);
+      formData.append('file_url', videoUrl);
+
+      const res = await fetch(endpoint, { method: 'POST', body: formData });
+      const data = await res.json();
+      if (data.error) {
+        return {
+          id: '',
+          success: false,
+          error: data.error.message,
+          error_type: 'meta_publish',
+          error_stage: 'meta_publish_facebook',
+        };
+      }
+      return { id: data.id || data.post_id || '', success: true };
+    }
+
     // If no images, just post text
     if (!imageUrls || imageUrls.length === 0) {
       const endpoint = `https://graph.facebook.com/v22.0/${pageExternalId}/feed`;
@@ -26,7 +76,15 @@ async function postToFacebookPage(
         body: JSON.stringify({ message, access_token: pageAccessToken }),
       });
       const data = await res.json();
-      if (data.error) return { id: '', success: false, error: data.error.message };
+      if (data.error) {
+        return {
+          id: '',
+          success: false,
+          error: data.error.message,
+          error_type: 'meta_publish',
+          error_stage: 'meta_publish_facebook',
+        };
+      }
       return { id: data.id || data.post_id || '', success: true };
     }
 
@@ -80,7 +138,15 @@ async function postToFacebookPage(
     });
 
     const feedData = await feedRes.json();
-    if (feedData.error) return { id: '', success: false, error: feedData.error.message };
+    if (feedData.error) {
+      return {
+        id: '',
+        success: false,
+        error: feedData.error.message,
+        error_type: 'meta_publish',
+        error_stage: 'meta_publish_facebook',
+      };
+    }
 
     return { id: feedData.id || feedData.post_id || '', success: true };
   } catch (error) {
@@ -88,6 +154,8 @@ async function postToFacebookPage(
       id: '',
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',
+      error_type: 'meta_publish',
+      error_stage: 'meta_publish_facebook',
     };
   }
 }
@@ -97,34 +165,107 @@ async function postToInstagram(
   igUserId: string,
   caption: string,
   imageUrls?: string[],
-): Promise<{ id: string; success: boolean; error?: string }> {
+  videoUrl?: string,
+): Promise<PostResult> {
   try {
-    if (!imageUrls || imageUrls.length === 0) {
-      return { id: '', success: false, error: 'Instagram requires at least one image' };
+    if (videoUrl && imageUrls?.length) {
+      return {
+        id: '',
+        success: false,
+        error: 'Instagram auto-post currently supports either image posts or one Reel per publish request',
+        error_type: 'preflight',
+        error_stage: 'preflight_validation',
+      };
     }
 
+    if (!imageUrls || imageUrls.length === 0) {
+      if (!videoUrl) {
+        return {
+          id: '',
+          success: false,
+          error: 'Instagram requires at least one image or one video',
+          error_type: 'preflight',
+          error_stage: 'preflight_validation',
+        };
+      }
+    }
+
+    const normalizedImageUrls = imageUrls || [];
+
     // Helper to check processing status
-    const waitForMediaProcessing = async (containerId: string) => {
+    const waitForMediaProcessing = async (containerId: string, maxAttempts = 10, delayMs = 3000) => {
       let isReady = false;
       let attempt = 0;
-      while (!isReady && attempt < 10) {
-        await new Promise(resolve => setTimeout(resolve, 3000)); // wait 3s
+      while (!isReady && attempt < maxAttempts) {
+        await new Promise(resolve => setTimeout(resolve, delayMs));
         const statusRes = await fetch(
-          `https://graph.facebook.com/v22.0/${containerId}?fields=status_code&access_token=${accessToken}`
+          `https://graph.facebook.com/v22.0/${containerId}?fields=status_code,status&access_token=${accessToken}`
         );
         const statusData = await statusRes.json();
         if (statusData.status_code === 'FINISHED') {
           isReady = true;
         } else if (statusData.status_code === 'ERROR') {
-          throw new Error('Instagram failed to process the image container');
+          throw new Error(statusData.status || 'Instagram failed to process the media container');
         }
         attempt++;
       }
       if (!isReady) throw new Error('Timeout waiting for Instagram media processing');
     };
 
+    if (videoUrl) {
+      const createRes = await fetch(
+        `https://graph.facebook.com/v22.0/${igUserId}/media`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            media_type: 'REELS',
+            video_url: videoUrl,
+            caption,
+            share_to_feed: true,
+            access_token: accessToken,
+          }),
+        },
+      );
+      const createData = await createRes.json();
+      if (createData.error) {
+        return {
+          id: '',
+          success: false,
+          error: createData.error.message,
+          error_type: 'meta_publish',
+          error_stage: 'meta_publish_instagram',
+        };
+      }
+
+      await waitForMediaProcessing(createData.id, 30, 5000);
+
+      const publishRes = await fetch(
+        `https://graph.facebook.com/v22.0/${igUserId}/media_publish`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            creation_id: createData.id,
+            access_token: accessToken,
+          }),
+        },
+      );
+      const publishData = await publishRes.json();
+      if (publishData.error) {
+        return {
+          id: '',
+          success: false,
+          error: publishData.error.message,
+          error_type: 'meta_publish',
+          error_stage: 'meta_publish_instagram',
+        };
+      }
+      return { id: publishData.id, success: true };
+    }
+
     // Single image post
-    if (imageUrls.length === 1) {
+    if (normalizedImageUrls.length === 1) {
       // Step 1: Create media container
       const createRes = await fetch(
         `https://graph.facebook.com/v22.0/${igUserId}/media`,
@@ -132,14 +273,22 @@ async function postToInstagram(
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            image_url: imageUrls[0],
+            image_url: normalizedImageUrls[0],
             caption,
             access_token: accessToken,
           }),
         },
       );
       const createData = await createRes.json();
-      if (createData.error) return { id: '', success: false, error: createData.error.message };
+      if (createData.error) {
+        return {
+          id: '',
+          success: false,
+          error: createData.error.message,
+          error_type: 'meta_publish',
+          error_stage: 'meta_publish_instagram',
+        };
+      }
 
       await waitForMediaProcessing(createData.id);
 
@@ -156,13 +305,21 @@ async function postToInstagram(
         },
       );
       const publishData = await publishRes.json();
-      if (publishData.error) return { id: '', success: false, error: publishData.error.message };
+      if (publishData.error) {
+        return {
+          id: '',
+          success: false,
+          error: publishData.error.message,
+          error_type: 'meta_publish',
+          error_stage: 'meta_publish_instagram',
+        };
+      }
       return { id: publishData.id, success: true };
     }
 
     // Carousel (multiple images)
     const childIds: string[] = [];
-    for (const url of imageUrls) {
+    for (const url of normalizedImageUrls) {
       const res = await fetch(
         `https://graph.facebook.com/v22.0/${igUserId}/media`,
         {
@@ -176,7 +333,15 @@ async function postToInstagram(
         },
       );
       const data = await res.json();
-      if (data.error) return { id: '', success: false, error: data.error.message };
+      if (data.error) {
+        return {
+          id: '',
+          success: false,
+          error: data.error.message,
+          error_type: 'meta_publish',
+          error_stage: 'meta_publish_instagram',
+        };
+      }
       childIds.push(data.id);
     }
 
@@ -194,7 +359,15 @@ async function postToInstagram(
       },
     );
     const carouselData = await carouselRes.json();
-    if (carouselData.error) return { id: '', success: false, error: carouselData.error.message };
+    if (carouselData.error) {
+      return {
+        id: '',
+        success: false,
+        error: carouselData.error.message,
+        error_type: 'meta_publish',
+        error_stage: 'meta_publish_instagram',
+      };
+    }
 
     await waitForMediaProcessing(carouselData.id);
 
@@ -210,13 +383,23 @@ async function postToInstagram(
       },
     );
     const publishData = await publishRes.json();
-    if (publishData.error) return { id: '', success: false, error: publishData.error.message };
+    if (publishData.error) {
+      return {
+        id: '',
+        success: false,
+        error: publishData.error.message,
+        error_type: 'meta_publish',
+        error_stage: 'meta_publish_instagram',
+      };
+    }
     return { id: publishData.id, success: true };
   } catch (error) {
     return {
       id: '',
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',
+      error_type: 'meta_publish',
+      error_stage: 'meta_publish_instagram',
     };
   }
 }
@@ -256,8 +439,19 @@ async function postToLineOA(
   accessToken: string,
   message: string,
   imageUrls?: string[],
-): Promise<{ id: string; success: boolean; error?: string }> {
+  videoUrl?: string,
+): Promise<PostResult> {
   try {
+    if (videoUrl) {
+      return {
+        id: '',
+        success: false,
+        error: 'LINE OA broadcast video auto-post is not supported in this flow yet',
+        error_type: 'preflight',
+        error_stage: 'preflight_validation',
+      };
+    }
+
     const messages: any[] = [];
 
     // Add images first (max 4 to leave room for text)
@@ -294,6 +488,8 @@ async function postToLineOA(
         id: '',
         success: false,
         error: data.message || `LINE API Error (${response.status})`,
+        error_type: 'meta_publish',
+        error_stage: 'meta_publish_line',
       };
     }
 
@@ -303,6 +499,8 @@ async function postToLineOA(
       id: '',
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',
+      error_type: 'meta_publish',
+      error_stage: 'meta_publish_line',
     };
   }
 }
@@ -314,43 +512,46 @@ export async function POST(request: NextRequest) {
   );
   try {
     const body: PostRequest = await request.json();
-    const { content_id, page_ids, message, image_urls } = body;
+    const { content_id, page_ids, message, image_urls, video_url } = body;
 
     if (!content_id || !page_ids?.length || !message) {
       return NextResponse.json(
-        { error: 'content_id, page_ids, and message are required' },
+        {
+          error: 'content_id, page_ids, and message are required',
+          error_type: 'preflight',
+          error_stage: 'preflight_validation',
+        },
         { status: 400 },
       );
     }
 
-    // Convert any base64 image URLs to public storage URLs (required by Instagram)
-    let publicImageUrls = image_urls;
-    if (image_urls && image_urls.some((url: string) => url.startsWith('data:'))) {
-      publicImageUrls = await Promise.all(image_urls.map(async (url: string) => {
-        if (!url.startsWith('data:')) return url;
-        const matches = url.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
-        if (!matches || matches.length !== 3) return url;
-        const contentType = matches[1];
-        const base64Data = matches[2];
-        const buffer = Buffer.from(base64Data, 'base64');
-        const ext = contentType.split('/')[1] || 'jpg';
-        const filename = `content_${Date.now()}_${Math.random().toString(36).substring(7)}.${ext}`;
-        
-        const { error: uploadError } = await supabase.storage
-          .from('content-images')
-          .upload(filename, buffer, { contentType });
-          
-        if (uploadError) {
-          console.error('Error uploading image to storage:', uploadError);
-          return url;
-        }
-        
-        const { data: { publicUrl } } = supabase.storage
-          .from('content-images')
-          .getPublicUrl(filename);
-          
-        return publicUrl;
-      }));
+    if (image_urls?.length && video_url) {
+      return NextResponse.json(
+        {
+          error: 'Please send either image_urls or video_url for this publish request, not both',
+          error_type: 'preflight',
+          error_stage: 'preflight_validation',
+        },
+        { status: 400 },
+      );
+    }
+
+    let publicImageUrls: string[] | undefined;
+    let publicVideoUrl: string | undefined;
+
+    try {
+      publicImageUrls = await normalizeImageUrls(supabase, image_urls);
+      publicVideoUrl = await normalizeVideoUrl(supabase, video_url);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Storage upload failed';
+      return NextResponse.json(
+        {
+          error: message,
+          error_type: 'storage',
+          error_stage: 'supabase_storage_upload',
+        },
+        { status: 500 },
+      );
     }
 
     // Fetch the social pages from the database
@@ -361,7 +562,11 @@ export async function POST(request: NextRequest) {
 
     if (pagesError || !pages?.length) {
       return NextResponse.json(
-        { error: 'No valid social pages found' },
+        {
+          error: 'No valid social pages found',
+          error_type: 'preflight',
+          error_stage: 'preflight_validation',
+        },
         { status: 404 },
       );
     }
@@ -394,6 +599,7 @@ export async function POST(request: NextRequest) {
             page.external_id,
             message,
             publicImageUrls,
+            publicVideoUrl,
           );
 
           return {
@@ -403,6 +609,8 @@ export async function POST(request: NextRequest) {
             success: postResult.success,
             post_id: postResult.id,
             error: postResult.error,
+            error_type: postResult.error_type,
+            error_stage: postResult.error_stage,
             comments_posted: 0,
           };
         } else if (page.provider === 'facebook') {
@@ -411,6 +619,7 @@ export async function POST(request: NextRequest) {
             page.external_id,
             message,
             publicImageUrls,
+            publicVideoUrl,
           );
 
           let commentsPosted = 0;
@@ -435,13 +644,16 @@ export async function POST(request: NextRequest) {
             success: postResult.success,
             post_id: postResult.id,
             error: postResult.error,
+            error_type: postResult.error_type,
+            error_stage: postResult.error_stage,
             comments_posted: commentsPosted,
           };
-        } else if (page.provider === 'line') {
+        } else if (page.provider === 'line' || page.provider === 'line_oa') {
           const postResult = await postToLineOA(
             token,
             message,
             publicImageUrls,
+            publicVideoUrl,
           );
 
           return {
@@ -451,6 +663,8 @@ export async function POST(request: NextRequest) {
             success: postResult.success,
             post_id: postResult.id,
             error: postResult.error,
+            error_type: postResult.error_type,
+            error_stage: postResult.error_stage,
             comments_posted: 0,
           };
         } else {
@@ -460,6 +674,8 @@ export async function POST(request: NextRequest) {
             provider: page.provider,
             success: false,
             error: `Provider "${page.provider}" auto-posting not yet supported`,
+            error_type: 'preflight',
+            error_stage: 'preflight_validation',
           };
         }
       } catch (err) {
@@ -469,6 +685,8 @@ export async function POST(request: NextRequest) {
           provider: page.provider,
           success: false,
           error: err instanceof Error ? err.message : 'Unknown error',
+          error_type: 'meta_publish',
+          error_stage: isInstagram ? 'meta_publish_instagram' : 'meta_publish_facebook',
         };
       }
     }));
@@ -498,12 +716,21 @@ export async function POST(request: NextRequest) {
       total: results.length,
       posted: successCount,
       failed: results.length - successCount,
+      error_type: successCount > 0 ? undefined : results.find((r) => !r.success)?.error_type,
+      error_stage: successCount > 0 ? undefined : results.find((r) => !r.success)?.error_stage,
       results,
     });
   } catch (error) {
     console.error('Auto-post error:', error);
     const message =
       error instanceof Error ? error.message : 'Auto-posting failed';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json(
+      {
+        error: message,
+        error_type: 'meta_publish',
+        error_stage: 'meta_publish_facebook',
+      },
+      { status: 500 },
+    );
   }
 }

@@ -13,7 +13,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { LoadingSpinner } from '@/components/shared/loading-spinner';
 import { EmptyState } from '@/components/shared/empty-state';
 import { OutputDisplay } from '@/components/content/output-display';
-import { Sparkles, Loader2, Save, RefreshCw, Building2, Image as ImageIcon, X, Upload } from 'lucide-react';
+import { Sparkles, Loader2, Save, RefreshCw, Building2, X, Upload, Video } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   Platform,
@@ -26,8 +26,6 @@ import {
   TONES,
   POST_LENGTHS,
   CONTENT_GOALS,
-  PLATFORM_LABELS,
-  CONTENT_TYPE_LABELS,
   CONTENT_GOAL_LABELS,
   PLATFORM_VARIANTS,
   ContentGoal,
@@ -49,6 +47,9 @@ interface SocialPage {
   name: string;
   provider: string;
   external_id: string;
+  meta?: {
+    is_instagram?: boolean;
+  };
 }
 
 const defaultInput: GenerationInput = {
@@ -59,6 +60,44 @@ const defaultInput: GenerationInput = {
   language: 'th',
   post_length: 'medium',
 };
+
+const MAX_VIDEO_SIZE_BYTES = 100 * 1024 * 1024;
+const ALLOWED_VIDEO_EXTENSIONS = ['mp4', 'mov', 'm4v', 'webm'];
+const ALLOWED_VIDEO_MIME_TYPES = [
+  'video/mp4',
+  'video/quicktime',
+  'video/x-m4v',
+  'video/webm',
+];
+
+function formatBytes(bytes: number): string {
+  if (bytes >= 1024 * 1024) {
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
+function getFileExtension(filename: string): string {
+  const parts = filename.toLowerCase().split('.');
+  return parts.length > 1 ? parts.pop() || '' : '';
+}
+
+function readFileAsDataUrl(
+  file: File,
+  onProgress?: (progress: number) => void,
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onprogress = (event) => {
+      if (!onProgress || !event.lengthComputable) return;
+      const progress = Math.min(100, Math.round((event.loaded / event.total) * 100));
+      onProgress(progress);
+    };
+    reader.onloadend = () => resolve(reader.result as string);
+    reader.onerror = () => reject(new Error('Failed to read file'));
+    reader.readAsDataURL(file);
+  });
+}
 
 function GeneratePageInner() {
   const searchParams = useSearchParams();
@@ -76,6 +115,11 @@ function GeneratePageInner() {
   const [selectedPageId, setSelectedPageId] = useState<string>('');
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+  const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [videoPreview, setVideoPreview] = useState<string>('');
+  const [videoUploadProgress, setVideoUploadProgress] = useState(0);
+  const [videoUploadError, setVideoUploadError] = useState('');
+  const [videoUploading, setVideoUploading] = useState(false);
   const [analyzingImage, setAnalyzingImage] = useState(false);
 
   useEffect(() => {
@@ -113,6 +157,12 @@ function GeneratePageInner() {
   function handleImageChange(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files || []);
     if (files.length > 0) {
+      if (videoFile) {
+        setVideoUploadError('กรุณาลบวิดีโอก่อน แล้วค่อยอัปโหลดรูปภาพ');
+        toast.error('กรุณาลบวิดีโอก่อน แล้วค่อยอัปโหลดรูปภาพ');
+        return;
+      }
+
       if (imageFiles.length + files.length > 2) {
         toast.error('อัพโหลดได้สูงสุด 2 รูปภาพครับ');
         return;
@@ -121,15 +171,9 @@ function GeneratePageInner() {
       const newFiles = [...imageFiles, ...files].slice(0, 2);
       setImageFiles(newFiles);
 
-      Promise.all(
-        newFiles.map((file) => {
-          return new Promise<string>((resolve) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result as string);
-            reader.readAsDataURL(file);
-          });
-        })
-      ).then((previews) => setImagePreviews(previews));
+      Promise.all(newFiles.map((file) => readFileAsDataUrl(file)))
+        .then((previews) => setImagePreviews(previews))
+        .catch(() => toast.error('ไม่สามารถอ่านไฟล์รูปภาพได้'));
     }
   }
 
@@ -143,6 +187,63 @@ function GeneratePageInner() {
     setImagePreviews(newPreviews);
   }
 
+  async function handleVideoChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setVideoUploadError('');
+    setVideoUploadProgress(0);
+
+    if (imageFiles.length > 0) {
+      setVideoUploadError('กรุณาลบรูปภาพก่อน แล้วค่อยอัปโหลดวิดีโอ');
+      toast.error('กรุณาลบรูปภาพก่อน แล้วค่อยอัปโหลดวิดีโอ');
+      return;
+    }
+
+    const extension = getFileExtension(file.name);
+    if (!ALLOWED_VIDEO_EXTENSIONS.includes(extension)) {
+      const message = `ไฟล์ .${extension || 'unknown'} ยังไม่รองรับ รองรับเฉพาะ ${ALLOWED_VIDEO_EXTENSIONS.map((ext) => `.${ext}`).join(', ')}`;
+      setVideoUploadError(message);
+      toast.error(message);
+      return;
+    }
+
+    if (!ALLOWED_VIDEO_MIME_TYPES.includes(file.type)) {
+      const message = `MIME type "${file.type || 'unknown'}" ยังไม่รองรับ`;
+      setVideoUploadError(message);
+      toast.error(message);
+      return;
+    }
+
+    if (file.size > MAX_VIDEO_SIZE_BYTES) {
+      const message = `วิดีโอต้องมีขนาดไม่เกิน ${formatBytes(MAX_VIDEO_SIZE_BYTES)} ตอนนี้คือ ${formatBytes(file.size)}`;
+      setVideoUploadError(message);
+      toast.error(message);
+      return;
+    }
+
+    try {
+      setVideoUploading(true);
+      const preview = await readFileAsDataUrl(file, setVideoUploadProgress);
+      setVideoFile(file);
+      setVideoPreview(preview);
+      setVideoUploadProgress(100);
+    } catch {
+      setVideoUploadError('ไม่สามารถอ่านไฟล์วิดีโอได้ กรุณาลองไฟล์ใหม่อีกครั้ง');
+      toast.error('ไม่สามารถอ่านไฟล์วิดีโอได้');
+    } finally {
+      setVideoUploading(false);
+    }
+  }
+
+  function removeVideo() {
+    setVideoFile(null);
+    setVideoPreview('');
+    setVideoUploadProgress(0);
+    setVideoUploadError('');
+    setVideoUploading(false);
+  }
+
   async function handleGenerate() {
     if (!profile?.id) {
       toast.error('Please create a business profile first');
@@ -154,7 +255,6 @@ function GeneratePageInner() {
 
     try {
       let image_analysis = '';
-      let uploaded_image_url = '';
 
       if (imageFiles.length > 0) {
         setAnalyzingImage(true);
@@ -185,6 +285,7 @@ function GeneratePageInner() {
             ...input,
             image_analysis: image_analysis || undefined,
             image_urls: imagePreviews.length > 0 ? imagePreviews : undefined,
+            video_url: videoPreview || undefined,
           },
         }),
       });
@@ -307,11 +408,115 @@ function GeneratePageInner() {
                         type="file" 
                         accept="image/*" 
                         multiple
-                        className="hidden" 
+                        className="hidden"
+                        disabled={!!videoFile}
                         onChange={handleImageChange} 
                       />
                     </div>
                   )}
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="flex justify-between items-center">
+                  <Label className="text-gray-700 font-medium">อัปโหลดวิดีโอสำหรับโพสต์จริง</Label>
+                  <span className="text-xs text-gray-400">{videoFile ? '1/1 วิดีโอ' : 'ยังไม่มีวิดีโอ'}</span>
+                </div>
+
+                {videoPreview ? (
+                  <div className="relative rounded-2xl overflow-hidden border border-gray-200 bg-black/90 shadow-sm">
+                    <video src={videoPreview} controls className="w-full max-h-64 bg-black" />
+                    <Button
+                      variant="destructive"
+                      size="icon"
+                      className="absolute top-2 right-2 h-8 w-8 rounded-full drop-shadow-md"
+                      onClick={removeVideo}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                    <div className="px-4 py-3 bg-white">
+                      <p className="text-sm font-medium text-gray-700">{videoFile?.name}</p>
+                      <p className="text-xs text-gray-400">รองรับโพสต์ Facebook Video และ Instagram Reel ใน flow นี้</p>
+                      <div className="mt-3 space-y-2">
+                        <div className="flex items-center justify-between text-[11px] text-gray-500">
+                          <span>{videoUploading ? 'กำลังเตรียมไฟล์วิดีโอ...' : 'ไฟล์พร้อมใช้งาน'}</span>
+                          <span>{videoUploadProgress}%</span>
+                        </div>
+                        <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
+                          <div
+                            className={`h-full transition-all ${videoUploadError ? 'bg-red-500' : 'bg-indigo-500'}`}
+                            style={{ width: `${videoUploadProgress}%` }}
+                          />
+                        </div>
+                        <div className="flex flex-wrap gap-2 text-[11px] text-gray-500">
+                          <span>ขนาด {videoFile ? formatBytes(videoFile.size) : '-'}</span>
+                          <span>MIME {videoFile?.type || '-'}</span>
+                          <span>นามสกุล .{videoFile ? getFileExtension(videoFile.name) : '-'}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    className={`border-2 border-dashed rounded-xl flex flex-col items-center justify-center transition-all cursor-pointer p-6 ${
+                      imageFiles.length > 0
+                        ? 'border-gray-200 bg-gray-50/60 text-gray-400 cursor-not-allowed'
+                        : 'border-gray-200 bg-gray-50/50 hover:bg-gray-50 hover:border-indigo-400'
+                    }`}
+                    onClick={() => {
+                      if (!imageFiles.length) {
+                        document.getElementById('video-upload')?.click();
+                      }
+                    }}
+                  >
+                    <div className="rounded-full bg-indigo-50 flex items-center justify-center mb-2 p-3">
+                      <Video className="h-5 w-5 text-indigo-600" />
+                    </div>
+                    <span className="text-sm font-medium text-gray-600 text-center">
+                      {videoUploading ? 'กำลังอ่านไฟล์วิดีโอ...' : 'เพิ่มวิดีโอ 1 ไฟล์'}
+                    </span>
+                    <span className="text-xs text-gray-400 text-center mt-1">
+                      รองรับ {ALLOWED_VIDEO_EXTENSIONS.map((ext) => `.${ext}`).join(', ')} และขนาดไม่เกิน {formatBytes(MAX_VIDEO_SIZE_BYTES)}
+                    </span>
+                    <div className="mt-4 w-full max-w-sm space-y-2">
+                      <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
+                        <div
+                          className={`h-full transition-all ${videoUploadError ? 'bg-red-500' : 'bg-indigo-500'}`}
+                          style={{ width: `${videoUploadProgress}%` }}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between text-[11px] text-gray-500">
+                        <span>{videoUploadError ? 'พบปัญหาก่อนอัปโหลด' : videoUploading ? 'กำลังเตรียม preview' : 'Preflight validation ก่อนส่งจริง'}</span>
+                        <span>{videoUploadProgress}%</span>
+                      </div>
+                    </div>
+                    <input
+                      id="video-upload"
+                      type="file"
+                      accept="video/*"
+                      className="hidden"
+                      disabled={imageFiles.length > 0}
+                      onChange={handleVideoChange}
+                    />
+                  </div>
+                )}
+
+                {videoUploadError && (
+                  <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                    {videoUploadError}
+                  </div>
+                )}
+
+                <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 px-4 py-3 space-y-2">
+                  <p className="text-xs font-semibold text-indigo-700 uppercase tracking-wide">Preflight Validation</p>
+                  <div className="text-xs text-indigo-900 space-y-1">
+                    <p>MIME ที่รองรับ: {ALLOWED_VIDEO_MIME_TYPES.join(', ')}</p>
+                    <p>Extension ที่รองรับ: {ALLOWED_VIDEO_EXTENSIONS.map((ext) => `.${ext}`).join(', ')}</p>
+                    <p>ขนาดสูงสุดใน UI ตอนนี้: {formatBytes(MAX_VIDEO_SIZE_BYTES)}</p>
+                  </div>
+                  <div className="text-[11px] text-indigo-800 leading-relaxed">
+                    Production note: ควรแยก bucket สำหรับวิดีโอด้วย `SUPABASE_CONTENT_VIDEO_BUCKET`, เปิด public read หรือ signed delivery ให้ Meta ดึงไฟล์ได้, และตั้ง bucket image เดิมผ่าน `SUPABASE_CONTENT_IMAGE_BUCKET` เพื่อไม่ปน media type ใน production
+                  </div>
                 </div>
               </div>
               {/* Social Page Selection (High Priority) */}
@@ -325,14 +530,17 @@ function GeneratePageInner() {
                     setSelectedPageId(pageId);
                     const page = socialPages.find(p => p.id === pageId);
                     if (page) {
-                      updateInput('platform', page.provider as Platform);
+                      const selectedPlatform = page.meta?.is_instagram
+                        ? 'instagram'
+                        : page.provider;
+                      updateInput('platform', selectedPlatform as Platform);
                     }
                   }}
                 >
                   <option value="">-- เลือกเพจที่ต้องการโพสต์ --</option>
                   {socialPages.map((p) => (
                     <option key={p.id} value={p.id}>
-                      [{p.provider.toUpperCase()}] {p.name}
+                      [{(p.meta?.is_instagram ? 'INSTAGRAM' : p.provider).toUpperCase()}] {p.name}
                     </option>
                   ))}
                 </select>
@@ -604,7 +812,13 @@ function GeneratePageInner() {
                   <Save className="h-3 w-3 mr-1" /> บันทึก
                 </Button>
               </div>
-              <OutputDisplay output={result.output} platform={input.platform} contentId={result.content?.id} imageUrls={imagePreviews} />
+              <OutputDisplay
+                output={result.output}
+                platform={input.platform}
+                contentId={result.content?.id}
+                imageUrls={imagePreviews}
+                videoUrl={videoPreview || undefined}
+              />
             </div>
           )}
 

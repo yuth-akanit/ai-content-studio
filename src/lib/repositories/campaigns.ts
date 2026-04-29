@@ -3,11 +3,11 @@ import { ContentProject } from '@/types/database';
 
 const TABLE = 'content_projects';
 
-export async function getCampaigns(profileId: string): Promise<ContentProject[]> {
+export async function getCampaigns(profileId: string, fields: string = '*'): Promise<ContentProject[]> {
   const db = getSupabaseServerClient();
   const { data, error } = await db
     .from(TABLE)
-    .select('*')
+    .select(fields)
     .eq('business_profile_id', profileId)
     .order('updated_at', { ascending: false });
 

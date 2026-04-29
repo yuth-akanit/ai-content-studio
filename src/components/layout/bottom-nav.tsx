@@ -8,12 +8,14 @@ import {
   Sparkles,
   Library,
   Menu,
+  MessageSquare,
 } from 'lucide-react';
 import { THAI_UI_LABELS } from '@/lib/constants/thai-labels';
 
 const navItems = [
   { href: '/dashboard', label: 'หน้าแรก', icon: LayoutDashboard },
   { href: '/generate', label: 'สร้าง AI', icon: Sparkles },
+  { href: '/chat', label: 'คุยกับ AI', icon: MessageSquare },
   { href: '/library', label: THAI_UI_LABELS.content_library, icon: Library },
 ];
 

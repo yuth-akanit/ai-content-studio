@@ -1,5 +1,5 @@
 import { getSupabaseServerClient } from '@/lib/supabase/client';
-import { GeneratedContent } from '@/types/database';
+import { CONTENT_TYPES, GeneratedContent, PLATFORMS } from '@/types/database';
 
 const TABLE = 'generated_contents';
 
@@ -98,32 +98,69 @@ export async function getContentStats(profileId: string): Promise<{
   recentCount: number;
 }> {
   const db = getSupabaseServerClient();
-
-  const { count: total } = await db
-    .from(TABLE)
-    .select('*', { count: 'exact', head: true })
-    .eq('business_profile_id', profileId);
-
-  const { data: contents } = await db
-    .from(TABLE)
-    .select('platform, content_type, created_at')
-    .eq('business_profile_id', profileId);
-
-  const byPlatform: Record<string, number> = {};
-  const byType: Record<string, number> = {};
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-  let recentCount = 0;
 
-  (contents || []).forEach(c => {
-    byPlatform[c.platform] = (byPlatform[c.platform] || 0) + 1;
-    byType[c.content_type] = (byType[c.content_type] || 0) + 1;
-    if (c.created_at >= sevenDaysAgo) recentCount++;
-  });
+  const [totalResult, recentResult, platformResults, typeResults] = await Promise.all([
+    db
+      .from(TABLE)
+      .select('id', { count: 'exact', head: true })
+      .eq('business_profile_id', profileId),
+    db
+      .from(TABLE)
+      .select('id', { count: 'exact', head: true })
+      .eq('business_profile_id', profileId)
+      .gte('created_at', sevenDaysAgo),
+    Promise.all(
+      PLATFORMS.map(async (platform) => {
+        const result = await db
+          .from(TABLE)
+          .select('id', { count: 'exact', head: true })
+          .eq('business_profile_id', profileId)
+          .eq('platform', platform);
+
+        return [platform, result] as const;
+      }),
+    ),
+    Promise.all(
+      CONTENT_TYPES.map(async (contentType) => {
+        const result = await db
+          .from(TABLE)
+          .select('id', { count: 'exact', head: true })
+          .eq('business_profile_id', profileId)
+          .eq('content_type', contentType);
+
+        return [contentType, result] as const;
+      }),
+    ),
+  ]);
+
+  const errors = [
+    totalResult.error,
+    recentResult.error,
+    ...platformResults.map(([, result]) => result.error),
+    ...typeResults.map(([, result]) => result.error),
+  ].filter(Boolean);
+
+  if (errors.length > 0) {
+    throw new Error(`Failed to fetch content stats: ${errors[0]?.message}`);
+  }
+
+  const byPlatform = Object.fromEntries(
+    platformResults
+      .filter(([, result]) => (result.count || 0) > 0)
+      .map(([platform, result]) => [platform, result.count || 0]),
+  );
+
+  const byType = Object.fromEntries(
+    typeResults
+      .filter(([, result]) => (result.count || 0) > 0)
+      .map(([contentType, result]) => [contentType, result.count || 0]),
+  );
 
   return {
-    total: total || 0,
+    total: totalResult.count || 0,
     byPlatform,
     byType,
-    recentCount,
+    recentCount: recentResult.count || 0,
   };
 }

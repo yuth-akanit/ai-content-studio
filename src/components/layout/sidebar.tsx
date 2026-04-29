@@ -12,6 +12,7 @@ import {
   Settings,
   Menu,
   X,
+  MessageSquare,
 } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -21,6 +22,7 @@ const navItems = [
   { href: '/dashboard', label: THAI_UI_LABELS.dashboard, icon: LayoutDashboard },
   { href: '/profile', label: THAI_UI_LABELS.business_profile, icon: Building2 },
   { href: '/generate', label: THAI_UI_LABELS.ai_creator, icon: Sparkles },
+  { href: '/chat', label: THAI_UI_LABELS.ai_chat, icon: MessageSquare },
   { href: '/library', label: THAI_UI_LABELS.content_library, icon: Library },
   { href: '/campaigns', label: THAI_UI_LABELS.campaign_workspace, icon: FolderKanban },
   { href: '/settings', label: THAI_UI_LABELS.settings, icon: Settings },

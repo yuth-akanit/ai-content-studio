@@ -237,6 +237,7 @@ export interface GenerationInput {
   visual_direction?: string;
   content_goal?: string;
   image_urls?: string[];
+  video_url?: string;
   image_analysis?: string;
 }
 
