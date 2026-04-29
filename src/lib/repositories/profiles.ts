@@ -33,7 +33,7 @@ export async function getDefaultProfile(): Promise<BusinessProfile | null> {
   return getDefaultProfileByFields('*');
 }
 
-export async function getDefaultProfileByFields(fields: string): Promise<BusinessProfile | null> {
+export async function getDefaultProfileByFields(fields: string): Promise<any | null> {
   const db = getSupabaseServerClient();
   const { data, error } = await db
     .from(TABLE)
