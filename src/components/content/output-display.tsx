@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
-import { Copy, Check, MessageCircle, Send, Loader2, Sparkles, Search } from 'lucide-react';
+import { Copy, Check, MessageCircle, Send, Loader2, Sparkles, Search, RefreshCw } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { THAI_UI_LABELS, THAI_PLATFORM_LABELS } from '@/lib/constants/thai-labels';
 import { toast } from 'sonner';
