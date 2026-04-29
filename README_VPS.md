@@ -71,6 +71,28 @@ git pull
 docker compose up -d --build
 ```
 
+## One-command VPS deploy
+
+If you are deploying directly on a VPS with Docker and an existing reverse proxy
+such as Caddy, use:
+
+```bash
+chmod +x deploy.sh
+./deploy.sh
+```
+
+Defaults:
+
+- container name: `ai-content-studio`
+- host port: `3007`
+- env file: `.env.production`
+
+You can override them:
+
+```bash
+APP_PORT=3012 APP_NAME=ai-content-studio-staging ./deploy.sh
+```
+
 ## 7. View logs
 
 ```bash
