@@ -3,7 +3,7 @@ import { ContentProject } from '@/types/database';
 
 const TABLE = 'content_projects';
 
-export async function getCampaigns(profileId: string, fields: string = '*'): Promise<ContentProject[]> {
+export async function getCampaigns(profileId: string, fields: string = '*'): Promise<any[]> {
   const db = getSupabaseServerClient();
   const { data, error } = await db
     .from(TABLE)
