@@ -13,6 +13,7 @@ import {
   Menu,
   X,
   MessageSquare,
+  Clapperboard,
 } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -25,6 +26,7 @@ const navItems = [
   { href: '/chat', label: THAI_UI_LABELS.ai_chat, icon: MessageSquare },
   { href: '/library', label: THAI_UI_LABELS.content_library, icon: Library },
   { href: '/campaigns', label: THAI_UI_LABELS.campaign_workspace, icon: FolderKanban },
+  { href: '/campaigns/short-form', label: 'Short-form', icon: Clapperboard },
   { href: '/settings', label: THAI_UI_LABELS.settings, icon: Settings },
 ];
 

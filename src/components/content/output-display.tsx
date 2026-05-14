@@ -1,13 +1,14 @@
 'use client';
 
-import { ContentOutput, Platform } from '@/types/database';
+import { ContentOutput, Platform, ScheduledPost } from '@/types/database';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
-import { Copy, Check, MessageCircle, Send, Loader2, Sparkles, Search, RefreshCw } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { Input } from '@/components/ui/input';
+import { Copy, Check, MessageCircle, Send, Loader2, Sparkles, Search, RefreshCw, CalendarClock, XCircle, Save } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
 import { THAI_UI_LABELS, THAI_PLATFORM_LABELS } from '@/lib/constants/thai-labels';
 import { toast } from 'sonner';
 
@@ -23,7 +24,16 @@ interface SocialPage {
   id: string;
   name: string;
   provider: string;
-  meta?: Record<string, any>;
+  meta?: Record<string, unknown>;
+}
+
+interface ScheduledPostListItem extends ScheduledPost {
+  inbox_channels?: {
+    id: string;
+    name: string;
+    provider: string;
+    meta?: Record<string, unknown>;
+  } | null;
 }
 
 type ErrorType = 'preflight' | 'storage' | 'meta_publish';
@@ -32,6 +42,21 @@ interface PublishErrorState {
   type: ErrorType;
   stage?: string;
   message: string;
+}
+
+interface AutoPostPayload {
+  content_id: string;
+  page_ids: string[];
+  message: string;
+  image_urls?: string[];
+  video_url?: string;
+}
+
+interface AutoPostResult {
+  success: boolean;
+  error?: string;
+  error_type?: ErrorType;
+  error_stage?: string;
 }
 
 function CopyButton({ text }: { text: string }) {
@@ -72,6 +97,11 @@ export function OutputDisplay({ output, platform, contentId, imageUrls, videoUrl
   const [publishError, setPublishError] = useState<PublishErrorState | null>(null);
   const [lastUploadPublicUrl, setLastUploadPublicUrl] = useState('');
   const [lastUploadSourceKey, setLastUploadSourceKey] = useState('');
+  const [scheduling, setScheduling] = useState(false);
+  const [scheduledAt, setScheduledAt] = useState('');
+  const [scheduledPosts, setScheduledPosts] = useState<ScheduledPostListItem[]>([]);
+  const [loadingScheduledPosts, setLoadingScheduledPosts] = useState(false);
+  const [rescheduleValues, setRescheduleValues] = useState<Record<string, string>>({});
   
   const [activeTab, setActiveTab] = useState('medium');
   const hashtagLine = output.hashtags && output.hashtags.length > 0 ? output.hashtags.join(' ') : '';
@@ -183,6 +213,29 @@ export function OutputDisplay({ output, platform, contentId, imageUrls, videoUrl
       .catch(() => {});
   }, []);
 
+  const loadScheduledPosts = useCallback(async () => {
+    if (!contentId) return;
+
+    setLoadingScheduledPosts(true);
+    try {
+      const res = await fetch(`/api/scheduled-posts?content_id=${contentId}&limit=50`);
+      const data = await res.json();
+      const items = Array.isArray(data.items) ? data.items : [];
+      setScheduledPosts(items);
+      setRescheduleValues(Object.fromEntries(
+        items.map((item: ScheduledPostListItem) => [item.id, toLocalDateTimeInput(item.scheduled_at)]),
+      ));
+    } catch {
+      toast.error('โหลดรายการ schedule ไม่สำเร็จ');
+    } finally {
+      setLoadingScheduledPosts(false);
+    }
+  }, [contentId]);
+
+  useEffect(() => {
+    loadScheduledPosts();
+  }, [loadScheduledPosts]);
+
   function togglePageSelection(pageId: string) {
     setSelectedPageIds(prev =>
       prev.includes(pageId)
@@ -214,6 +267,48 @@ export function OutputDisplay({ output, platform, contentId, imageUrls, videoUrl
   function getVideoSourceKey(source?: string): string {
     if (!source) return '';
     return source.slice(0, 120);
+  }
+
+  function toLocalDateTimeInput(iso: string): string {
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return '';
+    const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+    return local.toISOString().slice(0, 16);
+  }
+
+  function validateFutureLocalDate(value: string): string | null {
+    const timestamp = Date.parse(value);
+    if (!Number.isFinite(timestamp)) return 'กรุณาเลือกวันและเวลาที่ถูกต้อง';
+    if (timestamp <= Date.now()) return 'กรุณาเลือกเวลาในอนาคต';
+    return null;
+  }
+
+  function scheduledStatusClass(status: string): string {
+    if (status === 'pending') return 'bg-blue-50 text-blue-700 border-blue-100';
+    if (status === 'processing') return 'bg-amber-50 text-amber-700 border-amber-100';
+    if (status === 'posted') return 'bg-green-50 text-green-700 border-green-100';
+    if (status === 'failed') return 'bg-red-50 text-red-700 border-red-100';
+    return 'bg-gray-50 text-gray-600 border-gray-100';
+  }
+
+  async function resolveVideoForPublishing(forceStorageRetry = false): Promise<string | undefined> {
+    let resolvedVideoUrl = videoUrl;
+    const currentVideoSourceKey = getVideoSourceKey(videoUrl);
+    const canReuseLastUpload =
+      !forceStorageRetry &&
+      !!videoUrl?.startsWith('data:') &&
+      !!lastUploadPublicUrl &&
+      currentVideoSourceKey === lastUploadSourceKey;
+
+    if (canReuseLastUpload) {
+      resolvedVideoUrl = lastUploadPublicUrl;
+    } else if (videoUrl?.startsWith('data:')) {
+      resolvedVideoUrl = await uploadVideoForPosting(videoUrl);
+      setLastUploadPublicUrl(resolvedVideoUrl);
+      setLastUploadSourceKey(currentVideoSourceKey);
+    }
+
+    return resolvedVideoUrl || undefined;
   }
 
   async function uploadVideoForPosting(dataUrl: string): Promise<string> {
@@ -284,27 +379,18 @@ export function OutputDisplay({ output, platform, contentId, imageUrls, videoUrl
 
     try {
       let resolvedVideoUrl = videoUrl;
-      const currentVideoSourceKey = getVideoSourceKey(videoUrl);
-      const canReuseLastUpload =
-        !forceStorageRetry &&
-        !!videoUrl?.startsWith('data:') &&
-        !!lastUploadPublicUrl &&
-        currentVideoSourceKey === lastUploadSourceKey;
-
-      if (canReuseLastUpload) {
+      if (!forceStorageRetry && videoUrl?.startsWith('data:') && lastUploadPublicUrl && getVideoSourceKey(videoUrl) === lastUploadSourceKey) {
         resolvedVideoUrl = lastUploadPublicUrl;
         setPostProgress(95);
         setPostStatusMessage('ใช้วิดีโอที่อัปโหลดล่าสุดซ้ำ กำลังเตรียม publish...');
-      } else if (videoUrl?.startsWith('data:')) {
-        resolvedVideoUrl = await uploadVideoForPosting(videoUrl);
-        setLastUploadPublicUrl(resolvedVideoUrl);
-        setLastUploadSourceKey(currentVideoSourceKey);
+      } else {
+        resolvedVideoUrl = await resolveVideoForPublishing(forceStorageRetry);
       }
 
       setPostProgress(resolvedVideoUrl ? 96 : 35);
       setPostStatusMessage('กำลัง publish ไปยัง Meta และช่องทางที่เลือก...');
 
-      const postPayload: Record<string, any> = {
+      const postPayload: AutoPostPayload = {
         content_id: contentId,
         page_ids: selectedPageIds,
         message: finalTextPreview,
@@ -330,7 +416,7 @@ export function OutputDisplay({ output, platform, contentId, imageUrls, videoUrl
         setPostStatusMessage('โพสต์สำเร็จแล้ว');
         toast.success(`${THAI_UI_LABELS.post_success} (${data.posted}/${data.total})`);
       } else {
-        const failedResult = data.results?.find((r: any) => !r.success);
+        const failedResult = (data.results as AutoPostResult[] | undefined)?.find((r) => !r.success);
         const errorType = (failedResult?.error_type || data.error_type || 'meta_publish') as ErrorType;
         const errorStage = failedResult?.error_stage || data.error_stage;
         const errorMsg = failedResult?.error || data.error || THAI_UI_LABELS.post_failed;
@@ -338,10 +424,11 @@ export function OutputDisplay({ output, platform, contentId, imageUrls, videoUrl
         setPostStatusMessage(`${mapErrorTypeLabel(errorType)} ล้มเหลว`);
         toast.error(`โพสต์ไม่สำเร็จ: ${errorMsg}`);
       }
-    } catch (error: any) {
-      const errorType = (error?.error_type || 'storage') as ErrorType;
-      const errorStage = error?.error_stage || 'supabase_storage_upload';
-      const errorMessage = error?.error || THAI_UI_LABELS.post_failed;
+    } catch (error: unknown) {
+      const errorRecord = error && typeof error === 'object' ? error as Record<string, unknown> : {};
+      const errorType = (errorRecord.error_type || 'storage') as ErrorType;
+      const errorStage = typeof errorRecord.error_stage === 'string' ? errorRecord.error_stage : 'supabase_storage_upload';
+      const errorMessage = typeof errorRecord.error === 'string' ? errorRecord.error : THAI_UI_LABELS.post_failed;
       setStructuredError(errorType, errorMessage, errorStage);
       setPostStatusMessage(`${mapErrorTypeLabel(errorType)} ล้มเหลว`);
       toast.error(`โพสต์ไม่สำเร็จ: ${errorMessage}`);
@@ -357,6 +444,102 @@ export function OutputDisplay({ output, platform, contentId, imageUrls, videoUrl
   async function handleRetryPost() {
     const shouldForceStorageRetry = publishError?.type === 'storage';
     await runAutoPost(shouldForceStorageRetry);
+  }
+
+  async function handleSchedulePost() {
+    if (!contentId || selectedPageIds.length === 0) {
+      toast.error(THAI_UI_LABELS.select_pages);
+      return;
+    }
+
+    const validationError = validateFutureLocalDate(scheduledAt);
+    if (validationError) {
+      toast.error(validationError);
+      return;
+    }
+
+    setScheduling(true);
+    setPublishError(null);
+
+    try {
+      const resolvedVideoUrl = await resolveVideoForPublishing(false);
+      const publishPayload = {
+        message: finalTextPreview,
+        image_urls: imageUrls || [],
+        video_url: resolvedVideoUrl || null,
+        page_ids: selectedPageIds,
+        created_from: 'schedule_ui',
+        snapshot_version: 1,
+      };
+
+      const res = await fetch('/api/scheduled-posts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content_id: contentId,
+          social_page_ids: selectedPageIds,
+          scheduled_at: new Date(scheduledAt).toISOString(),
+          metadata: {
+            publish_payload: publishPayload,
+          },
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        throw new Error(data.error || 'schedule failed');
+      }
+
+      toast.success(`ตั้งเวลาโพสต์แล้ว ${data.items?.length || selectedPageIds.length} รายการ`);
+      setScheduledAt('');
+      await loadScheduledPosts();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'ตั้งเวลาโพสต์ไม่สำเร็จ';
+      toast.error(`ตั้งเวลาโพสต์ไม่สำเร็จ: ${message}`);
+    } finally {
+      setScheduling(false);
+    }
+  }
+
+  async function handleRescheduleScheduledPost(id: string) {
+    const nextValue = rescheduleValues[id];
+    const validationError = validateFutureLocalDate(nextValue);
+    if (validationError) {
+      toast.error(validationError);
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/scheduled-posts/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scheduled_at: new Date(nextValue).toISOString() }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || 'reschedule failed');
+      toast.success('เลื่อนเวลาโพสต์แล้ว');
+      await loadScheduledPosts();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'เลื่อนเวลาไม่สำเร็จ';
+      toast.error(message);
+    }
+  }
+
+  async function handleCancelScheduledPost(id: string) {
+    try {
+      const res = await fetch(`/api/scheduled-posts/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'cancelled' }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || 'cancel failed');
+      toast.success('ยกเลิก scheduled post แล้ว');
+      await loadScheduledPosts();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'ยกเลิกไม่สำเร็จ';
+      toast.error(message);
+    }
   }
 
   useEffect(() => {
@@ -531,12 +714,15 @@ export function OutputDisplay({ output, platform, contentId, imageUrls, videoUrl
               <div className="space-y-2">
                 <Label className="text-xs text-gray-500">{THAI_UI_LABELS.faq_section}</Label>
                 <div className="space-y-2">
-                  {(output.faq_section || output.faq || []).map((faq, i) => (
-                    <div key={i} className="bg-gray-50 p-3 rounded-lg text-sm border border-gray-100">
-                      <p className="font-semibold text-gray-800">Q: {faq.question || (faq as any).q}</p>
-                      <p className="text-gray-600 mt-1">A: {faq.answer || (faq as any).a}</p>
-                    </div>
-                  ))}
+                  {(output.faq_section || output.faq || []).map((faq, i) => {
+                    const legacyFaq = faq as { q?: string; a?: string };
+                    return (
+                      <div key={i} className="bg-gray-50 p-3 rounded-lg text-sm border border-gray-100">
+                        <p className="font-semibold text-gray-800">Q: {faq.question || legacyFaq.q}</p>
+                        <p className="text-gray-600 mt-1">A: {faq.answer || legacyFaq.a}</p>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -654,6 +840,126 @@ export function OutputDisplay({ output, platform, contentId, imageUrls, videoUrl
                 </>
               )}
             </Button>
+
+            <div className="border-t border-indigo-100 pt-4 space-y-4">
+              <div className="flex items-center gap-2">
+                <CalendarClock className="h-4 w-4 text-indigo-600" />
+                <span className="text-sm font-semibold text-indigo-700">ตั้งเวลาโพสต์</span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2">
+                <Input
+                  type="datetime-local"
+                  value={scheduledAt}
+                  onChange={(event) => setScheduledAt(event.target.value)}
+                  disabled={scheduling}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleSchedulePost}
+                  disabled={scheduling || selectedPageIds.length === 0}
+                  className="sm:w-auto"
+                >
+                  {scheduling ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      กำลังตั้งเวลา
+                    </>
+                  ) : (
+                    <>
+                      <CalendarClock className="h-4 w-4 mr-2" />
+                      Schedule Post
+                    </>
+                  )}
+                </Button>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Scheduled Posts</span>
+                  {loadingScheduledPosts && <Loader2 className="h-3 w-3 animate-spin text-gray-400" />}
+                </div>
+
+                {scheduledPosts.length === 0 && !loadingScheduledPosts ? (
+                  <p className="text-xs text-gray-500 bg-white/70 border border-indigo-50 rounded-lg px-3 py-2">
+                    ยังไม่มี scheduled post สำหรับคอนเทนต์นี้
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {scheduledPosts.map((item) => (
+                      <div key={item.id} className="rounded-lg border border-indigo-100 bg-white/80 p-3 space-y-2">
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div>
+                            <p className="text-sm font-medium text-gray-800">
+                              [{item.inbox_channels?.provider?.toUpperCase() || 'PAGE'}] {item.inbox_channels?.name || item.social_page_id}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              {new Date(item.scheduled_at).toLocaleString('th-TH')}
+                            </p>
+                          </div>
+                          <span className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${scheduledStatusClass(item.status)}`}>
+                            {item.status}
+                          </span>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
+                          <span>Retry {item.retry_count}/{item.max_retries}</span>
+                          {item.error_message && (
+                            <span className="text-red-600 line-clamp-1">{item.error_message}</span>
+                          )}
+                        </div>
+
+                        {item.status === 'pending' && (
+                          <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto] gap-2">
+                            <Input
+                              type="datetime-local"
+                              value={rescheduleValues[item.id] || ''}
+                              onChange={(event) => setRescheduleValues((prev) => ({
+                                ...prev,
+                                [item.id]: event.target.value,
+                              }))}
+                            />
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleRescheduleScheduledPost(item.id)}
+                            >
+                              <Save className="h-3 w-3 mr-1" />
+                              Reschedule
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="text-red-600 hover:text-red-700"
+                              onClick={() => handleCancelScheduledPost(item.id)}
+                            >
+                              <XCircle className="h-3 w-3 mr-1" />
+                              Cancel
+                            </Button>
+                          </div>
+                        )}
+
+                        {item.status === 'failed' && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="text-red-600 hover:text-red-700"
+                            onClick={() => handleCancelScheduledPost(item.id)}
+                          >
+                            <XCircle className="h-3 w-3 mr-1" />
+                            Cancel Failed Schedule
+                          </Button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
           </CardContent>
         </Card>
       )}

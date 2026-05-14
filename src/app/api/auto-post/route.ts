@@ -6,10 +6,12 @@ export const dynamic = 'force-dynamic';
 
 interface PostRequest {
   content_id: string;
-  page_ids: string[];
-  message: string;
+  page_ids?: string[];
+  social_page_id?: string;
+  message?: string;
   image_urls?: string[];
-  video_url?: string;
+  video_url?: string | null;
+  scheduled_post_id?: string;
 }
 
 type ErrorType = 'preflight' | 'storage' | 'meta_publish';
@@ -452,7 +454,11 @@ async function postToLineOA(
       };
     }
 
-    const messages: any[] = [];
+    type LineMessage =
+      | { type: 'image'; originalContentUrl: string; previewImageUrl: string }
+      | { type: 'text'; text: string };
+
+    const messages: LineMessage[] = [];
 
     // Add images first (max 4 to leave room for text)
     if (imageUrls && imageUrls.length > 0) {
@@ -512,9 +518,12 @@ export async function POST(request: NextRequest) {
   );
   try {
     const body: PostRequest = await request.json();
-    const { content_id, page_ids, message, image_urls, video_url } = body;
+    const { content_id, page_ids, social_page_id, message, image_urls, video_url, scheduled_post_id } = body;
+    const pageIds = page_ids?.length ? page_ids : social_page_id ? [social_page_id] : [];
+    const imageUrls = image_urls?.filter(Boolean);
+    const videoUrl = video_url || undefined;
 
-    if (!content_id || !page_ids?.length || !message) {
+    if (!content_id || !pageIds.length || !message?.trim()) {
       return NextResponse.json(
         {
           error: 'content_id, page_ids, and message are required',
@@ -525,7 +534,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (image_urls?.length && video_url) {
+    if (imageUrls?.length && videoUrl) {
       return NextResponse.json(
         {
           error: 'Please send either image_urls or video_url for this publish request, not both',
@@ -540,8 +549,8 @@ export async function POST(request: NextRequest) {
     let publicVideoUrl: string | undefined;
 
     try {
-      publicImageUrls = await normalizeImageUrls(supabase, image_urls);
-      publicVideoUrl = await normalizeVideoUrl(supabase, video_url);
+      publicImageUrls = await normalizeImageUrls(supabase, imageUrls);
+      publicVideoUrl = await normalizeVideoUrl(supabase, videoUrl);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Storage upload failed';
       return NextResponse.json(
@@ -558,7 +567,7 @@ export async function POST(request: NextRequest) {
     const { data: pages, error: pagesError } = await supabase
       .from('inbox_channels')
       .select('*')
-      .in('id', page_ids);
+      .in('id', pageIds);
 
     if (pagesError || !pages?.length) {
       return NextResponse.json(
@@ -691,9 +700,7 @@ export async function POST(request: NextRequest) {
       }
     }));
 
-    // Log the posting activity
-    const { error: logError } = await supabase.from('post_logs').insert(
-      results.map((r) => ({
+    const logRows = results.map((r) => ({
         content_id,
         social_page_id: r.page_id,
         provider: r.provider,
@@ -702,23 +709,49 @@ export async function POST(request: NextRequest) {
         error_message: r.error || null,
         comments_posted: r.comments_posted || 0,
         posted_at: new Date().toISOString(),
-      })),
-    );
+    }));
+
+    const { data: insertedLogs, error: logError } = await supabase
+      .from('post_logs')
+      .insert(logRows)
+      .select('id,social_page_id,status,provider');
 
     if (logError) {
       console.warn('Failed to log post activity:', logError);
     }
 
+    const logIdBySocialPage = new Map<string, string>();
+    for (const log of insertedLogs || []) {
+      if (log.social_page_id && log.id) {
+        logIdBySocialPage.set(log.social_page_id, log.id);
+      }
+    }
+
+    const resultsWithLogs = results.map((r) => ({
+      ...r,
+      social_page_id: r.page_id,
+      post_log_id: logIdBySocialPage.get(r.page_id) || null,
+      status: r.success ? 'posted' : 'failed',
+      platform: r.provider,
+    }));
+
+    const postLogIds = resultsWithLogs
+      .map((r) => r.post_log_id)
+      .filter((id): id is string => Boolean(id));
     const successCount = results.filter((r) => r.success).length;
 
     return NextResponse.json({
+      ok: successCount > 0,
       success: successCount > 0,
+      scheduled_post_id,
       total: results.length,
       posted: successCount,
       failed: results.length - successCount,
+      post_log_id: postLogIds.length === 1 ? postLogIds[0] : undefined,
+      post_log_ids: postLogIds,
       error_type: successCount > 0 ? undefined : results.find((r) => !r.success)?.error_type,
       error_stage: successCount > 0 ? undefined : results.find((r) => !r.success)?.error_stage,
-      results,
+      results: resultsWithLogs,
     });
   } catch (error) {
     console.error('Auto-post error:', error);

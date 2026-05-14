@@ -58,6 +58,7 @@ export interface ContentProject {
   description: string | null;
   campaign_type: string;
   status: 'active' | 'paused' | 'completed' | 'archived';
+  metadata?: Record<string, unknown>;
   created_at: string;
   updated_at: string;
 }
@@ -81,6 +82,7 @@ export interface GeneratedContent {
   visual_direction: string | null;
   platform_constraints: Record<string, unknown>;
   status: 'draft' | 'saved' | 'published' | 'archived';
+  metadata?: Record<string, unknown>;
   model_name: string | null;
   prompt_version: string;
   created_at: string;
@@ -124,6 +126,96 @@ export interface PlatformPreset {
   format_rules: Record<string, unknown>;
   created_at: string;
   updated_at: string;
+}
+
+export type ScheduledPostStatus = 'pending' | 'processing' | 'posted' | 'failed' | 'cancelled';
+
+export interface ScheduledPostPublishPayload {
+  message: string;
+  image_urls: string[];
+  video_url: string | null;
+  page_ids?: string[];
+  social_page_id?: string;
+  created_from: 'schedule_ui';
+  snapshot_version: 1;
+  [key: string]: unknown;
+}
+
+export interface ScheduledPost {
+  id: string;
+  content_id: string;
+  social_page_id: string;
+  scheduled_at: string;
+  status: ScheduledPostStatus;
+  retry_count: number;
+  max_retries: number;
+  error_message: string | null;
+  locked_at: string | null;
+  locked_by: string | null;
+  posted_at: string | null;
+  post_log_id: string | null;
+  metadata: {
+    publish_payload?: ScheduledPostPublishPayload;
+    [key: string]: unknown;
+  };
+  created_at: string;
+  updated_at: string;
+}
+
+export const SHORT_FORM_PLATFORM_TARGETS = ['tiktok', 'youtube_shorts', 'instagram_reels', 'facebook_reels'] as const;
+export type ShortFormPlatformTarget = typeof SHORT_FORM_PLATFORM_TARGETS[number];
+
+export const SHORT_FORM_FORMATS = [
+  '15s_short',
+  '30s_short',
+  '45s_educational_short',
+  'before_after_service_clip',
+  'problem_solution_clip',
+  'technician_advice_clip',
+  'customer_faq_clip',
+  'promo_offer_clip',
+  'myth_busting_clip',
+  'checklist_clip',
+] as const;
+export type ShortFormFormat = typeof SHORT_FORM_FORMATS[number];
+
+export interface ShortFormCampaignMetadata {
+  campaign_family: 'short_form';
+  platform_targets: ShortFormPlatformTarget[];
+  primary_platform: ShortFormPlatformTarget;
+  campaign_type: string;
+  service_type: string;
+  target_area: string;
+  content_angle: string;
+  cta_type: string;
+  cta_text: string;
+  cta_url: string | null;
+  utm_source: 'short_form';
+  utm_campaign: string;
+  posting_goal: string;
+  status: string;
+}
+
+export interface ShortFormContentOutput {
+  platform_targets: ShortFormPlatformTarget[];
+  primary_platform: ShortFormPlatformTarget;
+  format: ShortFormFormat;
+  hook: string;
+  script: string;
+  shot_list: string[];
+  caption_tiktok: string;
+  caption_youtube_shorts: string;
+  caption_instagram_reels?: string;
+  caption_facebook_reels?: string;
+  hashtags_tiktok: string[];
+  hashtags_youtube_shorts: string[];
+  hashtags_instagram_reels?: string[];
+  hashtags_facebook_reels?: string[];
+  cta: string;
+  thumbnail_text: string;
+  video_prompt: string;
+  voiceover_style: string;
+  compliance_notes: string[];
 }
 
 // ============================================================
