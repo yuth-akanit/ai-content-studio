@@ -5,6 +5,7 @@ import { useProfile } from '@/context/profile-context';
 import { PageHeader } from '@/components/shared/page-header';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { PlatformBadge } from '@/components/shared/platform-badge';
 import { LoadingSpinner } from '@/components/shared/loading-spinner';
 import { EmptyState } from '@/components/shared/empty-state';
@@ -16,6 +17,9 @@ import {
   Plus,
   ArrowRight,
   LayoutDashboard,
+  ExternalLink,
+  History,
+  Clock,
 } from 'lucide-react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
@@ -38,8 +42,128 @@ interface DashboardData {
   };
   recentContents: GeneratedContent[];
   campaigns: ContentProject[];
+  recent_post_logs: RecentPostLog[];
+  scheduled_post_summary: ScheduledPostSummary;
+  recent_scheduled_posts: RecentScheduledPost[];
   hasProfile: boolean;
   profileId: string | null;
+}
+
+interface RecentPostLog {
+  id: string;
+  content_id: string | null;
+  platform: string | null;
+  provider: string | null;
+  social_page_id: string | null;
+  channel_id: string | null;
+  status: string | null;
+  posted_url: string | null;
+  external_url: string | null;
+  post_external_id: string | null;
+  error_message: string | null;
+  created_at: string | null;
+  posted_at: string | null;
+  content_title: string;
+  content_preview: string | null;
+  page_name: string | null;
+}
+
+interface ScheduledPostSummary {
+  pending: number;
+  processing: number;
+  posted: number;
+  failed: number;
+  cancelled: number;
+}
+
+interface RecentScheduledPost {
+  id: string;
+  content_id: string;
+  social_page_id: string;
+  scheduled_at: string;
+  status: keyof ScheduledPostSummary | string;
+  retry_count: number;
+  max_retries: number;
+  locked_by: string | null;
+  posted_at: string | null;
+  post_log_id: string | null;
+  error_message: string | null;
+  created_at: string | null;
+  content_title: string;
+  content_preview: string | null;
+  page_name: string | null;
+  platform: string | null;
+}
+
+const EMPTY_SCHEDULED_SUMMARY: ScheduledPostSummary = {
+  pending: 0,
+  processing: 0,
+  posted: 0,
+  failed: 0,
+  cancelled: 0,
+};
+
+const SCHEDULED_STATUS_LABELS: Record<keyof ScheduledPostSummary, string> = {
+  pending: 'รอโพสต์',
+  processing: 'กำลังโพสต์',
+  posted: 'โพสต์แล้ว',
+  failed: 'ล้มเหลว',
+  cancelled: 'ยกเลิก',
+};
+
+const POST_LOG_STATUS_LABELS: Record<string, string> = {
+  success: 'สำเร็จ',
+  posted: 'สำเร็จ',
+  failed: 'ล้มเหลว',
+  error: 'ล้มเหลว',
+  pending: 'รอ',
+};
+
+function normalizePlatform(platform: string | null | undefined): Platform {
+  if (platform === 'line') return 'line_oa';
+  if (platform && platform in PLATFORM_LABELS) return platform as Platform;
+  return 'other';
+}
+
+function formatDateTime(value: string | null | undefined) {
+  if (!value) return '-';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '-';
+  return date.toLocaleString('th-TH', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  });
+}
+
+function postLogStatusLabel(status: string | null | undefined) {
+  if (!status) return 'รอ';
+  return POST_LOG_STATUS_LABELS[status] || status;
+}
+
+function scheduledStatusLabel(status: string | null | undefined) {
+  if (!status) return '-';
+  if (status in SCHEDULED_STATUS_LABELS) {
+    return SCHEDULED_STATUS_LABELS[status as keyof ScheduledPostSummary];
+  }
+  return status;
+}
+
+function statusBadgeClass(status: string | null | undefined) {
+  switch (status) {
+    case 'success':
+    case 'posted':
+      return 'bg-green-50 text-green-700 border-green-200';
+    case 'processing':
+      return 'bg-blue-50 text-blue-700 border-blue-200';
+    case 'failed':
+    case 'error':
+      return 'bg-red-50 text-red-700 border-red-200';
+    case 'cancelled':
+      return 'bg-gray-100 text-gray-600 border-gray-200';
+    case 'pending':
+    default:
+      return 'bg-amber-50 text-amber-700 border-amber-200';
+  }
 }
 
 export default function DashboardPage() {
@@ -67,6 +191,9 @@ export default function DashboardPage() {
         stats: { total: 0, byPlatform: {}, byType: {}, recentCount: 0 },
         recentContents: [],
         campaigns: [],
+        recent_post_logs: [],
+        scheduled_post_summary: EMPTY_SCHEDULED_SUMMARY,
+        recent_scheduled_posts: [],
         hasProfile: false,
         profileId: null,
       });
@@ -220,6 +347,153 @@ export default function DashboardPage() {
                       <PlatformBadge platform={platform as Platform} />
                     </div>
                     <span className="text-sm font-medium">{count}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mt-6">
+        {/* Recent Post Logs */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="text-base text-blue-700 flex items-center gap-2">
+              <History className="h-4 w-4" />
+              ประวัติการโพสต์ล่าสุด
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {data.recent_post_logs.length === 0 ? (
+              <p className="text-sm text-gray-500 text-center py-8">
+                ยังไม่มีประวัติการโพสต์
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {data.recent_post_logs.map((log) => {
+                  const postUrl = log.posted_url || log.external_url;
+
+                  return (
+                    <div key={log.id} className="rounded-lg border border-gray-100 bg-gray-50 p-3">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="min-w-0 space-y-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <PlatformBadge platform={normalizePlatform(log.platform || log.provider)} />
+                            <Badge variant="outline" className={cn('h-6', statusBadgeClass(log.status))}>
+                              {postLogStatusLabel(log.status)}
+                            </Badge>
+                            {log.page_name && (
+                              <span className="text-xs font-medium text-gray-500 truncate">
+                                {log.page_name}
+                              </span>
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-gray-900 truncate">
+                              {log.content_title}
+                            </p>
+                            {log.content_preview && (
+                              <p className="text-xs text-gray-500 line-clamp-2">
+                                {log.content_preview}
+                              </p>
+                            )}
+                          </div>
+                          {log.error_message && (
+                            <p className="text-xs text-red-600 line-clamp-2">
+                              {log.error_message}
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex shrink-0 items-center gap-2 sm:flex-col sm:items-end">
+                          <span className="text-xs text-gray-500 whitespace-nowrap">
+                            {formatDateTime(log.posted_at || log.created_at)}
+                          </span>
+                          {postUrl && (
+                            <a href={postUrl} target="_blank" rel="noreferrer">
+                              <Button size="sm" variant="outline" className="h-8">
+                                <ExternalLink className="h-3.5 w-3.5 mr-1" />
+                                เปิดโพสต์
+                              </Button>
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Scheduled Queue */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="text-base text-blue-700 flex items-center gap-2">
+              <Clock className="h-4 w-4" />
+              คิวโพสต์ล่วงหน้า
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-4">
+              {(Object.keys(EMPTY_SCHEDULED_SUMMARY) as Array<keyof ScheduledPostSummary>).map((status) => (
+                <div key={status} className="rounded-lg border border-gray-100 bg-gray-50 p-2 text-center">
+                  <p className="text-lg font-bold text-gray-900 leading-tight">
+                    {data.scheduled_post_summary[status] || 0}
+                  </p>
+                  <p className="text-[11px] text-gray-500">
+                    {SCHEDULED_STATUS_LABELS[status]}
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            {data.recent_scheduled_posts.length === 0 ? (
+              <p className="text-sm text-gray-500 text-center py-8">
+                ยังไม่มีคิวโพสต์ล่วงหน้า
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {data.recent_scheduled_posts.map((item) => (
+                  <div key={item.id} className="rounded-lg border border-gray-100 bg-gray-50 p-3">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0 space-y-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <PlatformBadge platform={normalizePlatform(item.platform)} />
+                          <Badge variant="outline" className={cn('h-6', statusBadgeClass(item.status))}>
+                            {scheduledStatusLabel(item.status)}
+                          </Badge>
+                          <span className="text-xs font-medium text-gray-500">
+                            Retry {item.retry_count}/{item.max_retries}
+                          </span>
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-gray-900 truncate">
+                            {item.content_title}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {item.page_name || item.social_page_id}
+                          </p>
+                          {item.content_preview && (
+                            <p className="text-xs text-gray-500 line-clamp-2">
+                              {item.content_preview}
+                            </p>
+                          )}
+                        </div>
+                        {item.error_message && (
+                          <p className="text-xs text-red-600 line-clamp-2">
+                            {item.error_message}
+                          </p>
+                        )}
+                      </div>
+                      <div className="shrink-0 text-xs text-gray-500 sm:text-right">
+                        <p>{formatDateTime(item.scheduled_at)}</p>
+                        {item.locked_by && (
+                          <p className="mt-1">Worker: {item.locked_by}</p>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 ))}
               </div>

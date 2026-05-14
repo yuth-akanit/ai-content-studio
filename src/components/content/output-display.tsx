@@ -105,6 +105,16 @@ export function OutputDisplay({ output, platform, contentId, imageUrls, videoUrl
   
   const [activeTab, setActiveTab] = useState('medium');
   const hashtagLine = output.hashtags && output.hashtags.length > 0 ? output.hashtags.join(' ') : '';
+  const selectedPages = socialPages.filter((page) => selectedPageIds.includes(page.id));
+  const hasPublishMedia = Boolean(imageUrls?.length || videoUrl);
+  const selectedInstagramPagesWithoutMedia = selectedPages.filter((page) => isInstagramPage(page) && !hasPublishMedia);
+  const hasInvalidInstagramSelection = selectedInstagramPagesWithoutMedia.length > 0;
+  const instagramMediaWarning = 'Instagram ต้องมีรูปภาพอย่างน้อย 1 รูป หรือวิดีโอ 1 ไฟล์ก่อนโพสต์';
+  const selectedInstagramPageNames = selectedInstagramPagesWithoutMedia.map((page) => page.name).join(', ');
+  const platformValidationMessage = hasInvalidInstagramSelection
+    ? `${instagramMediaWarning}${selectedInstagramPageNames ? `: ${selectedInstagramPageNames}` : ''}`
+    : '';
+  const isShortFormPlanningContent = Boolean((output as { short_form?: unknown }).short_form) || output.content_type === 'short_video_script';
 
   // Strip headline from top, FAQ lines, and duplicate CTA after contact block
   function cleanPostText(text: string, headline?: string): string {
@@ -244,6 +254,18 @@ export function OutputDisplay({ output, platform, contentId, imageUrls, videoUrl
     );
   }
 
+  function isInstagramPage(page: SocialPage): boolean {
+    return page.meta?.is_instagram === true || page.provider === 'instagram';
+  }
+
+  function validateSelectedPagesForMedia(): boolean {
+    if (!hasInvalidInstagramSelection) return true;
+
+    toast.error(platformValidationMessage || instagramMediaWarning);
+    setStructuredError('preflight', platformValidationMessage || instagramMediaWarning, 'preflight_validation');
+    return false;
+  }
+
   function mapErrorTypeLabel(type?: string): string {
     if (type === 'preflight') return 'Preflight Validation';
     if (type === 'storage') return 'Supabase Storage Upload';
@@ -372,6 +394,10 @@ export function OutputDisplay({ output, platform, contentId, imageUrls, videoUrl
       return;
     }
 
+    if (!validateSelectedPagesForMedia()) {
+      return;
+    }
+
     setPosting(true);
     setPostProgress(0);
     setPostStatusMessage(videoUrl ? 'เตรียมวิดีโอสำหรับโพสต์...' : 'เตรียมส่งโพสต์...');
@@ -449,6 +475,10 @@ export function OutputDisplay({ output, platform, contentId, imageUrls, videoUrl
   async function handleSchedulePost() {
     if (!contentId || selectedPageIds.length === 0) {
       toast.error(THAI_UI_LABELS.select_pages);
+      return;
+    }
+
+    if (!validateSelectedPagesForMedia()) {
       return;
     }
 
@@ -771,20 +801,39 @@ export function OutputDisplay({ output, platform, contentId, imageUrls, videoUrl
 
             <div className="space-y-2">
               <p className="text-xs text-gray-500">{THAI_UI_LABELS.select_pages}</p>
+              <div className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-800 space-y-1">
+                <p>Facebook/LINE สามารถโพสต์ข้อความล้วนได้</p>
+                <p>Instagram ต้องมีรูปภาพหรือวิดีโอก่อนโพสต์</p>
+                <p>TikTok/YouTube เป็น prepared only และยังไม่ได้เชื่อมต่อ posting API</p>
+                {isShortFormPlanningContent && (
+                  <p className="font-medium">Short-form scripts เป็น planning content กรุณาแนบรูป/วิดีโอจริงก่อนโพสต์ไป Instagram/Reels/Shorts</p>
+                )}
+              </div>
+              {platformValidationMessage && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
+                  {platformValidationMessage} กรุณาแนบ media หรือเอา Instagram ออกจากรายการก่อน
+                </div>
+              )}
               <div className="flex flex-wrap gap-2">
-              {socialPages.map((page) => (
-                <button
-                  key={page.id}
-                  onClick={() => togglePageSelection(page.id)}
-                  className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
-                    selectedPageIds.includes(page.id)
-                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-md'
-                      : 'bg-white text-gray-600 border-gray-200 hover:border-indigo-300'
-                  }`}
-                >
-                  [{page.meta?.is_instagram ? 'INSTAGRAM' : page.provider.toUpperCase()}] {page.name}
-                </button>
-              ))}
+                {socialPages.map((page) => {
+                  const selected = selectedPageIds.includes(page.id);
+                  const invalidInstagram = selected && isInstagramPage(page) && !hasPublishMedia;
+                  return (
+                    <button
+                      key={page.id}
+                      onClick={() => togglePageSelection(page.id)}
+                      className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
+                        invalidInstagram
+                          ? 'bg-amber-100 text-amber-800 border-amber-300 shadow-sm'
+                          : selected
+                            ? 'bg-indigo-600 text-white border-indigo-600 shadow-md'
+                            : 'bg-white text-gray-600 border-gray-200 hover:border-indigo-300'
+                      }`}
+                    >
+                      [{isInstagramPage(page) ? 'INSTAGRAM' : page.provider.toUpperCase()}] {page.name}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
@@ -826,7 +875,7 @@ export function OutputDisplay({ output, platform, contentId, imageUrls, videoUrl
             <Button
               className="w-full bg-indigo-600 hover:bg-indigo-700"
               onClick={handleAutoPost}
-              disabled={posting || selectedPageIds.length === 0}
+              disabled={posting || selectedPageIds.length === 0 || hasInvalidInstagramSelection}
             >
               {posting ? (
                 <>
@@ -858,7 +907,7 @@ export function OutputDisplay({ output, platform, contentId, imageUrls, videoUrl
                   type="button"
                   variant="outline"
                   onClick={handleSchedulePost}
-                  disabled={scheduling || selectedPageIds.length === 0}
+                  disabled={scheduling || selectedPageIds.length === 0 || hasInvalidInstagramSelection}
                   className="sm:w-auto"
                 >
                   {scheduling ? (
