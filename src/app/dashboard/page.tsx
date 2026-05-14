@@ -20,6 +20,8 @@ import {
   ExternalLink,
   History,
   Clock,
+  RefreshCw,
+  XCircle,
 } from 'lucide-react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
@@ -170,6 +172,8 @@ export default function DashboardPage() {
   const { profile, loading: profileLoading } = useProfile();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
     loadDashboard();
@@ -200,6 +204,56 @@ export default function DashboardPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function runScheduledAction(actionKey: string, request: () => Promise<Response>) {
+    setActionLoading(actionKey);
+    setActionError(null);
+
+    try {
+      const res = await request();
+      const result = await res.json().catch(() => ({}));
+
+      if (!res.ok || result?.ok === false) {
+        throw new Error(result?.error || 'Scheduled queue action failed');
+      }
+
+      await loadDashboard();
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Scheduled queue action failed');
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  function resetStaleScheduledPosts() {
+    return runScheduledAction('reset-stale', () => fetch('/api/scheduled-posts/reset-stale', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ stale_after_minutes: 10 }),
+    }));
+  }
+
+  function resetProcessingPost(id: string) {
+    return runScheduledAction(`reset-${id}`, () => fetch(`/api/scheduled-posts/${id}/reset-processing`, {
+      method: 'POST',
+    }));
+  }
+
+  function markProcessingPostFailed(id: string) {
+    return runScheduledAction(`fail-${id}`, () => fetch(`/api/scheduled-posts/${id}/manual-fail`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ error_message: 'Manually marked failed from dashboard' }),
+    }));
+  }
+
+  function cancelScheduledPost(id: string) {
+    return runScheduledAction(`cancel-${id}`, () => fetch(`/api/scheduled-posts/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'cancelled' }),
+    }));
   }
 
   if (profileLoading && !data) return <LoadingSpinner text={THAI_UI_LABELS.loading_dashboard} />;
@@ -434,8 +488,24 @@ export default function DashboardPage() {
               <Clock className="h-4 w-4" />
               คิวโพสต์ล่วงหน้า
             </CardTitle>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8"
+              disabled={actionLoading !== null}
+              onClick={resetStaleScheduledPosts}
+            >
+              <RefreshCw className={cn('h-3.5 w-3.5 mr-1', actionLoading === 'reset-stale' && 'animate-spin')} />
+              รีเซ็ตคิวค้าง
+            </Button>
           </CardHeader>
           <CardContent>
+            {actionError && (
+              <p className="mb-3 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs text-red-700">
+                {actionError}
+              </p>
+            )}
+
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-4">
               {(Object.keys(EMPTY_SCHEDULED_SUMMARY) as Array<keyof ScheduledPostSummary>).map((status) => (
                 <div key={status} className="rounded-lg border border-gray-100 bg-gray-50 p-2 text-center">
@@ -492,6 +562,44 @@ export default function DashboardPage() {
                         {item.locked_by && (
                           <p className="mt-1">Worker: {item.locked_by}</p>
                         )}
+                        <div className="mt-2 flex flex-wrap justify-start gap-2 sm:justify-end">
+                          {item.status === 'processing' && (
+                            <>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-8"
+                                disabled={actionLoading !== null}
+                                onClick={() => resetProcessingPost(item.id)}
+                              >
+                                <RefreshCw className={cn('h-3.5 w-3.5 mr-1', actionLoading === `reset-${item.id}` && 'animate-spin')} />
+                                รีเซ็ต
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-8 border-red-200 text-red-700 hover:bg-red-50"
+                                disabled={actionLoading !== null}
+                                onClick={() => markProcessingPostFailed(item.id)}
+                              >
+                                <XCircle className="h-3.5 w-3.5 mr-1" />
+                                Mark failed
+                              </Button>
+                            </>
+                          )}
+                          {(item.status === 'pending' || item.status === 'failed') && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-8 border-gray-200 text-gray-700 hover:bg-gray-100"
+                              disabled={actionLoading !== null}
+                              onClick={() => cancelScheduledPost(item.id)}
+                            >
+                              <XCircle className="h-3.5 w-3.5 mr-1" />
+                              ยกเลิก
+                            </Button>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
