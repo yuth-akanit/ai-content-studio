@@ -107,13 +107,26 @@ export function OutputDisplay({ output, platform, contentId, imageUrls, videoUrl
   const hashtagLine = output.hashtags && output.hashtags.length > 0 ? output.hashtags.join(' ') : '';
   const selectedPages = socialPages.filter((page) => selectedPageIds.includes(page.id));
   const hasPublishMedia = Boolean(imageUrls?.length || videoUrl);
+  const hasPublishVideo = Boolean(videoUrl);
   const selectedInstagramPagesWithoutMedia = selectedPages.filter((page) => isInstagramPage(page) && !hasPublishMedia);
   const hasInvalidInstagramSelection = selectedInstagramPagesWithoutMedia.length > 0;
   const instagramMediaWarning = 'Instagram ต้องมีรูปภาพอย่างน้อย 1 รูป หรือวิดีโอ 1 ไฟล์ก่อนโพสต์';
   const selectedInstagramPageNames = selectedInstagramPagesWithoutMedia.map((page) => page.name).join(', ');
-  const platformValidationMessage = hasInvalidInstagramSelection
-    ? `${instagramMediaWarning}${selectedInstagramPageNames ? `: ${selectedInstagramPageNames}` : ''}`
-    : '';
+  const selectedYouTubePagesWithoutVideo = selectedPages.filter((page) => isYouTubePage(page) && !hasPublishVideo);
+  const hasInvalidYouTubeSelection = selectedYouTubePagesWithoutVideo.length > 0;
+  const youtubeVideoWarning = 'YouTube Shorts ต้องมีวิดีโอ 1 ไฟล์ก่อนโพสต์';
+  const selectedYouTubePageNames = selectedYouTubePagesWithoutVideo.map((page) => page.name).join(', ');
+  const selectedTikTokPagesWithoutVideo = selectedPages.filter((page) => isTikTokPage(page) && !hasPublishVideo);
+  const hasInvalidTikTokSelection = selectedTikTokPagesWithoutVideo.length > 0;
+  const tiktokVideoWarning = 'TikTok ต้องมีวิดีโอ 1 ไฟล์ก่อนโพสต์';
+  const selectedTikTokPageNames = selectedTikTokPagesWithoutVideo.map((page) => page.name).join(', ');
+  const platformValidationMessages = [
+    hasInvalidInstagramSelection ? `${instagramMediaWarning}${selectedInstagramPageNames ? `: ${selectedInstagramPageNames}` : ''}` : '',
+    hasInvalidYouTubeSelection ? `${youtubeVideoWarning}${selectedYouTubePageNames ? `: ${selectedYouTubePageNames}` : ''}` : '',
+    hasInvalidTikTokSelection ? `${tiktokVideoWarning}${selectedTikTokPageNames ? `: ${selectedTikTokPageNames}` : ''}` : '',
+  ].filter(Boolean);
+  const platformValidationMessage = platformValidationMessages.join('\n');
+  const hasInvalidPlatformSelection = platformValidationMessages.length > 0;
   const isShortFormPlanningContent = Boolean((output as { short_form?: unknown }).short_form) || output.content_type === 'short_video_script';
 
   // Strip headline from top, FAQ lines, and duplicate CTA after contact block
@@ -258,11 +271,19 @@ export function OutputDisplay({ output, platform, contentId, imageUrls, videoUrl
     return page.meta?.is_instagram === true || page.provider === 'instagram';
   }
 
-  function validateSelectedPagesForMedia(): boolean {
-    if (!hasInvalidInstagramSelection) return true;
+  function isYouTubePage(page: SocialPage): boolean {
+    return page.provider === 'youtube' || page.provider === 'youtube_shorts';
+  }
 
-    toast.error(platformValidationMessage || instagramMediaWarning);
-    setStructuredError('preflight', platformValidationMessage || instagramMediaWarning, 'preflight_validation');
+  function isTikTokPage(page: SocialPage): boolean {
+    return page.provider === 'tiktok';
+  }
+
+  function validateSelectedPagesForMedia(): boolean {
+    if (!hasInvalidPlatformSelection) return true;
+
+    toast.error(platformValidationMessage || 'กรุณาแนบ media ให้ครบก่อนโพสต์');
+    setStructuredError('preflight', platformValidationMessage || 'กรุณาแนบ media ให้ครบก่อนโพสต์', 'preflight_validation');
     return false;
   }
 
@@ -804,26 +825,32 @@ export function OutputDisplay({ output, platform, contentId, imageUrls, videoUrl
               <div className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-800 space-y-1">
                 <p>Facebook/LINE สามารถโพสต์ข้อความล้วนได้</p>
                 <p>Instagram ต้องมีรูปภาพหรือวิดีโอก่อนโพสต์</p>
-                <p>TikTok/YouTube เป็น prepared only และยังไม่ได้เชื่อมต่อ posting API</p>
+                <p>YouTube Shorts/TikTok ต้องมีวิดีโอก่อนโพสต์ และต้องเชื่อม OAuth token ฝั่ง server</p>
+                <p>TikTok ใช้โหมด guarded โดยค่าเริ่มต้นเป็น SELF_ONLY</p>
                 {isShortFormPlanningContent && (
-                  <p className="font-medium">Short-form scripts เป็น planning content กรุณาแนบรูป/วิดีโอจริงก่อนโพสต์ไป Instagram/Reels/Shorts</p>
+                  <p className="font-medium">Short-form scripts เป็น planning content กรุณาแนบวิดีโอจริงก่อนโพสต์ไป YouTube Shorts/TikTok/Reels</p>
                 )}
               </div>
               {platformValidationMessage && (
-                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
-                  {platformValidationMessage} กรุณาแนบ media หรือเอา Instagram ออกจากรายการก่อน
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800 whitespace-pre-line">
+                  {platformValidationMessage} กรุณาแนบ media ให้ครบ หรือเอาช่องทางที่ต้องใช้ media ออกจากรายการก่อน
                 </div>
               )}
               <div className="flex flex-wrap gap-2">
                 {socialPages.map((page) => {
                   const selected = selectedPageIds.includes(page.id);
-                  const invalidInstagram = selected && isInstagramPage(page) && !hasPublishMedia;
+                  const invalidPlatform =
+                    selected &&
+                    (
+                      (isInstagramPage(page) && !hasPublishMedia) ||
+                      ((isYouTubePage(page) || isTikTokPage(page)) && !hasPublishVideo)
+                    );
                   return (
                     <button
                       key={page.id}
                       onClick={() => togglePageSelection(page.id)}
                       className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
-                        invalidInstagram
+                        invalidPlatform
                           ? 'bg-amber-100 text-amber-800 border-amber-300 shadow-sm'
                           : selected
                             ? 'bg-indigo-600 text-white border-indigo-600 shadow-md'
@@ -875,7 +902,7 @@ export function OutputDisplay({ output, platform, contentId, imageUrls, videoUrl
             <Button
               className="w-full bg-indigo-600 hover:bg-indigo-700"
               onClick={handleAutoPost}
-              disabled={posting || selectedPageIds.length === 0 || hasInvalidInstagramSelection}
+              disabled={posting || selectedPageIds.length === 0 || hasInvalidPlatformSelection}
             >
               {posting ? (
                 <>
@@ -907,7 +934,7 @@ export function OutputDisplay({ output, platform, contentId, imageUrls, videoUrl
                   type="button"
                   variant="outline"
                   onClick={handleSchedulePost}
-                  disabled={scheduling || selectedPageIds.length === 0 || hasInvalidInstagramSelection}
+                  disabled={scheduling || selectedPageIds.length === 0 || hasInvalidPlatformSelection}
                   className="sm:w-auto"
                 >
                   {scheduling ? (

@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { normalizeImageUrls, normalizeVideoUrl } from '@/lib/server/media-storage';
+import { getSocialAccountTokenByPageId } from '@/lib/repositories/social-account-tokens';
+import { uploadYouTubeShort } from '@/lib/social/youtube-posting';
+import { postTikTokVideo, type TikTokPrivacyLevel } from '@/lib/social/tiktok-posting';
+import { getValidYouTubeAccessToken } from '@/lib/oauth/youtube-oauth';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,6 +16,8 @@ interface PostRequest {
   image_urls?: string[];
   video_url?: string | null;
   scheduled_post_id?: string;
+  privacy_level?: string;
+  tiktok_privacy_level?: string;
 }
 
 type ErrorType = 'preflight' | 'storage' | 'meta_publish';
@@ -20,7 +26,9 @@ type ErrorStage =
   | 'supabase_storage_upload'
   | 'meta_publish_facebook'
   | 'meta_publish_instagram'
-  | 'meta_publish_line';
+  | 'meta_publish_line'
+  | 'youtube_publish'
+  | 'tiktok_publish';
 
 interface PostResult {
   id: string;
@@ -28,6 +36,50 @@ interface PostResult {
   error?: string;
   error_type?: ErrorType;
   error_stage?: ErrorStage;
+}
+
+type AutoPostProvider = 'facebook' | 'instagram' | 'line' | 'youtube' | 'tiktok' | string;
+
+interface AutoPostPage {
+  id: string;
+  name: string;
+  provider: string;
+  external_id: string;
+  access_token?: string | null;
+  meta?: Record<string, unknown> | null;
+}
+
+function normalizeProvider(page: AutoPostPage): AutoPostProvider {
+  if (page.meta?.is_instagram === true || page.provider === 'instagram') return 'instagram';
+  if (page.provider === 'line_oa') return 'line';
+  if (page.provider === 'youtube_shorts') return 'youtube';
+  return page.provider;
+}
+
+function buildVideoTitle(message: string, fallback = 'PAA Air Service Short') {
+  const firstLine = message.split('\n').map((line) => line.trim()).find(Boolean);
+  const title = firstLine || fallback;
+  return title.length > 100 ? title.slice(0, 100) : title;
+}
+
+function normalizeProviderErrorStage(provider: AutoPostProvider): ErrorStage {
+  if (provider === 'instagram') return 'meta_publish_instagram';
+  if (provider === 'line') return 'meta_publish_line';
+  if (provider === 'youtube') return 'youtube_publish';
+  if (provider === 'tiktok') return 'tiktok_publish';
+  return 'meta_publish_facebook';
+}
+
+const TIKTOK_PRIVACY_LEVELS = new Set<TikTokPrivacyLevel>([
+  'SELF_ONLY',
+  'MUTUAL_FOLLOW_FRIENDS',
+  'FOLLOWER_OF_CREATOR',
+  'PUBLIC_TO_EVERYONE',
+]);
+
+function normalizeTikTokPrivacyLevel(value?: string): TikTokPrivacyLevel | null {
+  if (!value) return 'SELF_ONLY';
+  return TIKTOK_PRIVACY_LEVELS.has(value as TikTokPrivacyLevel) ? value as TikTokPrivacyLevel : null;
 }
 
 async function postToFacebookPage(
@@ -518,10 +570,21 @@ export async function POST(request: NextRequest) {
   );
   try {
     const body: PostRequest = await request.json();
-    const { content_id, page_ids, social_page_id, message, image_urls, video_url, scheduled_post_id } = body;
+    const {
+      content_id,
+      page_ids,
+      social_page_id,
+      message,
+      image_urls,
+      video_url,
+      scheduled_post_id,
+      privacy_level,
+      tiktok_privacy_level,
+    } = body;
     const pageIds = page_ids?.length ? page_ids : social_page_id ? [social_page_id] : [];
     const imageUrls = image_urls?.filter(Boolean);
     const videoUrl = video_url || undefined;
+    const requestedTikTokPrivacyLevel = normalizeTikTokPrivacyLevel(tiktok_privacy_level || privacy_level);
 
     if (!content_id || !pageIds.length || !message?.trim()) {
       return NextResponse.json(
@@ -597,12 +660,12 @@ export async function POST(request: NextRequest) {
       allComments.push(...content.output_payload.suggested_comments);
     }
 
-    const results = await Promise.all(pages.map(async (page) => {
-      const token = page.meta?.access_token || page.access_token;
-      const isInstagram = page.meta?.is_instagram === true;
+    const results = await Promise.all((pages as AutoPostPage[]).map(async (page) => {
+      const token = typeof page.meta?.access_token === 'string' ? page.meta.access_token : page.access_token || '';
+      const provider = normalizeProvider(page);
 
       try {
-        if (isInstagram) {
+        if (provider === 'instagram') {
           const postResult = await postToInstagram(
             token,
             page.external_id,
@@ -617,12 +680,14 @@ export async function POST(request: NextRequest) {
             provider: 'instagram',
             success: postResult.success,
             post_id: postResult.id,
+            post_external_id: postResult.id,
             error: postResult.error,
+            error_message: postResult.error,
             error_type: postResult.error_type,
             error_stage: postResult.error_stage,
             comments_posted: 0,
           };
-        } else if (page.provider === 'facebook') {
+        } else if (provider === 'facebook') {
           const postResult = await postToFacebookPage(
             token,
             page.external_id,
@@ -652,12 +717,14 @@ export async function POST(request: NextRequest) {
             provider: page.provider,
             success: postResult.success,
             post_id: postResult.id,
+            post_external_id: postResult.id,
             error: postResult.error,
+            error_message: postResult.error,
             error_type: postResult.error_type,
             error_stage: postResult.error_stage,
             comments_posted: commentsPosted,
           };
-        } else if (page.provider === 'line' || page.provider === 'line_oa') {
+        } else if (provider === 'line') {
           const postResult = await postToLineOA(
             token,
             message,
@@ -671,9 +738,148 @@ export async function POST(request: NextRequest) {
             provider: 'line',
             success: postResult.success,
             post_id: postResult.id,
+            post_external_id: postResult.id,
             error: postResult.error,
+            error_message: postResult.error,
             error_type: postResult.error_type,
             error_stage: postResult.error_stage,
+            comments_posted: 0,
+          };
+        } else if (provider === 'youtube') {
+          if (!publicVideoUrl) {
+            return {
+              page_id: page.id,
+              page_name: page.name,
+              provider: 'youtube',
+              success: false,
+              post_id: '',
+              post_external_id: '',
+              error: 'YouTube posting requires video_url',
+              error_message: 'YouTube posting requires video_url',
+              error_type: 'preflight' as ErrorType,
+              error_stage: 'preflight_validation' as ErrorStage,
+              comments_posted: 0,
+            };
+          }
+
+          const accountToken = await getSocialAccountTokenByPageId(supabase, page.id, 'youtube');
+          if (!accountToken) {
+            return {
+              page_id: page.id,
+              page_name: page.name,
+              provider: 'youtube',
+              success: false,
+              post_id: '',
+              post_external_id: '',
+              error: 'Missing YouTube token',
+              error_message: 'Missing YouTube token',
+              error_type: 'preflight' as ErrorType,
+              error_stage: 'preflight_validation' as ErrorStage,
+              comments_posted: 0,
+            };
+          }
+
+          const youtubeAccessToken = await getValidYouTubeAccessToken(supabase, accountToken);
+          const postResult = await uploadYouTubeShort({
+            accessToken: youtubeAccessToken,
+            videoUrl: publicVideoUrl,
+            title: buildVideoTitle(message),
+            description: message,
+            privacyStatus: 'private',
+          });
+
+          return {
+            page_id: page.id,
+            page_name: page.name,
+            provider: 'youtube',
+            success: postResult.success,
+            post_id: postResult.post_external_id,
+            post_external_id: postResult.post_external_id,
+            comments_posted: 0,
+          };
+        } else if (provider === 'tiktok') {
+          if (!publicVideoUrl) {
+            return {
+              page_id: page.id,
+              page_name: page.name,
+              provider: 'tiktok',
+              success: false,
+              post_id: '',
+              post_external_id: '',
+              error: 'TikTok posting requires video_url',
+              error_message: 'TikTok posting requires video_url',
+              error_type: 'preflight' as ErrorType,
+              error_stage: 'preflight_validation' as ErrorStage,
+              comments_posted: 0,
+            };
+          }
+
+          if (!requestedTikTokPrivacyLevel) {
+            return {
+              page_id: page.id,
+              page_name: page.name,
+              provider: 'tiktok',
+              success: false,
+              post_id: '',
+              post_external_id: '',
+              error: 'Invalid TikTok privacy_level',
+              error_message: 'Invalid TikTok privacy_level',
+              error_type: 'preflight' as ErrorType,
+              error_stage: 'preflight_validation' as ErrorStage,
+              comments_posted: 0,
+            };
+          }
+
+          if (
+            requestedTikTokPrivacyLevel === 'PUBLIC_TO_EVERYONE' &&
+            process.env.TIKTOK_ALLOW_PUBLIC_DIRECT_POST !== 'true'
+          ) {
+            return {
+              page_id: page.id,
+              page_name: page.name,
+              provider: 'tiktok',
+              success: false,
+              post_id: '',
+              post_external_id: '',
+              error: 'TikTok public direct post is disabled',
+              error_message: 'TikTok public direct post is disabled',
+              error_type: 'preflight' as ErrorType,
+              error_stage: 'preflight_validation' as ErrorStage,
+              comments_posted: 0,
+            };
+          }
+
+          const accountToken = await getSocialAccountTokenByPageId(supabase, page.id, 'tiktok');
+          if (!accountToken) {
+            return {
+              page_id: page.id,
+              page_name: page.name,
+              provider: 'tiktok',
+              success: false,
+              post_id: '',
+              post_external_id: '',
+              error: 'Missing TikTok token',
+              error_message: 'Missing TikTok token',
+              error_type: 'preflight' as ErrorType,
+              error_stage: 'preflight_validation' as ErrorStage,
+              comments_posted: 0,
+            };
+          }
+
+          const postResult = await postTikTokVideo({
+            accessToken: accountToken.access_token,
+            videoUrl: publicVideoUrl,
+            caption: message,
+            privacyLevel: requestedTikTokPrivacyLevel,
+          });
+
+          return {
+            page_id: page.id,
+            page_name: page.name,
+            provider: 'tiktok',
+            success: postResult.success,
+            post_id: postResult.post_external_id,
+            post_external_id: postResult.post_external_id,
             comments_posted: 0,
           };
         } else {
@@ -682,20 +888,28 @@ export async function POST(request: NextRequest) {
             page_name: page.name,
             provider: page.provider,
             success: false,
+            post_id: '',
+            post_external_id: '',
             error: `Provider "${page.provider}" auto-posting not yet supported`,
+            error_message: `Provider "${page.provider}" auto-posting not yet supported`,
             error_type: 'preflight',
             error_stage: 'preflight_validation',
+            comments_posted: 0,
           };
         }
       } catch (err) {
         return {
           page_id: page.id,
           page_name: page.name,
-          provider: page.provider,
+          provider,
           success: false,
+          post_id: '',
+          post_external_id: '',
           error: err instanceof Error ? err.message : 'Unknown error',
+          error_message: err instanceof Error ? err.message : 'Unknown error',
           error_type: 'meta_publish',
-          error_stage: isInstagram ? 'meta_publish_instagram' : 'meta_publish_facebook',
+          error_stage: normalizeProviderErrorStage(provider),
+          comments_posted: 0,
         };
       }
     }));
@@ -704,9 +918,9 @@ export async function POST(request: NextRequest) {
         content_id,
         social_page_id: r.page_id,
         provider: r.provider,
-        post_external_id: r.post_id || null,
+        post_external_id: r.post_external_id || r.post_id || null,
         status: r.success ? 'posted' : 'failed',
-        error_message: r.error || null,
+        error_message: r.error_message || r.error || null,
         comments_posted: r.comments_posted || 0,
         posted_at: new Date().toISOString(),
     }));
@@ -732,6 +946,8 @@ export async function POST(request: NextRequest) {
       social_page_id: r.page_id,
       post_log_id: logIdBySocialPage.get(r.page_id) || null,
       status: r.success ? 'posted' : 'failed',
+      post_external_id: r.post_external_id || r.post_id || null,
+      error_message: r.error_message || r.error || null,
       platform: r.provider,
     }));
 

@@ -162,6 +162,22 @@ export interface ScheduledPost {
   updated_at: string;
 }
 
+export type SocialAccountTokenProvider = 'youtube' | 'tiktok';
+
+export interface SocialAccountToken {
+  id: string;
+  social_page_id: string;
+  provider: SocialAccountTokenProvider;
+  access_token: string;
+  refresh_token: string | null;
+  token_type: string | null;
+  scope: string | null;
+  expires_at: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
 export const SHORT_FORM_PLATFORM_TARGETS = ['tiktok', 'youtube_shorts', 'instagram_reels', 'facebook_reels'] as const;
 export type ShortFormPlatformTarget = typeof SHORT_FORM_PLATFORM_TARGETS[number];
 
