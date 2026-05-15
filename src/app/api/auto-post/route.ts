@@ -16,6 +16,8 @@ interface PostRequest {
   image_urls?: string[];
   video_url?: string | null;
   scheduled_post_id?: string;
+  privacy_status?: string;
+  youtube_privacy_status?: string;
   privacy_level?: string;
   tiktok_privacy_level?: string;
 }
@@ -76,6 +78,21 @@ const TIKTOK_PRIVACY_LEVELS = new Set<TikTokPrivacyLevel>([
   'FOLLOWER_OF_CREATOR',
   'PUBLIC_TO_EVERYONE',
 ]);
+
+type YouTubePrivacyStatus = 'private' | 'unlisted' | 'public';
+
+const YOUTUBE_PRIVACY_STATUSES = new Set<YouTubePrivacyStatus>([
+  'private',
+  'unlisted',
+  'public',
+]);
+
+function normalizeYouTubePrivacyStatus(value?: string): YouTubePrivacyStatus | null {
+  if (!value) return 'private';
+  return YOUTUBE_PRIVACY_STATUSES.has(value as YouTubePrivacyStatus)
+    ? value as YouTubePrivacyStatus
+    : null;
+}
 
 function normalizeTikTokPrivacyLevel(value?: string): TikTokPrivacyLevel | null {
   if (!value) return 'SELF_ONLY';
@@ -578,12 +595,15 @@ export async function POST(request: NextRequest) {
       image_urls,
       video_url,
       scheduled_post_id,
+      privacy_status,
+      youtube_privacy_status,
       privacy_level,
       tiktok_privacy_level,
     } = body;
     const pageIds = page_ids?.length ? page_ids : social_page_id ? [social_page_id] : [];
     const imageUrls = image_urls?.filter(Boolean);
     const videoUrl = video_url || undefined;
+    const requestedYouTubePrivacyStatus = normalizeYouTubePrivacyStatus(youtube_privacy_status || privacy_status);
     const requestedTikTokPrivacyLevel = normalizeTikTokPrivacyLevel(tiktok_privacy_level || privacy_level);
 
     if (!content_id || !pageIds.length || !message?.trim()) {
@@ -762,6 +782,22 @@ export async function POST(request: NextRequest) {
             };
           }
 
+          if (!requestedYouTubePrivacyStatus) {
+            return {
+              page_id: page.id,
+              page_name: page.name,
+              provider: 'youtube',
+              success: false,
+              post_id: '',
+              post_external_id: '',
+              error: 'Invalid YouTube privacy_status',
+              error_message: 'Invalid YouTube privacy_status',
+              error_type: 'preflight' as ErrorType,
+              error_stage: 'preflight_validation' as ErrorStage,
+              comments_posted: 0,
+            };
+          }
+
           const accountToken = await getSocialAccountTokenByPageId(supabase, page.id, 'youtube');
           if (!accountToken) {
             return {
@@ -785,7 +821,7 @@ export async function POST(request: NextRequest) {
             videoUrl: publicVideoUrl,
             title: buildVideoTitle(message),
             description: message,
-            privacyStatus: 'private',
+            privacyStatus: requestedYouTubePrivacyStatus,
           });
 
           return {

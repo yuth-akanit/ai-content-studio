@@ -37,6 +37,7 @@ interface ScheduledPostListItem extends ScheduledPost {
 }
 
 type ErrorType = 'preflight' | 'storage' | 'meta_publish';
+type YouTubePrivacyStatus = 'private' | 'unlisted' | 'public';
 
 interface PublishErrorState {
   type: ErrorType;
@@ -50,6 +51,7 @@ interface AutoPostPayload {
   message: string;
   image_urls?: string[];
   video_url?: string;
+  privacy_status?: YouTubePrivacyStatus;
 }
 
 interface AutoPostResult {
@@ -58,6 +60,12 @@ interface AutoPostResult {
   error_type?: ErrorType;
   error_stage?: string;
 }
+
+const YOUTUBE_PRIVACY_OPTIONS: Array<{ value: YouTubePrivacyStatus; label: string }> = [
+  { value: 'private', label: 'ส่วนตัว' },
+  { value: 'unlisted', label: 'ไม่แสดงสาธารณะ แต่คนมีลิงก์ดูได้' },
+  { value: 'public', label: 'สาธารณะ' },
+];
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -102,10 +110,12 @@ export function OutputDisplay({ output, platform, contentId, imageUrls, videoUrl
   const [scheduledPosts, setScheduledPosts] = useState<ScheduledPostListItem[]>([]);
   const [loadingScheduledPosts, setLoadingScheduledPosts] = useState(false);
   const [rescheduleValues, setRescheduleValues] = useState<Record<string, string>>({});
+  const [youtubePrivacyStatus, setYoutubePrivacyStatus] = useState<YouTubePrivacyStatus>('unlisted');
   
   const [activeTab, setActiveTab] = useState('medium');
   const hashtagLine = output.hashtags && output.hashtags.length > 0 ? output.hashtags.join(' ') : '';
   const selectedPages = socialPages.filter((page) => selectedPageIds.includes(page.id));
+  const hasSelectedYouTubePage = selectedPages.some((page) => isYouTubePage(page));
   const hasPublishMedia = Boolean(imageUrls?.length || videoUrl);
   const hasPublishVideo = Boolean(videoUrl);
   const selectedInstagramPagesWithoutMedia = selectedPages.filter((page) => isInstagramPage(page) && !hasPublishMedia);
@@ -451,6 +461,10 @@ export function OutputDisplay({ output, platform, contentId, imageUrls, videoUrl
         postPayload.video_url = resolvedVideoUrl;
       }
 
+      if (hasSelectedYouTubePage) {
+        postPayload.privacy_status = youtubePrivacyStatus;
+      }
+
       const res = await fetch('/api/auto-post', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -521,6 +535,7 @@ export function OutputDisplay({ output, platform, contentId, imageUrls, videoUrl
         page_ids: selectedPageIds,
         created_from: 'schedule_ui',
         snapshot_version: 1,
+        ...(hasSelectedYouTubePage ? { privacy_status: youtubePrivacyStatus } : {}),
       };
 
       const res = await fetch('/api/scheduled-posts', {
@@ -834,6 +849,26 @@ export function OutputDisplay({ output, platform, contentId, imageUrls, videoUrl
               {platformValidationMessage && (
                 <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800 whitespace-pre-line">
                   {platformValidationMessage} กรุณาแนบ media ให้ครบ หรือเอาช่องทางที่ต้องใช้ media ออกจากรายการก่อน
+                </div>
+              )}
+              {hasSelectedYouTubePage && (
+                <div className="space-y-1 rounded-lg border border-red-100 bg-red-50 px-3 py-2">
+                  <Label htmlFor="youtube-privacy-status" className="text-xs font-semibold text-red-800">
+                    YouTube Shorts privacy
+                  </Label>
+                  <select
+                    id="youtube-privacy-status"
+                    value={youtubePrivacyStatus}
+                    onChange={(event) => setYoutubePrivacyStatus(event.target.value as YouTubePrivacyStatus)}
+                    disabled={posting || scheduling}
+                    className="h-9 w-full rounded-md border border-red-200 bg-white px-3 text-sm text-gray-900 outline-none focus:border-red-400 focus:ring-2 focus:ring-red-100"
+                  >
+                    {YOUTUBE_PRIVACY_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               )}
               <div className="flex flex-wrap gap-2">
