@@ -185,14 +185,26 @@ export default function SettingsPage() {
             </div>
           )}
 
-          <div className="grid gap-3 text-sm md:grid-cols-2">
+          <div className="grid gap-3 text-sm md:grid-cols-2 lg:grid-cols-3">
             <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-3">
               <p className="font-medium text-gray-950">Status</p>
-              <p className="mt-1 text-gray-600">Not connected / pending review</p>
+              <p className="mt-1 text-gray-600">In review / pending TikTok approval</p>
             </div>
             <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-3">
-              <p className="font-medium text-gray-950">Posting safety</p>
-              <p className="mt-1 text-gray-600">Public direct posting disabled during review</p>
+              <p className="font-medium text-gray-950">Login Kit</p>
+              <p className="mt-1 text-gray-600">Pending approval</p>
+            </div>
+            <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-3">
+              <p className="font-medium text-gray-950">Content Posting API</p>
+              <p className="mt-1 text-gray-600">Pending approval</p>
+            </div>
+            <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-3">
+              <p className="font-medium text-gray-950">Public direct posting</p>
+              <p className="mt-1 text-gray-600">Disabled</p>
+            </div>
+            <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-3 md:col-span-2">
+              <p className="font-medium text-gray-950">Scopes</p>
+              <p className="mt-1 text-gray-600">user.info.basic, video.upload</p>
             </div>
           </div>
 

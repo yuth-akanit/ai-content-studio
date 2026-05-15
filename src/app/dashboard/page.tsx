@@ -339,6 +339,17 @@ export default function DashboardPage() {
         }
       />
 
+      <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+        <p className="font-semibold">TikTok is pending Developer Review</p>
+        <p className="mt-1">
+          TikTok Login Kit and Content Posting API are submitted for review.
+          OAuth may fail until TikTok approves the app/client_key.
+        </p>
+        <p className="mt-2">
+          Current scopes: user.info.basic, video.upload. Public direct posting is disabled.
+        </p>
+      </div>
+
       {/* Stats Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
         <Card className="border-none shadow-sm bg-blue-50/50">
