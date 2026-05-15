@@ -127,6 +127,52 @@ function normalizePlatform(platform: string | null | undefined): Platform {
   return 'other';
 }
 
+function displayProvider(provider: string | null | undefined) {
+  if (provider === 'youtube' || provider === 'youtube_shorts') {
+    return {
+      label: 'YouTube',
+      className: 'bg-red-100 text-red-700 border-red-200',
+    };
+  }
+
+  const platform = normalizePlatform(provider);
+  return {
+    label: PLATFORM_LABELS[platform],
+    className: '',
+    platform,
+  };
+}
+
+function ProviderBadge({ provider }: { provider: string | null | undefined }) {
+  const display = displayProvider(provider);
+
+  if (display.platform) {
+    return <PlatformBadge platform={display.platform} />;
+  }
+
+  return (
+    <Badge variant="outline" className={display.className}>
+      {display.label}
+    </Badge>
+  );
+}
+
+function getPostLogUrl(log: RecentPostLog) {
+  if ((log.provider === 'youtube' || log.platform === 'youtube') && log.post_external_id) {
+    return `https://youtube.com/shorts/${encodeURIComponent(log.post_external_id)}`;
+  }
+
+  return log.posted_url || log.external_url;
+}
+
+function getPostLogLinkLabel(log: RecentPostLog) {
+  if ((log.provider === 'youtube' || log.platform === 'youtube') && log.post_external_id) {
+    return 'เปิด Shorts';
+  }
+
+  return 'เปิดโพสต์';
+}
+
 function formatDateTime(value: string | null | undefined) {
   if (!value) return '-';
   const date = new Date(value);
@@ -426,14 +472,14 @@ export default function DashboardPage() {
             ) : (
               <div className="space-y-3">
                 {data.recent_post_logs.map((log) => {
-                  const postUrl = log.posted_url || log.external_url;
+                  const postUrl = getPostLogUrl(log);
 
                   return (
                     <div key={log.id} className="rounded-lg border border-gray-100 bg-gray-50 p-3">
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                         <div className="min-w-0 space-y-2">
                           <div className="flex flex-wrap items-center gap-2">
-                            <PlatformBadge platform={normalizePlatform(log.platform || log.provider)} />
+                            <ProviderBadge provider={log.platform || log.provider} />
                             <Badge variant="outline" className={cn('h-6', statusBadgeClass(log.status))}>
                               {postLogStatusLabel(log.status)}
                             </Badge>
@@ -467,7 +513,7 @@ export default function DashboardPage() {
                             <a href={postUrl} target="_blank" rel="noreferrer">
                               <Button size="sm" variant="outline" className="h-8">
                                 <ExternalLink className="h-3.5 w-3.5 mr-1" />
-                                เปิดโพสต์
+                                {getPostLogLinkLabel(log)}
                               </Button>
                             </a>
                           )}
@@ -530,7 +576,7 @@ export default function DashboardPage() {
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div className="min-w-0 space-y-2">
                         <div className="flex flex-wrap items-center gap-2">
-                          <PlatformBadge platform={normalizePlatform(item.platform)} />
+                          <ProviderBadge provider={item.platform} />
                           <Badge variant="outline" className={cn('h-6', statusBadgeClass(item.status))}>
                             {scheduledStatusLabel(item.status)}
                           </Badge>
