@@ -10,7 +10,7 @@ const DEFAULT_APP_BASE_URL = 'https://studio.paaair.online';
 const TIKTOK_AUTH_URL = 'https://www.tiktok.com/v2/auth/authorize/';
 const TIKTOK_TOKEN_URL = 'https://open.tiktokapis.com/v2/oauth/token/';
 const TIKTOK_CREATOR_INFO_URL = 'https://open.tiktokapis.com/v2/post/publish/creator_info/query/';
-const TIKTOK_SCOPES = ['video.publish'];
+const TIKTOK_SCOPES = ['user.info.basic', 'video.upload'];
 const REFRESH_SKEW_MS = 5 * 60 * 1000;
 
 interface TikTokOAuthConfig {

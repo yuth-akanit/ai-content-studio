@@ -17,15 +17,19 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
-import { Plus, Edit, Trash2, Settings } from 'lucide-react';
+import { Plus, Edit, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { TonePreset, CTAPreset, PlatformPreset, PromptPreset } from '@/types/database';
 import { THAI_UI_LABELS } from '@/lib/constants/thai-labels';
-import { cn } from '@/lib/utils';
+
+const TIKTOK_REVIEW_SOCIAL_PAGE_ID = '43621300-1501-4a0a-8cbd-91f459bd7f1b';
+const TIKTOK_CONNECT_URL =
+  `/api/oauth/tiktok/connect?social_page_id=${TIKTOK_REVIEW_SOCIAL_PAGE_ID}&return_to=/settings`;
 
 export default function SettingsPage() {
   const [tab, setTab] = useState('tone');
   const [loading, setLoading] = useState(true);
+  const [tiktokOAuthStatus, setTikTokOAuthStatus] = useState<'connected' | 'error' | null>(null);
   const [tonePresets, setTonePresets] = useState<TonePreset[]>([]);
   const [ctaPresets, setCTAPresets] = useState<CTAPreset[]>([]);
   const [platformPresets, setPlatformPresets] = useState<PlatformPreset[]>([]);
@@ -39,6 +43,10 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
+    const oauthStatus = new URLSearchParams(window.location.search).get('tiktok_oauth');
+    if (oauthStatus === 'connected' || oauthStatus === 'error') {
+      setTikTokOAuthStatus(oauthStatus);
+    }
     loadAll();
   }, []);
 
@@ -151,6 +159,57 @@ export default function SettingsPage() {
     <div>
       <PageHeader title={THAI_UI_LABELS.settings} description={THAI_UI_LABELS.settings_desc} />
 
+      <Card className="mb-6 border-gray-200 bg-white">
+        <CardHeader className="pb-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <CardTitle className="text-base">TikTok Connection</CardTitle>
+              <p className="mt-1 text-sm text-gray-500">Provider: TikTok</p>
+            </div>
+            <Badge variant="secondary" className="w-fit">
+              Review mode
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {tiktokOAuthStatus === 'connected' && (
+            <div className="rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700">
+              TikTok OAuth connected successfully.
+            </div>
+          )}
+
+          {tiktokOAuthStatus === 'error' && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
+              TikTok connection could not be completed. This is expected while Login Kit
+              and the client key are still pending TikTok approval.
+            </div>
+          )}
+
+          <div className="grid gap-3 text-sm md:grid-cols-2">
+            <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-3">
+              <p className="font-medium text-gray-950">Status</p>
+              <p className="mt-1 text-gray-600">Not connected / pending review</p>
+            </div>
+            <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-3">
+              <p className="font-medium text-gray-950">Posting safety</p>
+              <p className="mt-1 text-gray-600">Public direct posting disabled during review</p>
+            </div>
+          </div>
+
+          <p className="text-sm leading-6 text-gray-600">
+            OAuth may fail until TikTok approves the Login Kit configuration and client_key.
+            The connection flow is available for app review, but no tokens are shown in this UI.
+          </p>
+
+          <a
+            href={TIKTOK_CONNECT_URL}
+            className="inline-flex h-8 items-center justify-center rounded-lg bg-blue-600 px-3 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+          >
+            Connect TikTok
+          </a>
+        </CardContent>
+      </Card>
+
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="mb-6 bg-gray-100 p-1 rounded-xl">
           <TabsTrigger value="tone" className="rounded-lg data-[state=active]:bg-white data-[state=active]:text-blue-600 data-[state=active]:shadow-sm">
@@ -241,7 +300,7 @@ export default function SettingsPage() {
                   {p.examples && p.examples.length > 0 && (
                     <div className="mt-2 space-y-1">
                       {p.examples.slice(0, 2).map((e, i) => (
-                        <p key={i} className="text-xs text-gray-600">"{e}"</p>
+                        <p key={i} className="text-xs text-gray-600">&quot;{e}&quot;</p>
                       ))}
                     </div>
                   )}
