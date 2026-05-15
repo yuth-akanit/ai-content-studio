@@ -1,0 +1,416 @@
+{
+  "name": "Schedule Trigger",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes"
+            }
+          ]
+        }
+      },
+      "id": "c045721a-eeb5-4e72-b06a-d92768a94ebd",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        -4192,
+        840
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://studio.paaair.online/api/scheduled-posts/claim",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"limit\": 5,\n  \"worker_id\": \"n8n-cron\"\n}",
+        "options": {}
+      },
+      "id": "08582b07-c967-4ed7-b058-b7d4c8e085ea",
+      "name": "Claim Due Posts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        -3968,
+        840
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "1dgOFPlMVS3esbQ2",
+          "name": "x-api-key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json.items.length }}",
+              "operation": "larger"
+            }
+          ]
+        }
+      },
+      "id": "b8a9392b-bb2e-41d7-bdb9-59b00a7c5b8f",
+      "name": "Has Claimed Items",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -3744,
+        840
+      ]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "items",
+        "options": {}
+      },
+      "id": "4e473c7b-5cd1-45e1-ab88-1bc8e1ca3c2f",
+      "name": "Item Lists",
+      "type": "n8n-nodes-base.itemLists",
+      "typeVersion": 3,
+      "position": [
+        -3520,
+        840
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "1e90dd0e-f11a-4aaa-ba1a-50313cb4b732",
+      "name": "Loop",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -3296,
+        840
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "316b2014-9963-4ce4-bebc-031da2c9e782",
+              "name": "scheduled_post_id",
+              "value": "={{ $json.scheduled_post_id }}",
+              "type": "string"
+            },
+            {
+              "id": "b3e0c000-84c8-4720-bcbb-0ab6338b0066",
+              "name": "content_id",
+              "value": "={{ $json.content_id }}",
+              "type": "string"
+            },
+            {
+              "id": "0df006d1-db26-4074-b5ab-7a2e4e101c64",
+              "name": "page_ids",
+              "value": "={{ [$json.social_page_id] }}",
+              "type": "array"
+            },
+            {
+              "id": "673f32c3-94c6-432d-9658-ec2b558661bd",
+              "name": "message",
+              "value": "={{ $json.publish_payload.message }}",
+              "type": "string"
+            },
+            {
+              "id": "0b1ef382-78d1-443b-85d7-e21fc1381ddf",
+              "name": "image_urls",
+              "value": "={{ $json.publish_payload.image_urls || [] }}",
+              "type": "array"
+            },
+            {
+              "id": "d74112e0-25cf-4df5-b3e8-c576ca68997f",
+              "name": "video_url",
+              "value": "={{ $json.publish_payload.video_url || null }}",
+              "type": "string"
+            },
+            {
+              "id": "4462fa04-5b32-4a42-8319-df62004972e4",
+              "name": "privacy_status",
+              "value": "={{ $json.publish_payload.privacy_status || 'unlisted' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "4bde43d9-d8f5-4d07-9ae9-85d812eb1eee",
+      "name": "Build Auto Post Request",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -3072,
+        624
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://studio.paaair.online/api/auto-post",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ scheduled_post_id: $json.scheduled_post_id, content_id: $json.content_id, page_ids: $json.page_ids, message: $json.message, image_urls: $json.image_urls || [], video_url: $json.video_url || null, privacy_status: $json.privacy_status || 'unlisted' }) }}",
+        "options": {}
+      },
+      "id": "507d6c63-2458-44d8-a921-a79bc8301065",
+      "name": "Auto Post",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        -2848,
+        624
+      ],
+      "alwaysOutputData": true,
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.ok === true && $json.success === true && !!$json.post_log_id }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "784bd1ae-0d2a-41bb-a024-65c8db41e4af",
+      "name": "Auto Post Succeeded",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -2624,
+        624
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://studio.paaair.online/api/scheduled-posts/{{ $json.scheduled_post_id }}/mark-posted",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ post_log_id: $json.post_log_id || null }) }}",
+        "options": {}
+      },
+      "id": "224367aa-fa9b-4d4c-b07d-a30cc0abc8f4",
+      "name": "Mark Posted",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        -2400,
+        696
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "1dgOFPlMVS3esbQ2",
+          "name": "x-api-key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://studio.paaair.online/api/scheduled-posts/{{ $json.scheduled_post_id }}/mark-failed",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ error_message: typeof $json.error === 'string' ? $json.error : $json.error?.message || $json.message || $json.error_message || 'auto-post failed' }) }}",
+        "options": {}
+      },
+      "id": "61185df2-2587-4787-84ec-75392e3f305c",
+      "name": "Mark Failed",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        -2400,
+        888
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "1dgOFPlMVS3esbQ2",
+          "name": "x-api-key"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Claim Due Posts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim Due Posts": {
+      "main": [
+        [
+          {
+            "node": "Has Claimed Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Claimed Items": {
+      "main": [
+        [
+          {
+            "node": "Item Lists",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Item Lists": {
+      "main": [
+        [
+          {
+            "node": "Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Build Auto Post Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Auto Post Request": {
+      "main": [
+        [
+          {
+            "node": "Auto Post",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Auto Post": {
+      "main": [
+        [
+          {
+            "node": "Auto Post Succeeded",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Auto Post Succeeded": {
+      "main": [
+        [
+          {
+            "node": "Mark Posted",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Posted": {
+      "main": [
+        [
+          {
+            "node": "Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Failed": {
+      "main": [
+        [
+          {
+            "node": "Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "0d7fd8d6-05f3-4f29-ad13-1f7ddd985493",
+  "meta": {
+    "instanceId": "50b9398667fecef5231b900714a0997b8e87996f58727cad5427170a677b0267"
+  },
+  "id": "ihPK6SMVUHMZAMAM",
+  "tags": []
+}

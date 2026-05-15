@@ -66,7 +66,8 @@ Content-Type: application/json
           "page_ids": ["uuid"],
           "social_page_id": "uuid",
           "created_from": "schedule_ui",
-          "snapshot_version": 1
+          "snapshot_version": 1,
+          "privacy_status": "unlisted"
         }
       },
       "publish_payload": {
@@ -76,7 +77,8 @@ Content-Type: application/json
         "page_ids": ["uuid"],
         "social_page_id": "uuid",
         "created_from": "schedule_ui",
-        "snapshot_version": 1
+        "snapshot_version": 1,
+        "privacy_status": "unlisted"
       }
     }
   ]
@@ -113,7 +115,8 @@ Create a clean request body for `/api/auto-post` and explicitly preserve
   "page_ids": ["{{$json.social_page_id}}"],
   "message": "{{$json.publish_payload.message}}",
   "image_urls": "{{$json.publish_payload.image_urls || []}}",
-  "video_url": "{{$json.publish_payload.video_url || null}}"
+  "video_url": "{{$json.publish_payload.video_url || null}}",
+  "privacy_status": "{{$json.publish_payload.privacy_status || 'unlisted'}}"
 }
 ```
 
@@ -216,8 +219,20 @@ original claim item back in before calling this node.
   n8n loop.
 - `claim_due_scheduled_posts` returns `metadata.publish_payload` so n8n does not
   need to re-fetch `generated_contents`.
-- Do not add TikTok, YouTube Shorts, token refresh, or OAuth logic in this
-  workflow.
+- YouTube production default privacy is `unlisted`. The schedule UI should store
+  `metadata.publish_payload.privacy_status`; n8n should forward it to
+  `/api/auto-post` and fall back to `unlisted` only when an older scheduled row
+  does not have the field.
+- Do not add TikTok, token refresh, or OAuth logic in this workflow. OAuth and
+  refresh stay in the Studio API layer.
+
+## Stable Workflow Backup
+
+- Current stable export:
+  `n8n/stable/Schedule_Trigger_FIXED_youtube_queue.stable.json`
+- This stable backup preserves `scheduled_post_id`, forwards
+  `publish_payload.privacy_status`, and uses `unlisted` as the YouTube
+  production fallback.
 
 ## Verification Checklist
 
