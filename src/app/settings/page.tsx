@@ -25,6 +25,22 @@ import { THAI_UI_LABELS } from '@/lib/constants/thai-labels';
 const TIKTOK_REVIEW_SOCIAL_PAGE_ID = '43621300-1501-4a0a-8cbd-91f459bd7f1b';
 const TIKTOK_CONNECT_URL =
   `/api/oauth/tiktok/connect?social_page_id=${TIKTOK_REVIEW_SOCIAL_PAGE_ID}&return_to=/settings`;
+const tiktokDemoScopes = [
+  {
+    name: 'user.info.basic',
+    description: 'Used to identify the connected TikTok account and display connection status.',
+  },
+  {
+    name: 'video.upload',
+    description: 'Used to prepare TikTok short-form video uploads through the official TikTok API.',
+  },
+];
+const tiktokPrivacyOptions = [
+  ['SELF_ONLY', 'enabled for review/testing'],
+  ['MUTUAL_FOLLOW_FRIENDS', 'shown as available after creator info approval'],
+  ['FOLLOWER_OF_CREATOR', 'shown as available after creator info approval'],
+  ['PUBLIC_TO_EVERYONE', 'disabled until TikTok approval and server enablement'],
+] as const;
 
 export default function SettingsPage() {
   const [tab, setTab] = useState('tone');
@@ -213,12 +229,85 @@ export default function SettingsPage() {
             The connection flow is available for app review, but no tokens are shown in this UI.
           </p>
 
-          <a
-            href={TIKTOK_CONNECT_URL}
-            className="inline-flex h-8 items-center justify-center rounded-lg bg-blue-600 px-3 text-sm font-medium text-white transition-colors hover:bg-blue-700"
-          >
-            Connect TikTok
-          </a>
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+              <p className="font-semibold">TikTok Review Demo Mode</p>
+              <Badge variant="outline" className="w-fit border-amber-300 bg-white/70 text-amber-800">
+                mock connected
+              </Badge>
+            </div>
+            <div className="mt-3 grid gap-3 md:grid-cols-2">
+              <div>
+                <p className="font-medium">Demo account</p>
+                <p className="mt-1">[TIKTOK] TikTok Test Account</p>
+              </div>
+              <div>
+                <p className="font-medium">Provider</p>
+                <p className="mt-1">TikTok</p>
+              </div>
+              <div>
+                <p className="font-medium">Login Kit</p>
+                <p className="mt-1">OAuth route implemented / pending TikTok approval</p>
+              </div>
+              <div>
+                <p className="font-medium">Content Posting API</p>
+                <p className="mt-1">Upload preparation implemented / pending TikTok approval</p>
+              </div>
+            </div>
+
+            <div className="mt-4 space-y-3">
+              {tiktokDemoScopes.map((scope) => (
+                <div key={scope.name} className="rounded-lg border border-amber-200 bg-white/70 px-3 py-2">
+                  <p className="font-medium">Scope: {scope.name}</p>
+                  <p className="mt-1 text-amber-800">{scope.description}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              <div className="rounded-lg border border-amber-200 bg-white/70 px-3 py-2">
+                <p className="font-medium">Demo creator info</p>
+                <p className="mt-1">Username: paaairservice</p>
+                <p>Display name: PAA Air</p>
+                <p>Account status: Review mode / mock connected</p>
+              </div>
+              <div className="rounded-lg border border-amber-200 bg-white/70 px-3 py-2">
+                <p className="font-medium">Privacy options</p>
+                <div className="mt-1 space-y-1">
+                  {tiktokPrivacyOptions.map(([level, status]) => (
+                    <p key={level}>{level} = {status}</p>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <p className="mt-4 leading-6">
+              Safety note: Public direct posting is disabled by default. PUBLIC_TO_EVERYONE
+              is blocked unless explicitly enabled after TikTok approval and user confirmation.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <a
+              href={TIKTOK_CONNECT_URL}
+              className="inline-flex h-8 items-center justify-center rounded-lg bg-blue-600 px-3 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+            >
+              Connect TikTok
+            </a>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => toast('Creator info refresh is disabled in review demo mode until TikTok approves Login Kit/client_key.')}
+            >
+              Refresh Creator Info
+            </Button>
+            <a
+              href="/tiktok-review-demo"
+              className="inline-flex h-8 items-center justify-center rounded-lg border border-gray-200 bg-white px-3 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+            >
+              Open TikTok Review Demo
+            </a>
+          </div>
         </CardContent>
       </Card>
 

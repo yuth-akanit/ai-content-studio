@@ -342,10 +342,8 @@ export default function DashboardPage() {
       <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
         <p className="font-semibold">TikTok is pending Developer Review</p>
         <p className="mt-1">
-          TikTok Login Kit and Content Posting API are submitted for review.
-          OAuth may fail until TikTok approves the app/client_key.
-        </p>
-        <p className="mt-2">
+          Login Kit and Content Posting API are submitted for review. OAuth may fail
+          until TikTok approves the app/client_key.
           Current scopes: user.info.basic, video.upload. Public direct posting is disabled.
         </p>
       </div>

@@ -27,7 +27,6 @@ import {
   TONES,
   POST_LENGTHS,
   CONTENT_GOALS,
-  CONTENT_GOAL_LABELS,
   PLATFORM_VARIANTS,
   ContentGoal,
   Tone,
@@ -61,6 +60,9 @@ const defaultInput: GenerationInput = {
   language: 'th',
   post_length: 'medium',
 };
+
+const TIKTOK_REVIEW_SAMPLE_VIDEO_URL = 'https://s3.paaair.online/music-mv/youtube/AC_Cleaning.mp4';
+const TIKTOK_REVIEW_CAPTION = 'Air conditioner cleaning service demo video for TikTok review.';
 
 const MAX_VIDEO_SIZE_BYTES = 100 * 1024 * 1024;
 const ALLOWED_VIDEO_EXTENSIONS = ['mp4', 'mov', 'm4v', 'webm'];
@@ -250,6 +252,11 @@ function GeneratePageInner() {
       : hasTranscriptText
         ? 'เสียงไม่ชัด ใช้ key frames อย่างเดียว'
         : 'ใช้ key frames อย่างเดียว';
+  const selectedSocialPage = socialPages.find((page) => page.id === selectedPageId);
+  const isTikTokReviewContext =
+    input.platform === 'tiktok' ||
+    selectedSocialPage?.provider === 'tiktok' ||
+    selectedSocialPage?.name?.toLowerCase().includes('tiktok');
 
   useEffect(() => {
     loadSocialPages();
@@ -674,6 +681,63 @@ function GeneratePageInner() {
         title="สร้างคอนเทนต์ด้วย AI"
         description="สร้างเนื้อหาการตลาดสำหรับแพลตฟอร์มต่าง ๆ โดยอิงจากข้อมูลธุรกิจของคุณ"
       />
+
+      {isTikTokReviewContext && (
+        <Card className="mb-6 border-amber-200 bg-amber-50">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base text-amber-900">
+              TikTok video.upload preparation
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4 text-sm text-amber-900">
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="rounded-lg border border-amber-200 bg-white/70 px-3 py-2">
+                <p className="font-medium">Selected account</p>
+                <p className="mt-1">[TIKTOK] TikTok Test Account</p>
+              </div>
+              <div className="rounded-lg border border-amber-200 bg-white/70 px-3 py-2">
+                <p className="font-medium">Post type</p>
+                <p className="mt-1">Short Video</p>
+              </div>
+              <div className="rounded-lg border border-amber-200 bg-white/70 px-3 py-2">
+                <p className="font-medium">Upload mode</p>
+                <p className="mt-1">TikTok Content Posting API / video.upload</p>
+              </div>
+              <div className="rounded-lg border border-amber-200 bg-white/70 px-3 py-2">
+                <p className="font-medium">Privacy level</p>
+                <p className="mt-1">SELF_ONLY</p>
+              </div>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="rounded-lg border border-amber-200 bg-white/70 px-3 py-2">
+                <p className="font-medium">Caption</p>
+                <p className="mt-1">{TIKTOK_REVIEW_CAPTION}</p>
+              </div>
+              <div className="rounded-lg border border-amber-200 bg-white/70 px-3 py-2">
+                <p className="font-medium">Video URL</p>
+                <p className="mt-1 break-all">{TIKTOK_REVIEW_SAMPLE_VIDEO_URL}</p>
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-amber-200 bg-white/70 px-3 py-2">
+              <p className="font-medium">Upload preparation status</p>
+              <p className="mt-1">
+                Review mode preview only. This helper demonstrates the official TikTok
+                video.upload preparation flow and does not submit a TikTok post.
+              </p>
+            </div>
+
+            <div className="rounded-lg border border-amber-300 bg-amber-100 px-3 py-2">
+              <p className="font-medium">Review mode notice</p>
+              <p className="mt-1">
+                Public direct posting is disabled. PUBLIC_TO_EVERYONE is blocked until
+                TikTok approval and explicit server configuration.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Input Form */}
@@ -1340,7 +1404,7 @@ function GeneratePageInner() {
                     <Sparkles className="h-10 w-10 text-blue-500 opacity-80" />
                     <div className="absolute inset-0 rounded-full border border-blue-200/50 animate-ping opacity-20"></div>
                   </div>
-                  <p className="text-lg font-semibold text-gray-700">ระบุรายละเอียดและคลิก "สร้างคอนเทนต์เลย"</p>
+                  <p className="text-lg font-semibold text-gray-700">ระบุรายละเอียดและคลิก &quot;สร้างคอนเทนต์เลย&quot;</p>
                   <p className="text-sm mt-2 text-gray-500">AI จะประมวลผลตามหลัก SEO/AEO และสร้างคอนเทนต์เฉพาะธุรกิจคุณ</p>
                 </div>
               </CardContent>
