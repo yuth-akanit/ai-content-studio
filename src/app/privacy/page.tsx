@@ -1,4 +1,6 @@
 import type { Metadata } from 'next';
+import Image from 'next/image';
+import Link from 'next/link';
 
 export const metadata: Metadata = {
   title: 'Privacy Policy | AI Content Studio',
@@ -60,15 +62,42 @@ const sections = [
       'For privacy questions, access revocation help, or deletion requests, contact admin@paaair.com.',
     ],
   },
+  {
+    title: '9. TikTok Integration Review',
+    body: [
+      'AI Content Studio uses TikTok Login Kit and Content Posting API for official account connection and video upload preparation workflows.',
+      'The user.info.basic scope is used to identify the connected TikTok account. The video.upload scope is used for video upload preparation through the official TikTok API. Public posting remains disabled by default unless explicitly enabled after approval.',
+    ],
+  },
 ];
 
 export default function PrivacyPage() {
   return (
     <article className="mx-auto max-w-3xl">
       <div className="mb-8 border-b border-gray-200 pb-6">
-        <p className="mb-2 text-sm font-medium text-blue-600">AI Content Studio</p>
+        <div className="mb-5 flex items-center gap-3">
+          <Image
+            src="/app-icon.png"
+            alt="AI Content Studio app icon"
+            width={48}
+            height={48}
+            priority
+            className="rounded-xl"
+          />
+          <div>
+            <p className="text-sm font-medium text-blue-600">AI Content Studio</p>
+            <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-500">
+              <Link href="/" className="hover:text-blue-600 hover:underline">
+                Homepage
+              </Link>
+              <Link href="/terms" className="hover:text-blue-600 hover:underline">
+                Terms of Service
+              </Link>
+            </div>
+          </div>
+        </div>
         <h1 className="text-3xl font-semibold tracking-tight text-gray-950">Privacy Policy</h1>
-        <p className="mt-3 text-sm text-gray-500">Effective date: May 15, 2026</p>
+        <p className="mt-3 text-sm text-gray-500">Effective date: May 18, 2026</p>
       </div>
 
       <div className="space-y-8 text-sm leading-6 text-gray-700">

@@ -14,8 +14,13 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "AI Content Studio - Service Business",
-  description: "Generate high-converting marketing content for service businesses",
+  title: "AI Content Studio",
+  description: "Create, schedule, and manage short-form video content for businesses.",
+  icons: {
+    icon: "/app-icon.png",
+    shortcut: "/app-icon.png",
+    apple: "/app-icon.png",
+  },
 };
 
 import { ProfileProvider } from "@/context/profile-context";
