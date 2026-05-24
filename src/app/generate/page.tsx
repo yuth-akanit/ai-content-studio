@@ -749,9 +749,14 @@ function GeneratePageInner() {
             <CardContent className="space-y-4 pt-5">
               {/* Image Upload */}
               <div className="space-y-4">
-                <div className="flex justify-between items-center">
-                  <Label className="text-gray-700 font-medium">{THAI_UI_LABELS.upload_image_title || 'อัพโหลดรูปภาพ (สูงสุด 2 รูป)'}</Label>
-                  <span className="text-xs text-gray-400">{imageFiles.length}/2 รูป</span>
+                <div className="space-y-1">
+                  <div className="flex justify-between items-center">
+                    <Label className="text-gray-700 font-medium">{THAI_UI_LABELS.upload_image_title || 'อัพโหลดรูปภาพ (สูงสุด 2 รูป)'}</Label>
+                    <span className="text-xs text-gray-400">{imageFiles.length}/2 รูป</span>
+                  </div>
+                  <p className="text-xs leading-relaxed text-blue-700">
+                    ใส่รูปงานจริงที่เห็นจุดสำคัญ เช่น คราบฝุ่น น้ำรั่ว ช่างกำลังทำงาน อะไหล่ หรือภาพก่อน/หลัง เพื่อให้ AI เขียนอิงจากรูปและไม่ซ้ำ template เดิม
+                  </p>
                 </div>
                 
                 <div className="flex gap-4">
@@ -1202,29 +1207,32 @@ function GeneratePageInner() {
               <CardTitle className="text-base">{THAI_UI_LABELS.content_details}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div>
+              <div className="space-y-1">
                 <Label>{THAI_UI_LABELS.service_type}</Label>
                 <Input
                   value={input.service_type || ''}
                   onChange={(e) => updateInput('service_type', e.target.value)}
                   placeholder="เช่น ล้างแอร์, ซ่อมตู้เย็น"
                 />
+                <p className="text-xs text-gray-500">ระบุบริการให้ชัด เช่น ล้างแอร์บ้าน, ซ่อมตู้แช่ร้านอาหาร, ติดตั้งแอร์ใหม่</p>
               </div>
-              <div>
+              <div className="space-y-1">
                 <Label>{THAI_UI_LABELS.topic}</Label>
                 <Input
                   value={input.topic || ''}
                   onChange={(e) => updateInput('topic', e.target.value)}
                   placeholder="เช่น เคล็ดลับการดูแลตู้แช่ในช่วงหน้าร้อน"
                 />
+                <p className="text-xs text-gray-500">เขียนหัวข้อให้ผูกกับรูป เช่น ล้างคอยล์ที่มีฝุ่นสะสมหนัก ไม่ใช่แค่ “ล้างแอร์”</p>
               </div>
-              <div>
+              <div className="space-y-1">
                 <Label>{THAI_UI_LABELS.pain_point}</Label>
                 <Input
                   value={input.pain_point || ''}
                   onChange={(e) => updateInput('pain_point', e.target.value)}
                   placeholder="เช่น ตู้เย็นไม่เย็น, ค่าไฟแพง"
                 />
+                <p className="text-xs text-gray-500">ใส่อาการที่ลูกค้าเจอจริง เช่น ลมเบา มีกลิ่นอับ น้ำหยด เย็นไม่ถึง หรือของสดเสียเร็ว</p>
               </div>
               <div>
                 <Label>{THAI_UI_LABELS.location}</Label>
@@ -1263,22 +1271,24 @@ function GeneratePageInner() {
                   ))}
                 </select>
               </div>
-              <div>
+              <div className="space-y-1">
                 <Label>{THAI_UI_LABELS.keyword}</Label>
                 <Input
                   value={input.keyword || ''}
                   onChange={(e) => updateInput('keyword', e.target.value)}
                   placeholder="เช่น ล้างแอร์ กรุงเทพ"
                 />
+                <p className="text-xs text-gray-500">ใส่คีย์เวิร์ดท้องถิ่นหรืออาการ เช่น ล้างแอร์ บางนา, แอร์น้ำหยด, ตู้แช่ไม่เย็น</p>
               </div>
-              <div>
+              <div className="space-y-1">
                 <Label>{THAI_UI_LABELS.custom_notes}</Label>
                 <Textarea
                   value={input.custom_notes || ''}
                   onChange={(e) => updateInput('custom_notes', e.target.value)}
-                  placeholder="ระบุข้อมูลเพิ่มเติมหรือคำชี้แจงพิเศษ..."
-                  rows={3}
+                  placeholder="เช่น ให้เขียนจากสิ่งที่เห็นในรูปเป็นหลัก พูดถึงคราบฝุ่นที่คอยล์ การถอดล้าง และผลลัพธ์หลังล้าง ห้ามเขียนกว้าง ๆ แบบโพสต์ล้างแอร์ทั่วไป"
+                  rows={4}
                 />
+                <p className="text-xs leading-relaxed text-blue-700">ช่องนี้ช่วยลดคอนเทนต์ซ้ำที่สุด: ระบุสิ่งที่เห็นในรูป, งานที่ช่างทำ, อาการเสีย, ผลลัพธ์ก่อน/หลัง และคำที่ไม่อยากให้ใช้ซ้ำ</p>
               </div>
             </CardContent>
           </Card>

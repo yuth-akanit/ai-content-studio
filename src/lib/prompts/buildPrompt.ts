@@ -50,8 +50,17 @@ QUALITY RULES:
 - line_oa version must be concise and CTA-focused.
 - instagram version must be compact and hook-driven.
 - tiktok version must be short, punchy, curiosity-driven.
+- If IMAGE CONTEXT, VIDEO CONTEXT, or VIDEO TRANSCRIPT is provided, it is the PRIMARY source for the post angle. Do not let the generic HVAC template override what is visibly shown.
+- Every generation must feel unique to the uploaded media and user-entered details. Avoid reusable generic openings, sentence patterns, and service lists.
 
-FACEBOOK POST STRUCTURE (CRITICAL — platform_versions.facebook MUST follow this exact layout):
+VISUAL-FIRST RULES (CRITICAL WHEN MEDIA CONTEXT EXISTS):
+- Start from the actual visual evidence first: visible dirt, coil condition, water leak, technician action, tools, before/after state, equipment type, or customer situation.
+- The first hook must mention at least one specific visual detail from IMAGE CONTEXT / VIDEO CONTEXT when available.
+- Do NOT use generic hooks such as "แอร์ไม่เย็น?", "ถึงเวลาล้างแอร์แล้วหรือยัง?", or "ให้ PAA Air Service ดูแลคุณ" unless they are paired with a concrete visual detail from the uploaded media.
+- Include at least 2 concrete media-specific details in caption_main and platform_versions.facebook.
+- Vary wording, hook, service list, and CTA phrasing across generations while preserving the required contact block.
+
+FACEBOOK POST STRUCTURE (IMPORTANT — use this as a flexible layout, but visual evidence must lead):
 
 ⛔ ABSOLUTE RULE #1: NO HEADLINE/TITLE AT THE TOP.
 The very first line of platform_versions.facebook MUST be the hook (a question or pain-point emoji statement).
@@ -110,6 +119,8 @@ CRITICAL OUTPUT RULES:
 {
   "post_type": "string",
   "content_angle": "string",
+  "visual_angle": "string (Explain how this post is uniquely grounded in the uploaded image/video. If no media is provided, base this on the user's topic/details.)",
+  "observed_facts": ["string (2-5 concrete facts from the image/video or user-entered details; avoid generic service claims)"],
   "target_platforms": ["facebook", "line_oa", "instagram", "tiktok"],
   "headline": "string (DO NOT copy this into the facebook post text)",
   "caption_main": "string (Main content body with emojis and bullet points)",
@@ -133,7 +144,7 @@ CRITICAL OUTPUT RULES:
 }
 3. All text content must be in Thai (ภาษาไทย).
 5. Do NOT omit any field.
-6. The "facebook" value in platform_versions MUST use \\n for line breaks and MUST follow the layout.
+6. The "facebook" value in platform_versions MUST use \\n for line breaks and SHOULD follow the layout, but the hook and body must be grounded in the uploaded media or specific user details first.
 7. DO NOT include the "headline" inside the "facebook" text. The very first characters MUST be an emoji followed by the hook question/statement.
 8. ALWAYS include the EXACT contact block defined above into the facebook text. Do NOT make up URLs or emails. DO NOT leave it out.
 9. AFTER the contact block (✉️ line), the ONLY thing allowed is a blank line followed by hashtags. NO additional CTA, NO additional text, NO closing statement. Violating this is a critical error.`;
@@ -240,15 +251,17 @@ function buildUserPrompt(
 
   // Image Analysis
   if (input.image_analysis) {
-    parts.push(`\n=== IMAGE CONTEXT ===`);
+    parts.push(`\n=== IMAGE CONTEXT (PRIMARY CREATIVE SOURCE) ===`);
     parts.push(`The user provided an image. AI Vision Analysis: ${input.image_analysis}`);
-    parts.push(`CRITICAL INSTRUCTION: You MUST explicitly use the visual details described above in your content body. Do NOT write a generic post. Directly describe what is seen in the picture (e.g., if it shows a dirty pipe, mention cleaning dirty pipes; if it shows a temperature gauge, mention checking temperatures). Tie the image's specific problem/action to your service offering.`);
+    parts.push(`CRITICAL INSTRUCTION: Treat this visual analysis as the main source of the hook, content angle, observed_facts, and caption body. You MUST explicitly use the visual details described above in your content body. Do NOT write a generic HVAC/service post. Directly describe what is seen in the picture (e.g., dirty coil, water leak, technician action, tools, old unit, before/after condition).`);
+    parts.push(`ANTI-REPETITION: Avoid generic openings like "แอร์ไม่เย็น?" or reusable PAA service templates unless you connect them to a concrete detail from this exact image in the same sentence.`);
   }
 
   if (input.video_analysis) {
-    parts.push(`\n=== VIDEO CONTEXT ===`);
+    parts.push(`\n=== VIDEO CONTEXT (PRIMARY CREATIVE SOURCE) ===`);
     parts.push(`The user provided a video. Key-frame visual analysis: ${input.video_analysis}`);
-    parts.push(`CRITICAL INSTRUCTION: You MUST ground the content in the actual scenes from the video. Describe visible actions, equipment condition, technician workflow, before/after evidence, or customer pain point shown in the footage. Do NOT write a generic service post if the video analysis provides concrete details.`);
+    parts.push(`CRITICAL INSTRUCTION: Treat the actual scenes from the video as the main source of the hook, content angle, observed_facts, and caption body. Describe visible actions, equipment condition, technician workflow, before/after evidence, or customer pain point shown in the footage. Do NOT write a generic service post if the video analysis provides concrete details.`);
+    parts.push(`ANTI-REPETITION: Make the first hook and service explanation clearly different from previous generic HVAC posts by naming what is visible in this exact video.`);
   }
 
   if (input.video_transcript) {
