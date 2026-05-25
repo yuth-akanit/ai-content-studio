@@ -36,12 +36,19 @@ class OpenAICompatibleProvider implements AIProvider {
   async generate(messages: AIMessage[], overrides?: Partial<AIProviderConfig>): Promise<AIGenerationResult> {
     const cfg = { ...this.config, ...overrides };
 
-    const response = await fetch(`${cfg.baseURL || 'https://api.openai.com/v1'}/chat/completions`, {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${cfg.apiKey}`,
+    };
+
+    if (cfg.baseURL?.includes('openrouter.ai')) {
+      headers['HTTP-Referer'] = 'https://studio.paaair.online';
+      headers['X-Title'] = 'AI Content Studio';
+    }
+
+    const response = await fetch(`${cfg.baseURL || 'https://openrouter.ai/api/v1'}/chat/completions`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${cfg.apiKey}`,
-      },
+      headers,
       body: JSON.stringify({
         model: cfg.model,
         messages,
@@ -75,15 +82,38 @@ class OpenAICompatibleProvider implements AIProvider {
 
 let providerInstance: AIProvider | null = null;
 
+/**
+ * Mock provider used when real AI service is unavailable or when the
+ * `MOCK_AI` environment variable is set to "true". It returns a static
+ * placeholder response that satisfies the `AIProvider` interface.
+ */
+class MockProvider implements AIProvider {
+  async generate(_messages: AIMessage[], _overrides?: Partial<AIProviderConfig>): Promise<AIGenerationResult> {
+    return {
+      content: '🤖 Mock response: AI service is unavailable (budget limit reached).',
+      model: 'mock-model',
+    };
+  }
+}
+
 export function getAIProvider(): AIProvider {
   if (providerInstance) return providerInstance;
 
+  // Enable mock mode via environment variable. This is useful during local
+  // development when the external AI service hits its budget limit.
+  if (process.env.MOCK_AI === 'true') {
+    providerInstance = new MockProvider();
+    return providerInstance;
+  }
+
   const apiKey = process.env.AI_API_KEY || process.env.OPENAI_API_KEY || '';
-  const baseURL = process.env.AI_BASE_URL || process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1';
-  const model = process.env.AI_MODEL || 'gpt-4o-mini';
+  const baseURL = process.env.AI_BASE_URL || process.env.OPENAI_BASE_URL || 'https://openrouter.ai/api/v1';
+  const model = process.env.AI_MODEL || (baseURL.includes('openrouter') ? 'openai/gpt-4o-mini' : 'gpt-4o-mini');
 
   if (!apiKey) {
-    throw new Error('AI_API_KEY or OPENAI_API_KEY environment variable is required');
+    // If the key is missing, fall back to mock provider instead of throwing.
+    providerInstance = new MockProvider();
+    return providerInstance;
   }
 
   providerInstance = new OpenAICompatibleProvider({
