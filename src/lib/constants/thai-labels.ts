@@ -8,6 +8,7 @@ export const THAI_PLATFORM_LABELS: Record<Platform, string> = {
   tiktok: 'ติ๊กต็อก (TikTok)',
   google_business: 'กูเกิล บิสเนส (Google Business)',
   website: 'เว็บไซต์ (Website)',
+  youtube: 'ยูทูป (YouTube)',
   other: 'สื่ออื่น ๆ',
 };
 

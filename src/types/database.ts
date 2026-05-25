@@ -238,7 +238,7 @@ export interface ShortFormContentOutput {
 // Enums and constants
 // ============================================================
 
-export const PLATFORMS = ['facebook', 'instagram', 'line_oa', 'line_voom', 'tiktok', 'google_business', 'website', 'other'] as const;
+export const PLATFORMS = ['facebook', 'instagram', 'line_oa', 'line_voom', 'tiktok', 'google_business', 'website', 'youtube', 'other'] as const;
 export type Platform = typeof PLATFORMS[number];
 
 export const CONTENT_TYPES = [
@@ -436,6 +436,7 @@ export const PLATFORM_LABELS: Record<Platform, string> = {
   tiktok: 'TikTok',
   google_business: 'Google Business',
   website: 'Website',
+  youtube: 'YouTube',
   other: 'Other Platform',
 };
 
@@ -447,6 +448,7 @@ export const PLATFORM_VARIANTS: Record<Platform, string[]> = {
   tiktok: ['short_video', 'duet_idea', 'series'],
   google_business: ['update', 'offer', 'event'],
   website: ['service_page', 'landing_page', 'blog', 'faq_page'],
+  youtube: ['video', 'short', 'community_post'],
   other: ['custom'],
 };
 

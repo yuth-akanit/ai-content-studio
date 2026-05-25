@@ -160,6 +160,25 @@ export const platformRules: Record<Platform, PlatformRule> = {
       'Use local keywords naturally',
     ],
   },
+  youtube: {
+    platform: 'youtube',
+    description: 'YouTube video upload / description / Shorts content',
+    outputFields: [
+      'title', 'body', 'cta', 'hashtags', 'suggested_comments', 'faq_section',
+    ],
+    style: [
+      'Engaging and informative description',
+      'Clear title with high click-through rate potential',
+      'Conversational and community-driven tone',
+      'SEO-friendly video description with keywords',
+    ],
+    constraints: [
+      'Title under 100 characters',
+      'Description/body under 5000 characters',
+      'Hashtags: 3-5 relevant ones',
+    ],
+    maxLength: 5000,
+  },
   other: {
     platform: 'other',
     description: 'Custom platform content',

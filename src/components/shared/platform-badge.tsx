@@ -10,6 +10,7 @@ const platformColors: Record<Platform, string> = {
   tiktok: 'bg-gray-900 text-white border-gray-900',
   google_business: 'bg-amber-100 text-amber-700 border-amber-200',
   website: 'bg-purple-100 text-purple-700 border-purple-200',
+  youtube: 'bg-red-100 text-red-700 border-red-200',
   other: 'bg-gray-100 text-gray-700 border-gray-200',
 };
 

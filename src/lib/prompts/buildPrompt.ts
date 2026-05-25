@@ -50,6 +50,7 @@ QUALITY RULES:
 - line_oa version must be concise and CTA-focused.
 - instagram version must be compact and hook-driven.
 - tiktok version must be short, punchy, curiosity-driven.
+- youtube version must be search-optimized, engaging, and suitable for video descriptions or community posts.
 - If IMAGE CONTEXT, VIDEO CONTEXT, or VIDEO TRANSCRIPT is provided, it is the PRIMARY source for the post angle. Do not let the generic HVAC template override what is visibly shown.
 - Every generation must feel unique to the uploaded media and user-entered details. Avoid reusable generic openings, sentence patterns, and service lists.
 
@@ -121,7 +122,7 @@ CRITICAL OUTPUT RULES:
   "content_angle": "string",
   "visual_angle": "string (Explain how this post is uniquely grounded in the uploaded image/video. If no media is provided, base this on the user's topic/details.)",
   "observed_facts": ["string (2-5 concrete facts from the image/video or user-entered details; avoid generic service claims)"],
-  "target_platforms": ["facebook", "line_oa", "instagram", "tiktok"],
+  "target_platforms": ["facebook", "line_oa", "instagram", "tiktok", "youtube"],
   "headline": "string (DO NOT copy this into the facebook post text)",
   "caption_main": "string (Main content body with emojis and bullet points)",
   "caption_short": "string (Shorter version)",
@@ -139,7 +140,8 @@ CRITICAL OUTPUT RULES:
     "instagram": "string (Start directly with hook. NO title/headline. Use lots of spaces/emojis. Put hashtags at the end.)",
     "line_voom": "string (Start with strong hook. Vertical layout. Mention LINE OA link.)",
     "google_business": "string (Professional. Short and informative. Best for Local SEO.)",
-    "tiktok": "string (Shortest variant. No title/headline. Heavy focus on video action.)"
+    "tiktok": "string (Shortest variant. No title/headline. Heavy focus on video action.)",
+    "youtube": "string (Engaging description. Include video timestamps or outline if applicable. Use tags/hashtags.)"
   }
 }
 3. All text content must be in Thai (ภาษาไทย).

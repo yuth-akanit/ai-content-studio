@@ -14,7 +14,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { LoadingSpinner } from '@/components/shared/loading-spinner';
 import { EmptyState } from '@/components/shared/empty-state';
 import { OutputDisplay } from '@/components/content/output-display';
-import { Sparkles, Loader2, Save, RefreshCw, Building2, X, Upload, Video } from 'lucide-react';
+import { Sparkles, Loader2, Save, RefreshCw, Building2, X, Upload, Video, Globe, Store, MessageCircle, MoreHorizontal } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   Platform,
@@ -205,6 +205,55 @@ async function extractVideoKeyframes(videoSrc: string): Promise<VideoKeyframe[]>
   return frames;
 }
 
+function getPlatformIcon(platform: Platform) {
+  switch (platform) {
+    case 'facebook':
+      return (
+        <svg className="h-4 w-4 fill-[#1877F2] shrink-0" viewBox="0 0 24 24">
+          <path d="M22 12c0-5.52-4.48-10-10-10S2 6.48 2 12c0 4.84 3.44 8.87 8 9.8V15H8v-3h2V9.5C10 7.57 11.57 6 13.5 6H16v3h-2c-.55 0-1 .45-1 1v2h3v3h-3v6.95c4.56-.93 8-4.96 8-9.75z"/>
+        </svg>
+      );
+    case 'instagram':
+      return (
+        <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="url(#instagram-gradient)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <defs>
+            <radialGradient id="instagram-gradient" cx="30%" cy="107%" r="130%">
+              <stop offset="0%" stopColor="#fdf497" />
+              <stop offset="5%" stopColor="#fdf497" />
+              <stop offset="45%" stopColor="#fd5949" />
+              <stop offset="60%" stopColor="#d6249f" />
+              <stop offset="90%" stopColor="#285AEB" />
+            </radialGradient>
+          </defs>
+          <rect x="2" y="2" width="20" height="20" rx="5" ry="5"/>
+          <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/>
+          <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/>
+        </svg>
+      );
+    case 'line_oa':
+    case 'line_voom':
+      return <MessageCircle className="h-4 w-4 text-[#06C755] shrink-0" />;
+    case 'tiktok':
+      return (
+        <svg className="h-4 w-4 fill-black shrink-0" viewBox="0 0 24 24">
+          <path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.02 1.59 4.23.95 1.12 2.27 1.91 3.72 2.22v3.74c-1.83-.02-3.62-.64-5.09-1.74-.23-.17-.43-.37-.62-.57v6.62c.03 2.24-1.07 4.39-2.95 5.63-1.89 1.25-4.36 1.48-6.47.62-2.1-1-3.61-3.08-3.94-5.39-.46-2.58.55-5.26 2.58-6.88 1.95-1.55 4.67-1.92 6.97-.99v3.91c-1.32-.67-2.96-.44-4.05.57-.96.89-1.28 2.3-1.06 3.56.24 1.37 1.34 2.49 2.71 2.76 1.4.28 2.87-.41 3.53-1.68.22-.44.31-.94.31-1.44V.02z"/>
+        </svg>
+      );
+    case 'google_business':
+      return <Store className="h-4 w-4 text-[#4285F4] shrink-0" />;
+    case 'website':
+      return <Globe className="h-4 w-4 text-purple-600 shrink-0" />;
+    case 'youtube':
+      return (
+        <svg className="h-4 w-4 fill-[#FF0000] shrink-0" viewBox="0 0 24 24">
+          <path d="M23.498 6.163a3.003 3.003 0 0 0-2.11-2.107C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.388.511a3.002 3.002 0 0 0-2.11 2.107C0 8.053 0 12 0 12s0 3.947.502 5.837a3.003 3.003 0 0 0 2.11 2.107C4.495 20.455 12 20.455 12 20.455s7.505 0 9.388-.511a3.003 3.003 0 0 0 2.11-2.107C24 15.947 24 12 24 12s0-3.947-.502-5.837zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+        </svg>
+      );
+    default:
+      return <MoreHorizontal className="h-4 w-4 text-gray-500 shrink-0" />;
+  }
+}
+
 function GeneratePageInner() {
   const searchParams = useSearchParams();
   const [input, setInput] = useState<GenerationInput>(() => {
@@ -319,7 +368,7 @@ function GeneratePageInner() {
 
     if (!transcriptionRes.ok) {
       const errorData = await transcriptionRes.json().catch(() => ({}));
-      throw new Error(errorData.error || 'Auto transcription failed');
+      throw new Error(errorData.message || errorData.error || 'Auto transcription failed');
     }
 
     const transcriptionData = await transcriptionRes.json();
@@ -369,9 +418,9 @@ function GeneratePageInner() {
       toast.success('ถอด transcript ใหม่เรียบร้อยแล้ว');
     } catch (error) {
       console.error('Transcript refresh failed', error);
-      setVideoTranscriptError('ถอดเสียงอัตโนมัติไม่สำเร็จ คุณยังพิมพ์โน้ตหรือคำพูดจากวิดีโอเองได้');
+      setVideoTranscriptError('ถอดเสียงวิดีโอไม่สำเร็จ ระบบจะสร้างคอนเทนต์จากข้อมูลที่กรอกแทน');
       setUseTranscriptForGeneration(false);
-      toast.error('ถอด transcript ใหม่ไม่สำเร็จ');
+      toast.error('ถอดเสียงวิดีโอไม่สำเร็จ ระบบจะสร้างคอนเทนต์จากข้อมูลที่กรอกแทน');
     } finally {
       setTranscribingVideo(false);
     }
@@ -503,8 +552,9 @@ function GeneratePageInner() {
         }
       } catch (error) {
         console.error('Video transcription failed', error);
-        setVideoTranscriptError('ถอดเสียงอัตโนมัติไม่สำเร็จ คุณยังพิมพ์โน้ตหรือคำพูดจากวิดีโอเองได้');
+        setVideoTranscriptError('ถอดเสียงวิดีโอไม่สำเร็จ ระบบจะสร้างคอนเทนต์จากข้อมูลที่กรอกแทน');
         setUseTranscriptForGeneration(false);
+        toast.error('ถอดเสียงวิดีโอไม่สำเร็จ ระบบจะสร้างคอนเทนต์จากข้อมูลที่กรอกแทน');
       } finally {
         setTranscribingVideo(false);
       }
@@ -602,7 +652,9 @@ function GeneratePageInner() {
             ...input,
             image_analysis: image_analysis || undefined,
             video_analysis: video_analysis || undefined,
-            video_transcript: shouldUseTranscriptForGeneration ? normalizedTranscript : undefined,
+            video_transcript: shouldUseTranscriptForGeneration 
+              ? normalizedTranscript 
+              : (videoPreview ? 'มีวิดีโอแนบ แต่ถอดเสียงไม่ได้ ให้เขียนจากข้อมูลธุรกิจ/คีย์เวิร์ดเท่านั้น ห้ามเดาเนื้อหาในวิดีโอ' : undefined),
             image_urls: imagePreviews.length > 0 ? imagePreviews : undefined,
             video_url: videoPreview || undefined,
           },
@@ -1102,32 +1154,43 @@ function GeneratePageInner() {
                 </select>
               </div>
 
-              {/* Platform */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label>แพลตฟอร์ม</Label>
-                  <select
-                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
-                    value={input.platform}
-                    onChange={(e) => updateInput('platform', e.target.value as Platform)}
-                  >
-                    {PLATFORMS.map((p) => (
-                      <option key={p} value={p}>{THAI_PLATFORM_LABELS[p]}</option>
-                    ))}
-                  </select>
+              {/* Platform Selector in Card Grid Style */}
+              <div className="space-y-2">
+                <Label>แพลตฟอร์ม</Label>
+                <div className="grid grid-cols-2 gap-3">
+                  {PLATFORMS.map((p) => {
+                    const active = input.platform === p;
+                    return (
+                      <button
+                        key={p}
+                        type="button"
+                        onClick={() => updateInput('platform', p)}
+                        className={`flex items-center gap-2.5 p-3 rounded-xl border text-left transition-all cursor-pointer h-12 ${
+                          active
+                            ? 'border-blue-600 bg-blue-50/50 text-blue-700 font-medium shadow-sm'
+                            : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+                        }`}
+                      >
+                        {getPlatformIcon(p)}
+                        <span className="text-xs truncate">{THAI_PLATFORM_LABELS[p]}</span>
+                      </button>
+                    );
+                  })}
                 </div>
-                <div>
-                  <Label>รูปแบบโพสต์ (Variant)</Label>
-                  <select
-                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
-                    value={input.platform_variant || ''}
-                    onChange={(e) => updateInput('platform_variant', e.target.value)}
-                  >
-                    {(PLATFORM_VARIANTS[input.platform] || []).map((v) => (
-                      <option key={v} value={v}>{v.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</option>
-                    ))}
-                  </select>
-                </div>
+              </div>
+
+              {/* Variant Selector */}
+              <div>
+                <Label>รูปแบบโพสต์ (Variant)</Label>
+                <select
+                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
+                  value={input.platform_variant || ''}
+                  onChange={(e) => updateInput('platform_variant', e.target.value)}
+                >
+                  {(PLATFORM_VARIANTS[input.platform] || []).map((v) => (
+                    <option key={v} value={v}>{v.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</option>
+                  ))}
+                </select>
               </div>
 
               {/* Content Type */}

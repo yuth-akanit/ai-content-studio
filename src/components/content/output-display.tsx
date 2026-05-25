@@ -642,6 +642,7 @@ export function OutputDisplay({ output, platform, contentId, imageUrls, videoUrl
                 {output.platform_versions.line_voom && <TabsTrigger value="line_voom" className="data-[state=active]:bg-white">{THAI_PLATFORM_LABELS.line_voom}</TabsTrigger>}
                 {output.platform_versions.google_business && <TabsTrigger value="google_business" className="data-[state=active]:bg-white">{THAI_PLATFORM_LABELS.google_business}</TabsTrigger>}
                 {output.platform_versions.tiktok && <TabsTrigger value="tiktok" className="data-[state=active]:bg-white">{THAI_PLATFORM_LABELS.tiktok}</TabsTrigger>}
+                {output.platform_versions.youtube && <TabsTrigger value="youtube" className="data-[state=active]:bg-white">{THAI_PLATFORM_LABELS.youtube}</TabsTrigger>}
               </TabsList>
               
               <div className="p-5">
@@ -686,6 +687,12 @@ export function OutputDisplay({ output, platform, contentId, imageUrls, videoUrl
                 <TabsContent value="tiktok" className="mt-0">
                   <div className="space-y-4">
                     <ContentBlock label={THAI_PLATFORM_LABELS.tiktok} content={output.platform_versions.tiktok} />
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="youtube" className="mt-0">
+                  <div className="space-y-4">
+                    <ContentBlock label={THAI_PLATFORM_LABELS.youtube} content={output.platform_versions.youtube} />
                   </div>
                 </TabsContent>
               </div>
