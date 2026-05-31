@@ -95,18 +95,19 @@ async function forwardToN8n(payload: ProductVideoPayload) {
       signal: controller.signal,
     });
 
-    let responseBody: unknown = null;
-    try {
-      responseBody = await response.json();
-    } catch {
-      responseBody = null;
-    }
+    await response.arrayBuffer().catch(() => null);
 
     return {
       forwarded: true,
       ok: response.ok,
       status: response.status,
-      response: responseBody,
+      response_body_exposed: false,
+    };
+  } catch {
+    return {
+      forwarded: false,
+      ok: false,
+      reason: 'n8n_forward_failed',
     };
   } finally {
     clearTimeout(timeout);
