@@ -141,6 +141,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       ok: true,
       status: n8n.forwarded ? 'forwarded_to_server_side_wrapper_target' : 'preview_payload_ready',
+      n8n_forwarded: n8n.forwarded,
+      n8n_status: 'status' in n8n ? n8n.status : null,
+      response_body_exposed: 'response_body_exposed' in n8n ? n8n.response_body_exposed : false,
+      preview_only: guard.preview_only,
+      real_posting_enabled: guard.real_posting_enabled,
+      line_broadcast_enabled: guard.line_broadcast_enabled,
+      schedule_enabled: guard.schedule_enabled,
       guard,
       payload,
       n8n,
