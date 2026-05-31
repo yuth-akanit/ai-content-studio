@@ -10,13 +10,10 @@ import {
   Library,
   FolderKanban,
   Settings,
-  Menu,
-  X,
   MessageSquare,
   Clapperboard,
+  Video,
 } from 'lucide-react';
-import { useState } from 'react';
-import { Button } from '@/components/ui/button';
 import { THAI_UI_LABELS } from '@/lib/constants/thai-labels';
 
 const navItems = [
@@ -27,6 +24,7 @@ const navItems = [
   { href: '/library', label: THAI_UI_LABELS.content_library, icon: Library },
   { href: '/campaigns', label: THAI_UI_LABELS.campaign_workspace, icon: FolderKanban },
   { href: '/campaigns/short-form', label: 'Short-form', icon: Clapperboard },
+  { href: '/product-video', label: 'Product Video', icon: Video },
   { href: '/settings', label: THAI_UI_LABELS.settings, icon: Settings },
 ];
 
