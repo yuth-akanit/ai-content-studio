@@ -274,18 +274,24 @@ async function validatePublicMediaUrlBeforeFacebookGraph(input: {
     redirect: 'follow',
   });
   const contentType = cleanText(response.headers.get('content-type')).toLowerCase();
-  if (response.status !== 200) {
-    throw Object.assign(new Error('media_url_not_http_200'), {
-      code: 'media_url_not_http_200',
+  const safeMediaDebug = {
+    actual_status: response.status,
+    actual_content_type: contentType || null,
+  };
+  if (response.status !== 200 && response.status !== 206) {
+    throw Object.assign(new Error('media_url_not_http_200_or_206'), {
+      code: 'media_url_not_http_200_or_206',
       status: 409,
+      ...safeMediaDebug,
     });
   }
 
-  const expectedContentTypePrefix = input.mediaType === 'image' ? 'image/' : 'video/';
-  if (!contentType.startsWith(expectedContentTypePrefix)) {
+  const contentTypeAllowed = contentType.startsWith('video/') || contentType.startsWith('image/');
+  if (!contentTypeAllowed) {
     throw Object.assign(new Error('media_url_content_type_invalid'), {
       code: 'media_url_content_type_invalid',
       status: 409,
+      ...safeMediaDebug,
     });
   }
 }

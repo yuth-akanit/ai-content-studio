@@ -114,8 +114,20 @@ export async function POST(
       console.error('[product-video] manual publish execute failed', error);
     }
 
+    const mediaDebug = {
+      actual_status: typeof (error as { actual_status?: unknown }).actual_status === 'number'
+        ? (error as { actual_status: number }).actual_status
+        : undefined,
+      actual_content_type: typeof (error as { actual_content_type?: unknown }).actual_content_type === 'string'
+        ? (error as { actual_content_type: string }).actual_content_type
+        : undefined,
+    };
+    const safeDebug = mediaDebug.actual_status || mediaDebug.actual_content_type
+      ? { media_preflight: mediaDebug }
+      : {};
+
     return NextResponse.json(
-      { ok: false, error: code, ...PRODUCT_VIDEO_PREVIEW_SAFETY_FLAGS },
+      { ok: false, error: code, ...safeDebug, ...PRODUCT_VIDEO_PREVIEW_SAFETY_FLAGS },
       { status },
     );
   }
