@@ -14,6 +14,8 @@ interface ManualPublishExecuteBody {
   target_page_key?: unknown;
   publish_plan_checksum?: unknown;
   idempotency_key?: unknown;
+  manual_execute?: unknown;
+  request_scoped_real_publish_approval?: unknown;
 }
 
 function cleanText(value: unknown): string {
@@ -58,6 +60,8 @@ export async function POST(
       targetPageKey: cleanText(body.target_page_key),
       publishPlanChecksum: cleanText(body.publish_plan_checksum),
       idempotencyKey: cleanText(body.idempotency_key),
+      manualExecute: body.manual_execute,
+      requestScopedRealPublishApproval: body.request_scoped_real_publish_approval,
     });
 
     return NextResponse.json({
@@ -70,15 +74,18 @@ export async function POST(
       idempotent_replay: result.idempotent_replay,
       execution_plan: result.execution_plan,
       execution: result.execution,
-      publish_allowed: false,
-      real_posting_enabled: false,
-      facebook_post_performed: false,
-      line_broadcast_performed: false,
-      schedule_enabled: false,
-      renderer_called: false,
-      phaya_called: false,
-      s3_upload_performed: false,
-      mark_posted_performed: false,
+      publish_allowed: result.execution.publish_allowed,
+      real_posting_enabled: result.execution.real_posting_enabled,
+      request_scoped_real_publish_approval: result.execution.request_scoped_real_publish_approval,
+      facebook_post_performed: result.execution.facebook_post_performed,
+      facebook_post_id: result.execution.facebook_post_id,
+      facebook_graph_endpoint: result.execution.facebook_graph_endpoint,
+      line_broadcast_performed: result.execution.line_broadcast_performed,
+      schedule_enabled: result.execution.schedule_enabled,
+      renderer_called: result.execution.renderer_called,
+      phaya_called: result.execution.phaya_called,
+      s3_upload_performed: result.execution.s3_upload_performed,
+      mark_posted_performed: result.execution.mark_posted_performed,
       storage: {
         publish_execution_audit_path: getProductVideoManualPublishExecutionAuditPathForDiagnostics(),
       },

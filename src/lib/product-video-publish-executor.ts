@@ -20,7 +20,12 @@ export type ProductVideoPublishExecutionDryRunStatus =
   | 'publish_execution_ready_dry_run';
 export type ProductVideoPublishExecutionBlockReason = 'media_not_rendered' | null;
 export type ProductVideoManualPublishExecutionStatus = 'blocked' | 'published';
-export type ProductVideoManualPublishExecutionBlockReason = 'real_posting_flag_off' | null;
+export type ProductVideoManualPublishExecutionBlockReason =
+  | 'manual_execute_required'
+  | 'request_real_publish_approval_required'
+  | 'real_posting_flag_off'
+  | 'preview_already_published'
+  | null;
 
 export interface ProductVideoPublishExecutionDryRunAudit extends ProductVideoPreviewSafetyFlags {
   execution_audit_id: string;
@@ -81,7 +86,7 @@ export interface ProductVideoPublishExecutionPlan extends ProductVideoPreviewSaf
   };
 }
 
-export interface ProductVideoManualPublishExecutionAudit extends ProductVideoPreviewSafetyFlags {
+export interface ProductVideoManualPublishExecutionAudit {
   execution_id: string;
   preview_id: string;
   authorization_id: string;
@@ -90,8 +95,10 @@ export interface ProductVideoManualPublishExecutionAudit extends ProductVideoPre
   local_only: true;
   manual_execution: true;
   safe_to_audit: true;
+  publish_allowed: boolean;
   real_posting_enabled: boolean;
   facebook_real_publish_flag_enabled: boolean;
+  request_scoped_real_publish_approval: boolean;
   idempotency_key: string;
   target_page_key: string;
   publish_plan_checksum: string;
@@ -99,7 +106,15 @@ export interface ProductVideoManualPublishExecutionAudit extends ProductVideoPre
   authorization_status: 'publish_authorized_for_manual_execution';
   media_status: 'ready';
   execution_plan: ProductVideoPublishExecutionPlan;
+  facebook_post_performed: boolean;
   facebook_post_id: string | null;
+  facebook_graph_endpoint: string | null;
+  line_broadcast_performed: false;
+  schedule_enabled: false;
+  renderer_called: false;
+  phaya_called: false;
+  s3_upload_performed: false;
+  mark_posted_performed: boolean;
   executed_at: string;
 }
 
@@ -121,6 +136,142 @@ function getManualPublishExecutionAuditPath(): string {
 function isRealFacebookPublishEnabled(): boolean {
   return process.env.PRODUCT_VIDEO_REAL_FACEBOOK_PUBLISH_ENABLED === 'true'
     && process.env.PRODUCT_VIDEO_MANUAL_PUBLISH_EXECUTE_APPROVED === 'true';
+}
+
+function isTruthy(value: unknown): boolean {
+  return value === true || value === 'true' || value === '1';
+}
+
+function buildBlockedManualExecution(
+  input: {
+    item: ProductVideoPreviewLogRecord;
+    authorization: ProductVideoPublishAuthorizationRecord;
+    targetPageKey: string;
+    publishPlanChecksum: string;
+    idempotencyKey: string;
+    executionPlan: ProductVideoPublishExecutionPlan;
+    blockReason: Exclude<ProductVideoManualPublishExecutionBlockReason, null>;
+    realPostingEnabled: boolean;
+    requestScopedRealPublishApproval: boolean;
+  },
+): ProductVideoManualPublishExecutionAudit {
+  return {
+    execution_id: randomUUID(),
+    preview_id: input.item.preview_id,
+    authorization_id: input.authorization.authorization_id,
+    status: 'blocked',
+    block_reason: input.blockReason,
+    local_only: true,
+    manual_execution: true,
+    safe_to_audit: true,
+    publish_allowed: false,
+    real_posting_enabled: input.realPostingEnabled,
+    facebook_real_publish_flag_enabled: isRealFacebookPublishEnabled(),
+    request_scoped_real_publish_approval: input.requestScopedRealPublishApproval,
+    idempotency_key: input.idempotencyKey,
+    target_page_key: input.targetPageKey,
+    publish_plan_checksum: input.publishPlanChecksum,
+    publish_plan_status: 'publish_plan_ready',
+    authorization_status: input.authorization.status,
+    media_status: 'ready',
+    execution_plan: input.executionPlan,
+    facebook_post_performed: false,
+    facebook_post_id: null,
+    facebook_graph_endpoint: null,
+    line_broadcast_performed: false,
+    schedule_enabled: false,
+    renderer_called: false,
+    phaya_called: false,
+    s3_upload_performed: false,
+    mark_posted_performed: false,
+    executed_at: new Date().toISOString(),
+  };
+}
+
+function getFacebookPageAccessToken(targetPageKey: string): string {
+  const normalizedKey = targetPageKey.toUpperCase().replace(/[^A-Z0-9]+/g, '_');
+  return cleanText(process.env[`PRODUCT_VIDEO_FACEBOOK_PAGE_ACCESS_TOKEN_${normalizedKey}`])
+    || cleanText(process.env.PRODUCT_VIDEO_FACEBOOK_PAGE_ACCESS_TOKEN)
+    || cleanText(process.env.FACEBOOK_PAGE_ACCESS_TOKEN);
+}
+
+async function publishProductVideoToFacebook(input: {
+  pageId: string;
+  targetPageKey: string;
+  caption: string;
+  mediaUrl: string;
+}): Promise<{ postId: string; endpoint: string }> {
+  const token = getFacebookPageAccessToken(input.targetPageKey);
+  if (!token) {
+    throw Object.assign(new Error('facebook_page_access_token_missing'), {
+      code: 'facebook_page_access_token_missing',
+      status: 503,
+    });
+  }
+
+  const apiVersion = cleanText(process.env.PRODUCT_VIDEO_FACEBOOK_GRAPH_API_VERSION) || 'v20.0';
+  const endpoint = `https://graph.facebook.com/${apiVersion}/${encodeURIComponent(input.pageId)}/videos`;
+  const body = new URLSearchParams({
+    access_token: token,
+    description: input.caption,
+    file_url: input.mediaUrl,
+  });
+
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    body,
+  });
+  const payload = await response.json().catch(() => ({})) as Record<string, unknown>;
+  const id = typeof payload.id === 'string' ? payload.id : '';
+  if (!response.ok || !id) {
+    throw Object.assign(new Error('facebook_graph_publish_failed'), {
+      code: 'facebook_graph_publish_failed',
+      status: response.status >= 400 ? response.status : 502,
+    });
+  }
+
+  return { postId: id, endpoint: `/${apiVersion}/${input.pageId}/videos` };
+}
+
+async function validatePublicMediaUrlBeforeFacebookGraph(input: {
+  mediaUrl: string | null;
+  mediaType: 'video' | 'image' | null;
+}): Promise<void> {
+  if (!input.mediaUrl) {
+    throw Object.assign(new Error('media_url_required'), { code: 'media_url_required', status: 409 });
+  }
+
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(input.mediaUrl);
+  } catch {
+    throw Object.assign(new Error('media_url_invalid'), { code: 'media_url_invalid', status: 409 });
+  }
+
+  if (parsedUrl.protocol !== 'https:' && parsedUrl.protocol !== 'http:') {
+    throw Object.assign(new Error('media_url_http_required'), { code: 'media_url_http_required', status: 409 });
+  }
+
+  const response = await fetch(parsedUrl, {
+    method: 'GET',
+    headers: { Range: 'bytes=0-0' },
+    redirect: 'follow',
+  });
+  const contentType = cleanText(response.headers.get('content-type')).toLowerCase();
+  if (response.status !== 200) {
+    throw Object.assign(new Error('media_url_not_http_200'), {
+      code: 'media_url_not_http_200',
+      status: 409,
+    });
+  }
+
+  const expectedContentTypePrefix = input.mediaType === 'image' ? 'image/' : 'video/';
+  if (!contentType.startsWith(expectedContentTypePrefix)) {
+    throw Object.assign(new Error('media_url_content_type_invalid'), {
+      code: 'media_url_content_type_invalid',
+      status: 409,
+    });
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -176,13 +327,25 @@ function parseManualPublishExecutionAuditLine(line: string): ProductVideoManualP
     const parsed = JSON.parse(line) as unknown;
     if (!isRecord(parsed)) return null;
     if (parsed.status !== 'blocked' && parsed.status !== 'published') return null;
-    if (parsed.status === 'blocked' && parsed.block_reason !== 'real_posting_flag_off') return null;
+    if (parsed.status === 'blocked' && (
+      parsed.block_reason !== 'real_posting_flag_off'
+      && parsed.block_reason !== 'manual_execute_required'
+      && parsed.block_reason !== 'request_real_publish_approval_required'
+      && parsed.block_reason !== 'preview_already_published'
+    )) return null;
     if (parsed.status === 'published' && parsed.block_reason !== null) return null;
     if (typeof parsed.preview_id !== 'string') return null;
     if (typeof parsed.idempotency_key !== 'string') return null;
     if (parsed.safe_to_audit !== true) return null;
-    if (parsed.publish_allowed !== false) return null;
-    if (parsed.facebook_post_performed !== false) return null;
+    if (parsed.status === 'blocked') {
+      if (parsed.publish_allowed !== false) return null;
+      if (parsed.facebook_post_performed !== false) return null;
+      if (parsed.mark_posted_performed !== false) return null;
+    } else {
+      if (parsed.publish_allowed !== true) return null;
+      if (parsed.facebook_post_performed !== true) return null;
+      if (parsed.mark_posted_performed !== true) return null;
+    }
     if (parsed.line_broadcast_performed !== false) return null;
     if (parsed.renderer_called !== false) return null;
     if (parsed.s3_upload_performed !== false) return null;
@@ -376,6 +539,8 @@ export async function executeProductVideoManualPublish(input: {
   targetPageKey: string;
   publishPlanChecksum: string;
   idempotencyKey: string;
+  manualExecute?: unknown;
+  requestScopedRealPublishApproval?: unknown;
 }): Promise<{
   execution: ProductVideoManualPublishExecutionAudit;
   execution_plan: ProductVideoPublishExecutionPlan;
@@ -427,9 +592,14 @@ export async function executeProductVideoManualPublish(input: {
     record.preview_id === input.item.preview_id
     && record.status === 'published'
   ));
-  if (alreadyPublished) {
-    throw Object.assign(new Error('preview_already_published'), { code: 'preview_already_published', status: 409 });
-  }
+
+  const executionPlan = buildExecutionPlan(input.item, publishPlan);
+  executionPlan.execution_mode = 'manual_publish';
+
+  const manualExecute = isTruthy(input.manualExecute);
+  const requestScopedRealPublishApproval = isTruthy(input.requestScopedRealPublishApproval);
+  const envRealPublishEnabled = isRealFacebookPublishEnabled();
+  const realPostingEnabled = envRealPublishEnabled;
 
   const existing = executions.find((record) => (
     record.preview_id === input.item.preview_id
@@ -438,6 +608,22 @@ export async function executeProductVideoManualPublish(input: {
     && record.idempotency_key === idempotencyKey
     && record.authorization_id === authorization.authorization_id
   ));
+
+  if (alreadyPublished) {
+    const execution = buildBlockedManualExecution({
+      item: input.item,
+      authorization,
+      targetPageKey,
+      publishPlanChecksum,
+      idempotencyKey,
+      executionPlan,
+      blockReason: 'preview_already_published',
+      realPostingEnabled,
+      requestScopedRealPublishApproval,
+    });
+    return { execution, execution_plan: executionPlan, idempotent_replay: true };
+  }
+
   if (existing) {
     return {
       execution: existing,
@@ -446,30 +632,64 @@ export async function executeProductVideoManualPublish(input: {
     };
   }
 
-  const executionPlan = buildExecutionPlan(input.item, publishPlan);
-  executionPlan.execution_mode = 'manual_publish';
-  const realPostingEnabled = isRealFacebookPublishEnabled();
-
-  // Real Facebook posting is deliberately not implemented here. With flags off, this executor records
-  // a blocked audit only and performs no Graph/LINE/n8n/renderer/S3 calls.
-  if (realPostingEnabled) {
-    throw Object.assign(new Error('real_facebook_publish_not_implemented'), {
-      code: 'real_facebook_publish_not_implemented',
-      status: 501,
-    });
+  let blockReason: Exclude<ProductVideoManualPublishExecutionBlockReason, null> | null = null;
+  if (!manualExecute) {
+    blockReason = 'manual_execute_required';
+  } else if (!requestScopedRealPublishApproval) {
+    blockReason = 'request_real_publish_approval_required';
+  } else if (!realPostingEnabled) {
+    blockReason = 'real_posting_flag_off';
   }
+
+  if (blockReason) {
+    const execution = buildBlockedManualExecution({
+      item: input.item,
+      authorization,
+      targetPageKey,
+      publishPlanChecksum,
+      idempotencyKey,
+      executionPlan,
+      blockReason,
+      realPostingEnabled,
+      requestScopedRealPublishApproval,
+    });
+
+    const auditPath = getManualPublishExecutionAuditPath();
+    await mkdir(path.dirname(auditPath), { recursive: true });
+    await writeFile(auditPath, `${JSON.stringify(execution)}\n`, { flag: 'a' });
+
+    return {
+      execution,
+      execution_plan: executionPlan,
+      idempotent_replay: false,
+    };
+  }
+
+  await validatePublicMediaUrlBeforeFacebookGraph({
+    mediaUrl: publishPlan.media.public_media_url,
+    mediaType: publishPlan.media.media_type,
+  });
+
+  const facebookResult = await publishProductVideoToFacebook({
+    pageId: publishPlan.target_page.page_id,
+    targetPageKey,
+    caption: publishPlan.content.caption,
+    mediaUrl: publishPlan.media.public_media_url,
+  });
 
   const execution: ProductVideoManualPublishExecutionAudit = {
     execution_id: randomUUID(),
     preview_id: input.item.preview_id,
     authorization_id: authorization.authorization_id,
-    status: 'blocked',
-    block_reason: 'real_posting_flag_off',
+    status: 'published',
+    block_reason: null,
     local_only: true,
     manual_execution: true,
     safe_to_audit: true,
-    real_posting_enabled: false,
-    facebook_real_publish_flag_enabled: false,
+    publish_allowed: true,
+    real_posting_enabled: true,
+    facebook_real_publish_flag_enabled: true,
+    request_scoped_real_publish_approval: true,
     idempotency_key: idempotencyKey,
     target_page_key: targetPageKey,
     publish_plan_checksum: publishPlanChecksum,
@@ -477,9 +697,16 @@ export async function executeProductVideoManualPublish(input: {
     authorization_status: authorization.status,
     media_status: publishPlan.media.media_status,
     execution_plan: executionPlan,
-    facebook_post_id: null,
+    facebook_post_performed: true,
+    facebook_post_id: facebookResult.postId,
+    facebook_graph_endpoint: facebookResult.endpoint,
+    line_broadcast_performed: false,
+    schedule_enabled: false,
+    renderer_called: false,
+    phaya_called: false,
+    s3_upload_performed: false,
+    mark_posted_performed: true,
     executed_at: new Date().toISOString(),
-    ...PRODUCT_VIDEO_PREVIEW_SAFETY_FLAGS,
   };
 
   const auditPath = getManualPublishExecutionAuditPath();
