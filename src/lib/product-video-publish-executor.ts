@@ -653,6 +653,7 @@ export async function executeProductVideoManualPublish(input: {
     && record.publish_plan_checksum === publishPlanChecksum
     && record.idempotency_key === idempotencyKey
     && record.authorization_id === authorization.authorization_id
+    && (record.status === 'published' || !envRealPublishEnabled)
     && (record.facebook_page_id || record.execution_plan?.would_publish_to?.facebook_page_id || record.execution_plan?.would_publish_to?.target_page_id) === selectedPage.facebook_page_id
   ));
 
