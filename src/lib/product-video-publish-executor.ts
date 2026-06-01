@@ -6,6 +6,7 @@ import {
   ProductVideoPreviewLogRecord,
   ProductVideoPreviewSafetyFlags,
 } from '@/lib/product-video-preview-log';
+import { hasSystemNote } from '@/lib/product-video-caption-validator';
 import {
   ProductVideoPublishAuthorizationRecord,
   listProductVideoPublishAuthorizations,
@@ -29,6 +30,7 @@ export type ProductVideoManualPublishExecutionBlockReason =
   | 'request_real_publish_approval_required'
   | 'real_posting_flag_off'
   | 'preview_already_published'
+  | 'invalid_marketing_caption_system_note_detected'
   | null;
 
 export interface ProductVideoPublishExecutionDryRunAudit extends ProductVideoPreviewSafetyFlags {
@@ -367,6 +369,7 @@ function parseManualPublishExecutionAuditLine(line: string): ProductVideoManualP
       && parsed.block_reason !== 'manual_execute_required'
       && parsed.block_reason !== 'request_real_publish_approval_required'
       && parsed.block_reason !== 'preview_already_published'
+      && parsed.block_reason !== 'invalid_marketing_caption_system_note_detected'
     )) return null;
     if (parsed.status === 'published' && parsed.block_reason !== null) return null;
     if (typeof parsed.preview_id !== 'string') return null;
@@ -734,6 +737,32 @@ export async function executeProductVideoManualPublish(input: {
     };
   }
 
+  const publishCaption = publishPlan.content.publish_caption || publishPlan.content.marketing_caption || publishPlan.content.caption;
+  if (hasSystemNote(publishCaption)) {
+    const execution = buildBlockedManualExecution({
+      item: input.item,
+      authorization,
+      targetPageKey,
+      publishPlanChecksum,
+      idempotencyKey,
+      executionPlan,
+      blockReason: 'invalid_marketing_caption_system_note_detected',
+      realPostingEnabled,
+      requestScopedRealPublishApproval,
+      selectedPage,
+    });
+
+    const auditPath = getManualPublishExecutionAuditPath();
+    await mkdir(path.dirname(auditPath), { recursive: true });
+    await writeFile(auditPath, `${JSON.stringify(execution)}\n`, { flag: 'a' });
+
+    return {
+      execution,
+      execution_plan: executionPlan,
+      idempotent_replay: false,
+    };
+  }
+
   const mediaUrlForFacebook = cleanText(publishPlan.media.public_media_url || publishPlan.media.media_url);
   await validatePublicMediaUrlBeforeFacebookGraph({
     mediaUrl: mediaUrlForFacebook,
@@ -743,7 +772,7 @@ export async function executeProductVideoManualPublish(input: {
   const facebookResult = await publishProductVideoToFacebook({
     pageId: selectedPage.facebook_page_id,
     pageAccessToken: selectedPage.page_access_token,
-    caption: publishPlan.content.caption,
+    caption: publishCaption,
     mediaUrl: mediaUrlForFacebook,
   });
 

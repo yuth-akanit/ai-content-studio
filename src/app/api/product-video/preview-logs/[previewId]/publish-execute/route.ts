@@ -76,6 +76,18 @@ export async function POST(
       selectedPageIdOrChannelId: cleanText(body.selected_channel_id) || cleanText(body.selected_page_id),
     });
 
+    if (result.execution.block_reason === 'invalid_marketing_caption_system_note_detected') {
+      return NextResponse.json(
+        {
+          ok: false,
+          status: 'blocked',
+          block_reason: 'invalid_marketing_caption_system_note_detected',
+          facebook_post_performed: false,
+        },
+        { status: 400 },
+      );
+    }
+
     return NextResponse.json({
       ok: true,
       status: result.execution.status,

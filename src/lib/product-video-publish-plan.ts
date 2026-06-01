@@ -47,6 +47,8 @@ export interface ProductVideoPublishPlanPreview extends ProductVideoPreviewSafet
   };
   content: {
     caption: string;
+    marketing_caption: string;
+    publish_caption: string;
     brand_context: string;
   };
   media: ProductVideoPublishPlanMedia;
@@ -125,7 +127,7 @@ export function buildProductVideoPublishPlanChecksum(
       platform: item.platform,
     },
     content: {
-      caption: item.caption,
+      caption: item.marketing_caption || item.caption,
       brand_context: item.brand_context,
     },
     media: {
@@ -174,7 +176,9 @@ export async function buildProductVideoPublishPlanPreview(
       platform: item.platform,
     },
     content: {
-      caption: item.caption,
+      caption: item.marketing_caption || item.caption,
+      marketing_caption: item.marketing_caption || item.caption || '',
+      publish_caption: item.marketing_caption || item.caption || '',
       brand_context: item.brand_context,
     },
     media,

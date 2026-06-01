@@ -33,6 +33,8 @@ export interface ProductVideoPreviewLogInput {
   facebook_page_id: string;
   platform: ProductVideoPlatform;
   caption: string;
+  marketing_caption?: string;
+  preview_note?: string;
   n8n_forwarded: boolean;
   n8n_status: number | null;
   response_body_exposed: false;
@@ -192,6 +194,8 @@ export async function appendProductVideoPreviewLog(
     facebook_page_id: input.facebook_page_id,
     platform: input.platform,
     caption: input.caption,
+    marketing_caption: input.marketing_caption || '',
+    preview_note: input.preview_note || '',
     preview_only: true,
     real_posting_enabled: false,
     line_broadcast_enabled: false,

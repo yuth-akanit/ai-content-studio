@@ -4,6 +4,7 @@ import {
   redactProductVideoFacebookPage,
   resolveProductVideoSelectedFacebookPage,
 } from '@/lib/product-video-facebook-page';
+import { validateMarketingCaption } from '@/lib/product-video-caption-validator';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,6 +19,8 @@ interface ProductVideoGenerateRequest {
   selected_page_name?: string;
   platform?: ProductVideoPlatform;
   caption?: string;
+  marketing_caption?: string;
+  preview_note?: string;
   preview_only?: boolean;
   real_posting_enabled?: boolean;
   line_broadcast_enabled?: boolean;
@@ -36,6 +39,8 @@ interface ProductVideoPayload {
   facebook_page_id: string;
   platform: ProductVideoPlatform;
   caption: string;
+  marketing_caption: string;
+  preview_note: string;
   preview_only: true;
   real_posting_enabled: false;
   line_broadcast_enabled: false;
@@ -52,6 +57,9 @@ async function buildPayload(body: ProductVideoGenerateRequest): Promise<ProductV
   const selectedPageSelector = clean(body.selected_channel_id) || clean(body.selected_page_id);
   const selectedPage = await resolveProductVideoSelectedFacebookPage(selectedPageSelector);
 
+  const marketingCaption = clean(body.marketing_caption || body.caption);
+  const previewNote = clean(body.preview_note || 'สร้างวิดีโอสินค้าแบบ preview เท่านั้น ยังไม่โพสต์จริง และยังไม่เปิด schedule');
+
   return {
     brand_context: clean(body.brand_context),
     target_page_key: clean(body.target_page_key),
@@ -61,7 +69,9 @@ async function buildPayload(body: ProductVideoGenerateRequest): Promise<ProductV
     external_id: selectedPage.external_id,
     facebook_page_id: selectedPage.facebook_page_id,
     platform: 'facebook_page',
-    caption: clean(body.caption),
+    caption: marketingCaption,
+    marketing_caption: marketingCaption,
+    preview_note: previewNote,
     preview_only: true,
     real_posting_enabled: false,
     line_broadcast_enabled: false,
@@ -80,7 +90,6 @@ function validatePayload(payload: ProductVideoPayload): string[] {
   if (!payload.external_id) errors.push('external_id_required');
   if (!payload.facebook_page_id) errors.push('facebook_page_id_required');
   if (!payload.platform) errors.push('platform_required');
-  if (!payload.caption) errors.push('caption_required');
 
   if (payload.brand_context === 'syncflow' && payload.target_page_key !== 'syncflow') {
     errors.push('syncflow_requires_target_page_key_syncflow');
@@ -89,6 +98,9 @@ function validatePayload(payload: ProductVideoPayload): string[] {
   if ((payload.brand_context === 'paa' || payload.brand_context === 'paa_air') && payload.target_page_key !== 'paa_air') {
     errors.push('paa_requires_target_page_key_paa_air');
   }
+
+  const captionErrors = validateMarketingCaption(payload.marketing_caption, payload.brand_context);
+  errors.push(...captionErrors);
 
   return errors;
 }
@@ -184,6 +196,8 @@ export async function POST(request: NextRequest) {
         facebook_page_id: payload.facebook_page_id,
         platform: payload.platform,
         caption: payload.caption,
+        marketing_caption: payload.marketing_caption,
+        preview_note: payload.preview_note,
         n8n_forwarded: n8n.forwarded,
         n8n_status: n8nStatus,
         response_body_exposed: false,

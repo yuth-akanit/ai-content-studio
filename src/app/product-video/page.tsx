@@ -147,7 +147,29 @@ interface PreviewLogItem {
 type BrandContext = 'syncflow' | 'paa_air';
 type TargetPageKey = 'syncflow' | 'paa_air';
 
-const defaultCaption = 'สร้างวิดีโอสินค้าแบบ preview เท่านั้น ยังไม่โพสต์จริง และยังไม่เปิด schedule';
+const syncflowDefaultCaption = `ลูกค้าทักมาหลายช่องทาง แต่งานไม่ควรหลุดเพราะตอบไม่ทัน
+
+ถ้าทีมแอดมินต้องไล่ตอบ LINE, Facebook, Instagram และโทรศัพท์พร้อมกัน โอกาสพลาดคิว พลาดงาน และตอบลูกค้าช้าจะสูงมาก
+
+SyncFlow ช่วยรวมงานจากหลายช่องทางให้กลายเป็นระบบเดียว ตั้งแต่รับเรื่อง จัดคิว ติดตามสถานะ ไปจนถึงแจ้งเตือนทีมงาน
+
+เหมาะกับธุรกิจบริการที่มีแอดมินหลายคน งานเข้าหลายช่องทาง และต้องการลดงานหลุดโดยไม่เพิ่มคน
+
+สนใจดูตัวอย่างระบบ ทัก SyncFlow by PAA Tech
+
+#SyncFlow #ระบบจัดการงาน #ธุรกิจบริการ #AIContentStudio #จัดคิวงาน #ลดงานหลุด`;
+
+const paaAirDefaultCaption = `แอร์ไม่เย็น มีกลิ่นอับ น้ำหยด ปัญหาชวนปวดหัวในช่วงหน้าร้อน!
+
+ปล่อยไว้นานอาจทำให้ค่าไฟพุ่งกระฉูด แถมยังเป็นแหล่งสะสมของเชื้อโรคและฝุ่นละออง PM2.5 ที่ส่งผลเสียต่อสุขภาพครอบครัวคุณ
+
+PAA Air บริการล้างแอร์ฆ่าเชื้อโรคด้วยทีมช่างมืออาชีพ ล้างสะอาดทุกซอกทุกมุม ตรวจเช็กระบบน้ำยาแอร์ฟรี
+
+ให้บริการในพื้นที่กรุงเทพฯ และปริมณฑล สะดวรวดเร็ว นัดง่าย ตรงเวลา
+
+สนใจจองคิวบริการ โทร 02-XXX-XXXX หรือทักแชทหาเราได้ทันที
+
+#PAAAir #ล้างแอร์ #ช่างแอร์มืออาชีพ #แอร์บ้าน #บริการล้างแอร์ #กรุงเทพ`;
 
 function inferTargetPageKey(page: SocialPage | undefined): TargetPageKey {
   const raw = `${page?.name || ''} ${page?.provider || ''}`.toLowerCase();
@@ -199,7 +221,11 @@ export default function ProductVideoPage() {
   const [selectedPageId, setSelectedPageId] = useState('');
   const [brandContext, setBrandContext] = useState<BrandContext>('paa_air');
   const [targetPageKey, setTargetPageKey] = useState<TargetPageKey>('paa_air');
-  const [caption, setCaption] = useState(defaultCaption);
+  const [caption, setCaption] = useState('');
+
+  useEffect(() => {
+    setCaption(brandContext === 'syncflow' ? syncflowDefaultCaption : paaAirDefaultCaption);
+  }, [brandContext]);
   const [submitting, setSubmitting] = useState(false);
   const [decidingPreviewId, setDecidingPreviewId] = useState<string | null>(null);
   const [loadingPublishPlanId, setLoadingPublishPlanId] = useState<string | null>(null);
@@ -288,6 +314,8 @@ export default function ProductVideoPage() {
           selected_page_id: selectedPage.id,
           platform: 'facebook_page',
           caption,
+          marketing_caption: caption,
+          preview_note: 'สร้างวิดีโอสินค้าแบบ preview เท่านั้น ยังไม่โพสต์จริง และยังไม่เปิด schedule',
           preview_only: true,
           real_posting_enabled: false,
           line_broadcast_enabled: false,
