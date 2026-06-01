@@ -121,8 +121,11 @@ export async function POST(
       actual_content_type: typeof (error as { actual_content_type?: unknown }).actual_content_type === 'string'
         ? (error as { actual_content_type: string }).actual_content_type
         : undefined,
+      checked_url: typeof (error as { checked_url?: unknown }).checked_url === 'string'
+        ? (error as { checked_url: string }).checked_url
+        : null,
     };
-    const safeDebug = mediaDebug.actual_status || mediaDebug.actual_content_type
+    const safeDebug = mediaDebug.actual_status || mediaDebug.actual_content_type || mediaDebug.checked_url
       ? { media_preflight: mediaDebug }
       : {};
 

@@ -254,18 +254,30 @@ async function validatePublicMediaUrlBeforeFacebookGraph(input: {
   mediaType: 'video' | 'image' | null;
 }): Promise<void> {
   if (!input.mediaUrl) {
-    throw Object.assign(new Error('media_url_required'), { code: 'media_url_required', status: 409 });
+    throw Object.assign(new Error('media_url_required'), {
+      code: 'media_url_required',
+      status: 409,
+      checked_url: null,
+    });
   }
 
   let parsedUrl: URL;
   try {
     parsedUrl = new URL(input.mediaUrl);
   } catch {
-    throw Object.assign(new Error('media_url_invalid'), { code: 'media_url_invalid', status: 409 });
+    throw Object.assign(new Error('media_url_invalid'), {
+      code: 'media_url_invalid',
+      status: 409,
+      checked_url: input.mediaUrl,
+    });
   }
 
   if (parsedUrl.protocol !== 'https:' && parsedUrl.protocol !== 'http:') {
-    throw Object.assign(new Error('media_url_http_required'), { code: 'media_url_http_required', status: 409 });
+    throw Object.assign(new Error('media_url_http_required'), {
+      code: 'media_url_http_required',
+      status: 409,
+      checked_url: parsedUrl.toString(),
+    });
   }
 
   const response = await fetch(parsedUrl, {
@@ -277,6 +289,7 @@ async function validatePublicMediaUrlBeforeFacebookGraph(input: {
   const safeMediaDebug = {
     actual_status: response.status,
     actual_content_type: contentType || null,
+    checked_url: parsedUrl.toString(),
   };
   if (response.status !== 200 && response.status !== 206) {
     throw Object.assign(new Error('media_url_not_http_200_or_206'), {
@@ -721,8 +734,9 @@ export async function executeProductVideoManualPublish(input: {
     };
   }
 
+  const mediaUrlForFacebook = cleanText(publishPlan.media.public_media_url || publishPlan.media.media_url);
   await validatePublicMediaUrlBeforeFacebookGraph({
-    mediaUrl: publishPlan.media.public_media_url,
+    mediaUrl: mediaUrlForFacebook,
     mediaType: publishPlan.media.media_type,
   });
 
@@ -730,7 +744,7 @@ export async function executeProductVideoManualPublish(input: {
     pageId: selectedPage.facebook_page_id,
     pageAccessToken: selectedPage.page_access_token,
     caption: publishPlan.content.caption,
-    mediaUrl: publishPlan.media.public_media_url,
+    mediaUrl: mediaUrlForFacebook,
   });
 
   const execution: ProductVideoManualPublishExecutionAudit = {
