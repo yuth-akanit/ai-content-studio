@@ -111,6 +111,8 @@ export async function resolveProductVideoSelectedFacebookPage(
       .from('inbox_channels')
       .select(selectColumns)
       .eq('id', selector)
+      .eq('provider', 'facebook')
+      .eq('status', 'active')
       .maybeSingle();
 
     if (byIdError) {
@@ -127,6 +129,8 @@ export async function resolveProductVideoSelectedFacebookPage(
     .from('inbox_channels')
     .select(selectColumns)
     .eq('external_id', selector)
+    .eq('provider', 'facebook')
+    .eq('status', 'active')
     .maybeSingle();
 
   if (byExternalIdError) {
