@@ -14,6 +14,10 @@ import {
   ProductVideoPublishPlanPreview,
   buildProductVideoPublishPlanPreview,
 } from '@/lib/product-video-publish-plan';
+import {
+  ProductVideoSelectedFacebookPage,
+  resolveProductVideoSelectedFacebookPage,
+} from '@/lib/product-video-facebook-page';
 
 export type ProductVideoPublishExecutionDryRunStatus =
   | 'publish_execution_blocked'
@@ -40,6 +44,11 @@ export interface ProductVideoPublishExecutionDryRunAudit extends ProductVideoPre
   real_posting_enabled: false;
   idempotency_key: string;
   target_page_key: string;
+  selected_channel_id: string;
+  selected_page_id: string;
+  selected_page_name: string;
+  external_id: string;
+  facebook_page_id: string;
   publish_plan_checksum: string;
   publish_plan_status: 'publish_plan_ready';
   authorization_status: 'publish_authorized_for_manual_execution';
@@ -56,6 +65,9 @@ export interface ProductVideoPublishExecutionPlan extends ProductVideoPreviewSaf
   would_publish_to: {
     platform: string;
     target_page_key: string;
+    selected_channel_id: string;
+    external_id: string;
+    facebook_page_id: string;
     target_page_id: string;
     target_page_name: string;
   };
@@ -101,6 +113,11 @@ export interface ProductVideoManualPublishExecutionAudit {
   request_scoped_real_publish_approval: boolean;
   idempotency_key: string;
   target_page_key: string;
+  selected_channel_id: string;
+  selected_page_id: string;
+  selected_page_name: string;
+  external_id: string;
+  facebook_page_id: string;
   publish_plan_checksum: string;
   publish_plan_status: 'publish_plan_ready';
   authorization_status: 'publish_authorized_for_manual_execution';
@@ -153,6 +170,7 @@ function buildBlockedManualExecution(
     blockReason: Exclude<ProductVideoManualPublishExecutionBlockReason, null>;
     realPostingEnabled: boolean;
     requestScopedRealPublishApproval: boolean;
+    selectedPage: ProductVideoSelectedFacebookPage;
   },
 ): ProductVideoManualPublishExecutionAudit {
   return {
@@ -170,6 +188,11 @@ function buildBlockedManualExecution(
     request_scoped_real_publish_approval: input.requestScopedRealPublishApproval,
     idempotency_key: input.idempotencyKey,
     target_page_key: input.targetPageKey,
+    selected_channel_id: input.selectedPage.selected_channel_id,
+    selected_page_id: input.selectedPage.selected_page_id,
+    selected_page_name: input.selectedPage.selected_page_name,
+    external_id: input.selectedPage.external_id,
+    facebook_page_id: input.selectedPage.facebook_page_id,
     publish_plan_checksum: input.publishPlanChecksum,
     publish_plan_status: 'publish_plan_ready',
     authorization_status: input.authorization.status,
@@ -188,23 +211,16 @@ function buildBlockedManualExecution(
   };
 }
 
-function getFacebookPageAccessToken(targetPageKey: string): string {
-  const normalizedKey = targetPageKey.toUpperCase().replace(/[^A-Z0-9]+/g, '_');
-  return cleanText(process.env[`PRODUCT_VIDEO_FACEBOOK_PAGE_ACCESS_TOKEN_${normalizedKey}`])
-    || cleanText(process.env.PRODUCT_VIDEO_FACEBOOK_PAGE_ACCESS_TOKEN)
-    || cleanText(process.env.FACEBOOK_PAGE_ACCESS_TOKEN);
-}
-
 async function publishProductVideoToFacebook(input: {
   pageId: string;
-  targetPageKey: string;
+  pageAccessToken: string;
   caption: string;
   mediaUrl: string;
 }): Promise<{ postId: string; endpoint: string }> {
-  const token = getFacebookPageAccessToken(input.targetPageKey);
-  if (!token) {
-    throw Object.assign(new Error('facebook_page_access_token_missing'), {
-      code: 'facebook_page_access_token_missing',
+  const pageAccessToken = cleanText(input.pageAccessToken);
+  if (!pageAccessToken) {
+    throw Object.assign(new Error('selected_facebook_page_access_token_missing'), {
+      code: 'selected_facebook_page_access_token_missing',
       status: 503,
     });
   }
@@ -212,7 +228,7 @@ async function publishProductVideoToFacebook(input: {
   const apiVersion = cleanText(process.env.PRODUCT_VIDEO_FACEBOOK_GRAPH_API_VERSION) || 'v20.0';
   const endpoint = `https://graph.facebook.com/${apiVersion}/${encodeURIComponent(input.pageId)}/videos`;
   const body = new URLSearchParams({
-    access_token: token,
+    access_token: pageAccessToken,
     description: input.caption,
     file_url: input.mediaUrl,
   });
@@ -403,6 +419,9 @@ function buildExecutionPlan(
     would_publish_to: {
       platform: publishPlan.target_page.platform,
       target_page_key: publishPlan.target_page.page_key,
+      selected_channel_id: item.selected_channel_id || item.selected_page_id,
+      external_id: item.external_id || publishPlan.target_page.page_id,
+      facebook_page_id: item.facebook_page_id || publishPlan.target_page.page_id,
       target_page_id: publishPlan.target_page.page_id,
       target_page_name: publishPlan.target_page.page_name,
     },
@@ -514,6 +533,11 @@ export async function dryRunProductVideoPublishExecution(input: {
     real_posting_enabled: false,
     idempotency_key: idempotencyKey,
     target_page_key: targetPageKey,
+    selected_channel_id: input.item.selected_channel_id || input.item.selected_page_id,
+    selected_page_id: input.item.selected_page_id,
+    selected_page_name: input.item.selected_page_name,
+    external_id: input.item.external_id || publishPlan.target_page.page_id,
+    facebook_page_id: input.item.facebook_page_id || publishPlan.target_page.page_id,
     publish_plan_checksum: publishPlanChecksum,
     publish_plan_status: publishPlan.publish_plan_status,
     authorization_status: authorization.status,
@@ -587,10 +611,21 @@ export async function executeProductVideoManualPublish(input: {
     });
   }
 
+  const selectedPage = await resolveProductVideoSelectedFacebookPage(
+    input.item.selected_channel_id || input.item.selected_page_id || publishPlan.target_page.page_id,
+  );
+  if (selectedPage.facebook_page_id !== publishPlan.target_page.page_id) {
+    throw Object.assign(new Error('selected_facebook_page_mismatch'), {
+      code: 'selected_facebook_page_mismatch',
+      status: 409,
+    });
+  }
+
   const executions = await listProductVideoManualPublishExecutions();
   const alreadyPublished = executions.find((record) => (
     record.preview_id === input.item.preview_id
     && record.status === 'published'
+    && (record.facebook_page_id || record.execution_plan?.would_publish_to?.facebook_page_id || record.execution_plan?.would_publish_to?.target_page_id) === selectedPage.facebook_page_id
   ));
 
   const executionPlan = buildExecutionPlan(input.item, publishPlan);
@@ -607,6 +642,7 @@ export async function executeProductVideoManualPublish(input: {
     && record.publish_plan_checksum === publishPlanChecksum
     && record.idempotency_key === idempotencyKey
     && record.authorization_id === authorization.authorization_id
+    && (record.facebook_page_id || record.execution_plan?.would_publish_to?.facebook_page_id || record.execution_plan?.would_publish_to?.target_page_id) === selectedPage.facebook_page_id
   ));
 
   if (alreadyPublished) {
@@ -620,6 +656,7 @@ export async function executeProductVideoManualPublish(input: {
       blockReason: 'preview_already_published',
       realPostingEnabled,
       requestScopedRealPublishApproval,
+      selectedPage,
     });
     return { execution, execution_plan: executionPlan, idempotent_replay: true };
   }
@@ -652,6 +689,7 @@ export async function executeProductVideoManualPublish(input: {
       blockReason,
       realPostingEnabled,
       requestScopedRealPublishApproval,
+      selectedPage,
     });
 
     const auditPath = getManualPublishExecutionAuditPath();
@@ -671,8 +709,8 @@ export async function executeProductVideoManualPublish(input: {
   });
 
   const facebookResult = await publishProductVideoToFacebook({
-    pageId: publishPlan.target_page.page_id,
-    targetPageKey,
+    pageId: selectedPage.facebook_page_id,
+    pageAccessToken: selectedPage.page_access_token,
     caption: publishPlan.content.caption,
     mediaUrl: publishPlan.media.public_media_url,
   });
@@ -692,6 +730,11 @@ export async function executeProductVideoManualPublish(input: {
     request_scoped_real_publish_approval: true,
     idempotency_key: idempotencyKey,
     target_page_key: targetPageKey,
+    selected_channel_id: selectedPage.selected_channel_id,
+    selected_page_id: selectedPage.selected_page_id,
+    selected_page_name: selectedPage.selected_page_name,
+    external_id: selectedPage.external_id,
+    facebook_page_id: selectedPage.facebook_page_id,
     publish_plan_checksum: publishPlanChecksum,
     publish_plan_status: publishPlan.publish_plan_status,
     authorization_status: authorization.status,

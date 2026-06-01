@@ -15,9 +15,11 @@ interface SocialPage {
   id: string;
   name: string;
   provider: string;
+  status?: string;
   external_id?: string;
   meta?: {
     is_instagram?: boolean;
+    access_token_present?: boolean;
   } | null;
 }
 
@@ -118,8 +120,11 @@ interface PreviewLogItem {
   updated_at?: string;
   brand_context: string;
   target_page_key: string;
+  selected_channel_id?: string;
   selected_page_id: string;
   selected_page_name: string;
+  external_id?: string;
+  facebook_page_id?: string;
   platform: string;
   caption: string;
   preview_only: true;
@@ -234,7 +239,7 @@ export default function ProductVideoPage() {
   useEffect(() => {
     (async () => {
       try {
-        const response = await fetch('/api/social-pages');
+        const response = await fetch('/api/social-pages?provider=facebook&status=active');
         const data = await response.json();
         if (!response.ok || !Array.isArray(data)) throw new Error('โหลดรายการเพจไม่สำเร็จ');
 
@@ -279,8 +284,8 @@ export default function ProductVideoPage() {
         body: JSON.stringify({
           brand_context: brandContext,
           target_page_key: targetPageKey,
+          selected_channel_id: selectedPage.id,
           selected_page_id: selectedPage.id,
-          selected_page_name: selectedPage.name,
           platform: 'facebook_page',
           caption,
           preview_only: true,
@@ -391,7 +396,7 @@ export default function ProductVideoPage() {
     setResult(null);
 
     try {
-      const idempotencyKey = `manual-publish-auth-${previewId}-${plan.publish_plan_checksum}`;
+      const idempotencyKey = `manual-publish-auth-${previewId}-${plan.target_page.page_id}-${plan.publish_plan_checksum}`;
       const response = await fetch(`/api/product-video/preview-logs/${encodeURIComponent(previewId)}/publish-authorization`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

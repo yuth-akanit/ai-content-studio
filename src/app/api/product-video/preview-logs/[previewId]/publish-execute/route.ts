@@ -14,8 +14,12 @@ interface ManualPublishExecuteBody {
   target_page_key?: unknown;
   publish_plan_checksum?: unknown;
   idempotency_key?: unknown;
+  selected_page_id?: unknown;
+  selected_channel_id?: unknown;
   manual_execute?: unknown;
   request_scoped_real_publish_approval?: unknown;
+  access_token?: unknown;
+  page_access_token?: unknown;
 }
 
 function cleanText(value: unknown): string {
@@ -42,6 +46,13 @@ export async function POST(
   } catch {
     return NextResponse.json(
       { ok: false, error: 'invalid_json', ...PRODUCT_VIDEO_PREVIEW_SAFETY_FLAGS },
+      { status: 400 },
+    );
+  }
+
+  if (body.access_token || body.page_access_token) {
+    return NextResponse.json(
+      { ok: false, error: 'request_body_token_rejected', ...PRODUCT_VIDEO_PREVIEW_SAFETY_FLAGS },
       { status: 400 },
     );
   }

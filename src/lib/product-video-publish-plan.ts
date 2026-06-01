@@ -91,6 +91,25 @@ function buildPlanMedia(metadata: ProductVideoMediaMetadataRecord | null): Produ
   };
 }
 
+function getFacebookPageId(item: ProductVideoPreviewLogRecord): string {
+  return item.facebook_page_id || item.external_id || item.selected_page_id;
+}
+
+function assertBrandTargetPageGuard(item: ProductVideoPreviewLogRecord): void {
+  if (item.brand_context === 'syncflow' && item.target_page_key !== 'syncflow') {
+    throw Object.assign(new Error('syncflow_requires_target_page_key_syncflow'), {
+      code: 'syncflow_requires_target_page_key_syncflow',
+      status: 409,
+    });
+  }
+  if ((item.brand_context === 'paa' || item.brand_context === 'paa_air') && item.target_page_key !== 'paa_air') {
+    throw Object.assign(new Error('paa_requires_target_page_key_paa_air'), {
+      code: 'paa_requires_target_page_key_paa_air',
+      status: 409,
+    });
+  }
+}
+
 export function buildProductVideoPublishPlanChecksum(
   item: ProductVideoPreviewLogRecord,
   metadata: ProductVideoMediaMetadataRecord | null = null,
@@ -100,7 +119,7 @@ export function buildProductVideoPublishPlanChecksum(
     preview_id: item.preview_id,
     source_status: item.status,
     target_page: {
-      page_id: item.selected_page_id,
+      page_id: getFacebookPageId(item),
       page_name: item.selected_page_name,
       page_key: item.target_page_key,
       platform: item.platform,
@@ -135,6 +154,7 @@ export async function buildProductVideoPublishPlanPreview(
       status: 409,
     });
   }
+  assertBrandTargetPageGuard(item);
 
   const metadata = await findLatestProductVideoMediaMetadata(item.preview_id);
   const media = buildPlanMedia(metadata);
@@ -148,7 +168,7 @@ export async function buildProductVideoPublishPlanPreview(
     local_only: true,
     read_only: true,
     target_page: {
-      page_id: item.selected_page_id,
+      page_id: getFacebookPageId(item),
       page_name: item.selected_page_name,
       page_key: item.target_page_key,
       platform: item.platform,

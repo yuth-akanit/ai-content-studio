@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { appendProductVideoPreviewLog } from '@/lib/product-video-preview-log';
+import {
+  redactProductVideoFacebookPage,
+  resolveProductVideoSelectedFacebookPage,
+} from '@/lib/product-video-facebook-page';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,6 +13,7 @@ type BrandContext = 'syncflow' | 'paa_air' | 'paa' | string;
 interface ProductVideoGenerateRequest {
   brand_context?: BrandContext;
   target_page_key?: string;
+  selected_channel_id?: string;
   selected_page_id?: string;
   selected_page_name?: string;
   platform?: ProductVideoPlatform;
@@ -17,13 +22,18 @@ interface ProductVideoGenerateRequest {
   real_posting_enabled?: boolean;
   line_broadcast_enabled?: boolean;
   schedule_enabled?: boolean;
+  access_token?: unknown;
+  page_access_token?: unknown;
 }
 
 interface ProductVideoPayload {
   brand_context: string;
   target_page_key: string;
+  selected_channel_id: string;
   selected_page_id: string;
   selected_page_name: string;
+  external_id: string;
+  facebook_page_id: string;
   platform: ProductVideoPlatform;
   caption: string;
   preview_only: true;
@@ -38,13 +48,19 @@ function clean(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
-function buildPayload(body: ProductVideoGenerateRequest): ProductVideoPayload {
+async function buildPayload(body: ProductVideoGenerateRequest): Promise<ProductVideoPayload> {
+  const selectedPageSelector = clean(body.selected_channel_id) || clean(body.selected_page_id);
+  const selectedPage = await resolveProductVideoSelectedFacebookPage(selectedPageSelector);
+
   return {
     brand_context: clean(body.brand_context),
     target_page_key: clean(body.target_page_key),
-    selected_page_id: clean(body.selected_page_id),
-    selected_page_name: clean(body.selected_page_name),
-    platform: (clean(body.platform) || 'facebook_page') as ProductVideoPlatform,
+    selected_channel_id: selectedPage.selected_channel_id,
+    selected_page_id: selectedPage.selected_page_id,
+    selected_page_name: selectedPage.selected_page_name,
+    external_id: selectedPage.external_id,
+    facebook_page_id: selectedPage.facebook_page_id,
+    platform: 'facebook_page',
     caption: clean(body.caption),
     preview_only: true,
     real_posting_enabled: false,
@@ -58,8 +74,11 @@ function validatePayload(payload: ProductVideoPayload): string[] {
 
   if (!payload.brand_context) errors.push('brand_context_required');
   if (!payload.target_page_key) errors.push('target_page_key_required');
+  if (!payload.selected_channel_id) errors.push('selected_channel_id_required');
   if (!payload.selected_page_id) errors.push('selected_page_id_required');
   if (!payload.selected_page_name) errors.push('selected_page_name_required');
+  if (!payload.external_id) errors.push('external_id_required');
+  if (!payload.facebook_page_id) errors.push('facebook_page_id_required');
   if (!payload.platform) errors.push('platform_required');
   if (!payload.caption) errors.push('caption_required');
 
@@ -118,7 +137,14 @@ async function forwardToN8n(payload: ProductVideoPayload) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json() as ProductVideoGenerateRequest;
-    const payload = buildPayload(body);
+    if (body.access_token || body.page_access_token) {
+      return NextResponse.json(
+        { ok: false, error: 'request_body_token_rejected' },
+        { status: 400 },
+      );
+    }
+
+    const payload = await buildPayload(body);
     const validationErrors = validatePayload(payload);
 
     const guard = {
@@ -151,8 +177,11 @@ export async function POST(request: NextRequest) {
       ? await appendProductVideoPreviewLog({
         brand_context: payload.brand_context,
         target_page_key: payload.target_page_key,
+        selected_channel_id: payload.selected_channel_id,
         selected_page_id: payload.selected_page_id,
         selected_page_name: payload.selected_page_name,
+        external_id: payload.external_id,
+        facebook_page_id: payload.facebook_page_id,
         platform: payload.platform,
         caption: payload.caption,
         n8n_forwarded: n8n.forwarded,
@@ -173,15 +202,34 @@ export async function POST(request: NextRequest) {
       schedule_enabled: guard.schedule_enabled,
       preview_log_created: Boolean(previewLog),
       preview_log: previewLog,
+      selected_facebook_page: redactProductVideoFacebookPage({
+        selected_channel_id: payload.selected_channel_id,
+        selected_page_id: payload.selected_page_id,
+        selected_page_name: payload.selected_page_name,
+        external_id: payload.external_id,
+        facebook_page_id: payload.facebook_page_id,
+        provider: 'facebook',
+        status: 'active',
+        page_access_token: 'redacted-present',
+      }),
       guard,
       payload,
       n8n,
     });
   } catch (error) {
-    console.error('[product-video] generate wrapper failed', error);
+    const status = typeof (error as { status?: unknown }).status === 'number'
+      ? (error as { status: number }).status
+      : 500;
+    const code = typeof (error as { code?: unknown }).code === 'string'
+      ? (error as { code: string }).code
+      : 'Failed to prepare product video request';
+
+    if (status >= 500) {
+      console.error('[product-video] generate wrapper failed', error);
+    }
     return NextResponse.json(
-      { ok: false, error: 'Failed to prepare product video request' },
-      { status: 500 },
+      { ok: false, error: code },
+      { status },
     );
   }
 }

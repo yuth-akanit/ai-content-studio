@@ -26,8 +26,11 @@ export interface ProductVideoPreviewSafetyFlags {
 export interface ProductVideoPreviewLogInput {
   brand_context: string;
   target_page_key: string;
+  selected_channel_id: string;
   selected_page_id: string;
   selected_page_name: string;
+  external_id: string;
+  facebook_page_id: string;
   platform: ProductVideoPlatform;
   caption: string;
   n8n_forwarded: boolean;
@@ -182,8 +185,11 @@ export async function appendProductVideoPreviewLog(
     created_at: new Date().toISOString(),
     brand_context: input.brand_context,
     target_page_key: input.target_page_key,
+    selected_channel_id: input.selected_channel_id,
     selected_page_id: input.selected_page_id,
     selected_page_name: input.selected_page_name,
+    external_id: input.external_id,
+    facebook_page_id: input.facebook_page_id,
     platform: input.platform,
     caption: input.caption,
     preview_only: true,
