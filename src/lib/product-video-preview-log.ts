@@ -218,6 +218,16 @@ export async function listProductVideoPreviewLogs(): Promise<ProductVideoPreview
     .reverse();
 }
 
+export async function findProductVideoPreviewLogById(
+  previewId: string,
+): Promise<ProductVideoPreviewLogRecord | null> {
+  const cleanPreviewId = cleanText(previewId);
+  if (!cleanPreviewId) return null;
+
+  const items = await listProductVideoPreviewLogs();
+  return items.find((item) => item.preview_id === cleanPreviewId) || null;
+}
+
 export async function applyProductVideoPreviewDecision(input: {
   previewId: string;
   decision: ProductVideoApprovalDecision;

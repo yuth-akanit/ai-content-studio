@@ -29,6 +29,33 @@ type PreviewLogStatus =
 
 type PreviewDecision = 'approve' | 'reject' | 'request_changes';
 
+type PublishPlanPreview = {
+  plan_id: string;
+  publish_plan_status: 'publish_plan_ready';
+  target_page: {
+    page_id: string;
+    page_name: string;
+    page_key: string;
+    platform: string;
+  };
+  content: {
+    caption: string;
+    brand_context: string;
+  };
+  media: {
+    media_status: 'not_rendered';
+    media_url: null;
+  };
+  publish_allowed: false;
+  facebook_post_performed: false;
+  line_broadcast_performed: false;
+  schedule_enabled: false;
+  renderer_called: false;
+  phaya_called: false;
+  s3_upload_performed: false;
+  mark_posted_performed: false;
+};
+
 interface PreviewLogItem {
   preview_id: string;
   created_at: string;
@@ -114,6 +141,8 @@ export default function ProductVideoPage() {
   const [caption, setCaption] = useState(defaultCaption);
   const [submitting, setSubmitting] = useState(false);
   const [decidingPreviewId, setDecidingPreviewId] = useState<string | null>(null);
+  const [loadingPublishPlanId, setLoadingPublishPlanId] = useState<string | null>(null);
+  const [publishPlanPreviews, setPublishPlanPreviews] = useState<Record<string, PublishPlanPreview>>({});
   const [result, setResult] = useState<Record<string, unknown> | null>(null);
 
   const selectedPage = useMemo(
@@ -232,6 +261,11 @@ export default function ProductVideoPage() {
         throw new Error(data.error || 'บันทึก decision ไม่สำเร็จ');
       }
 
+      setPublishPlanPreviews((current) => {
+        const next = { ...current };
+        delete next[previewId];
+        return next;
+      });
       toast.success(getDecisionSuccessMessage(decision));
       await loadPreviewLogs();
     } catch (error) {
@@ -242,11 +276,37 @@ export default function ProductVideoPage() {
     }
   }
 
+  async function handlePublishPlanPreview(previewId: string) {
+    setLoadingPublishPlanId(previewId);
+    setResult(null);
+
+    try {
+      const response = await fetch(`/api/product-video/preview-logs/${encodeURIComponent(previewId)}/publish-plan`);
+      const data = await response.json();
+      setResult(data);
+
+      if (!response.ok || !data.ok || !data.publish_plan) {
+        throw new Error(data.error || 'สร้าง Publish Plan Preview ไม่สำเร็จ');
+      }
+
+      setPublishPlanPreviews((current) => ({
+        ...current,
+        [previewId]: data.publish_plan as PublishPlanPreview,
+      }));
+      toast.success('สร้าง Publish Plan Preview แบบ read-only แล้ว ยังไม่โพสต์จริง');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'สร้าง Publish Plan Preview ไม่สำเร็จ';
+      toast.error(message);
+    } finally {
+      setLoadingPublishPlanId(null);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="Product Video"
-        description="Phase 3B: ตรวจและบันทึก decision แบบ local-only เท่านั้น ยังไม่โพสต์จริง ไม่เปิด schedule และไม่เรียก provider ภายนอก"
+        description="Phase 3C: สร้าง Publish Plan Preview แบบ read-only/local-only จากรายการที่ approved_for_future_publish โดยยังไม่โพสต์จริง"
         actions={(
           <Badge variant="secondary" className="gap-1">
             <ShieldCheck className="h-3.5 w-3.5" />
@@ -345,10 +405,13 @@ export default function ProductVideoPage() {
             <div className="rounded-lg bg-blue-50 p-3 text-blue-800">schedule_enabled=false</div>
             <div className="rounded-lg bg-blue-50 p-3 text-blue-800">renderer_called=false · phaya_called=false · s3_upload_performed=false</div>
             <div className="rounded-lg border border-gray-200 p-3">
-              Decision ใน Owner Review Queue เป็น local approval เท่านั้น ไม่เผยแพร่จริงและไม่ mark posted
+              Decision ใน Owner Review Queue เป็น local approval เท่านั้น ไม่ใช่ permission ให้โพสต์จริง
             </div>
             <div className="rounded-lg border border-gray-200 p-3">
-              Client เรียกเฉพาะ <code>/api/product-video/generate</code> และ <code>/api/product-video/preview-logs/[previewId]/decision</code>
+              Publish Plan Preview แสดง target page / caption / media plan เท่านั้น และยังคง publish_allowed=false
+            </div>
+            <div className="rounded-lg border border-gray-200 p-3">
+              Client เรียกเฉพาะ <code>/api/product-video/generate</code>, <code>/decision</code> และ <code>/publish-plan</code>
             </div>
           </CardContent>
         </Card>
@@ -358,7 +421,7 @@ export default function ProductVideoPage() {
         <CardHeader className="flex flex-row items-center justify-between gap-3">
           <div>
             <CardTitle className="text-base">Owner Review Queue</CardTitle>
-            <p className="mt-1 text-xs text-gray-500">Local approval only: ปุ่มด้านล่างเปลี่ยน status และเขียน audit log เท่านั้น ไม่ publish จริง</p>
+            <p className="mt-1 text-xs text-gray-500">Local approval only: approved_for_future_publish สามารถดู Publish Plan Preview ได้ แต่ยังไม่ publish จริง</p>
           </div>
           <Button variant="outline" size="sm" onClick={() => loadPreviewLogs(true)} disabled={loadingLogs}>
             <RefreshCw className={`mr-2 h-4 w-4 ${loadingLogs ? 'animate-spin' : ''}`} />
@@ -433,7 +496,45 @@ export default function ProductVideoPage() {
                   >
                     Request changes
                   </Button>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => handlePublishPlanPreview(item.preview_id)}
+                    disabled={item.status !== 'approved_for_future_publish' || loadingPublishPlanId === item.preview_id}
+                    title={item.status === 'approved_for_future_publish' ? 'สร้าง publish plan preview แบบ read-only' : 'ต้อง approved_for_future_publish ก่อน'}
+                  >
+                    {loadingPublishPlanId === item.preview_id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                    Preview publish plan
+                  </Button>
                 </div>
+
+                {publishPlanPreviews[item.preview_id] ? (
+                  <div className="mt-4 space-y-3 rounded-xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-950">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="font-semibold">Publish Plan Preview</div>
+                      <Badge variant="secondary">publish_plan_ready</Badge>
+                    </div>
+                    <div className="grid gap-2 text-xs sm:grid-cols-2">
+                      <div>target page: <span className="font-medium">{publishPlanPreviews[item.preview_id].target_page.page_name}</span></div>
+                      <div>platform: <span className="font-medium">{publishPlanPreviews[item.preview_id].target_page.platform}</span></div>
+                      <div>media: <span className="font-medium">{publishPlanPreviews[item.preview_id].media.media_status}</span></div>
+                      <div>publish_allowed: <span className="font-medium">false</span></div>
+                    </div>
+                    <p className="whitespace-pre-wrap rounded-lg bg-white/70 p-3 text-xs text-blue-950">
+                      {publishPlanPreviews[item.preview_id].content.caption}
+                    </p>
+                    <div className="flex flex-wrap gap-2 text-xs">
+                      <Badge variant="secondary">read_only=true</Badge>
+                      <Badge variant="secondary">facebook_post_performed=false</Badge>
+                      <Badge variant="secondary">line_broadcast_performed=false</Badge>
+                      <Badge variant="secondary">schedule_enabled=false</Badge>
+                      <Badge variant="secondary">renderer_called=false</Badge>
+                      <Badge variant="secondary">phaya_called=false</Badge>
+                      <Badge variant="secondary">s3_upload_performed=false</Badge>
+                      <Badge variant="secondary">mark_posted_performed=false</Badge>
+                    </div>
+                  </div>
+                ) : null}
               </div>
             ))
           )}
