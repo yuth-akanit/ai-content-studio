@@ -32,6 +32,7 @@ type PreviewDecision = 'approve' | 'reject' | 'request_changes';
 type PublishPlanPreview = {
   plan_id: string;
   publish_plan_status: 'publish_plan_ready';
+  publish_plan_checksum: string;
   target_page: {
     page_id: string;
     page_name: string;
@@ -46,6 +47,22 @@ type PublishPlanPreview = {
     media_status: 'not_rendered';
     media_url: null;
   };
+  publish_allowed: false;
+  facebook_post_performed: false;
+  line_broadcast_performed: false;
+  schedule_enabled: false;
+  renderer_called: false;
+  phaya_called: false;
+  s3_upload_performed: false;
+  mark_posted_performed: false;
+};
+
+type PublishAuthorization = {
+  status: 'publish_authorized_for_manual_execution';
+  authorization_id: string;
+  idempotency_key: string;
+  target_page_key: string;
+  publish_plan_checksum: string;
   publish_allowed: false;
   facebook_post_performed: false;
   line_broadcast_performed: false;
@@ -142,7 +159,9 @@ export default function ProductVideoPage() {
   const [submitting, setSubmitting] = useState(false);
   const [decidingPreviewId, setDecidingPreviewId] = useState<string | null>(null);
   const [loadingPublishPlanId, setLoadingPublishPlanId] = useState<string | null>(null);
+  const [authorizingPreviewId, setAuthorizingPreviewId] = useState<string | null>(null);
   const [publishPlanPreviews, setPublishPlanPreviews] = useState<Record<string, PublishPlanPreview>>({});
+  const [publishAuthorizations, setPublishAuthorizations] = useState<Record<string, PublishAuthorization>>({});
   const [result, setResult] = useState<Record<string, unknown> | null>(null);
 
   const selectedPage = useMemo(
@@ -266,6 +285,11 @@ export default function ProductVideoPage() {
         delete next[previewId];
         return next;
       });
+      setPublishAuthorizations((current) => {
+        const next = { ...current };
+        delete next[previewId];
+        return next;
+      });
       toast.success(getDecisionSuccessMessage(decision));
       await loadPreviewLogs();
     } catch (error) {
@@ -302,11 +326,53 @@ export default function ProductVideoPage() {
     }
   }
 
+  async function handlePublishAuthorization(previewId: string) {
+    const plan = publishPlanPreviews[previewId];
+    if (!plan) {
+      toast.error('ต้องสร้าง Publish Plan Preview ก่อน');
+      return;
+    }
+
+    setAuthorizingPreviewId(previewId);
+    setResult(null);
+
+    try {
+      const idempotencyKey = `manual-publish-auth-${previewId}-${plan.publish_plan_checksum}`;
+      const response = await fetch(`/api/product-video/preview-logs/${encodeURIComponent(previewId)}/publish-authorization`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          target_page_key: plan.target_page.page_key,
+          publish_plan_checksum: plan.publish_plan_checksum,
+          idempotency_key: idempotencyKey,
+          reason: 'owner confirmed local-only manual publish authorization gate',
+        }),
+      });
+      const data = await response.json();
+      setResult(data);
+
+      if (!response.ok || !data.ok || !data.authorization) {
+        throw new Error(data.error || 'บันทึก Publish Authorization ไม่สำเร็จ');
+      }
+
+      setPublishAuthorizations((current) => ({
+        ...current,
+        [previewId]: data.authorization as PublishAuthorization,
+      }));
+      toast.success('บันทึก Publish Authorization แบบ audit-only แล้ว ยังไม่โพสต์จริง');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'บันทึก Publish Authorization ไม่สำเร็จ';
+      toast.error(message);
+    } finally {
+      setAuthorizingPreviewId(null);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="Product Video"
-        description="Phase 3C: สร้าง Publish Plan Preview แบบ read-only/local-only จากรายการที่ approved_for_future_publish โดยยังไม่โพสต์จริง"
+        description="Phase 3D: Final Publish Authorization Gate แบบ local-only/audit-only หลัง publish_plan_ready โดยยังไม่โพสต์จริง"
         actions={(
           <Badge variant="secondary" className="gap-1">
             <ShieldCheck className="h-3.5 w-3.5" />
@@ -411,7 +477,10 @@ export default function ProductVideoPage() {
               Publish Plan Preview แสดง target page / caption / media plan เท่านั้น และยังคง publish_allowed=false
             </div>
             <div className="rounded-lg border border-gray-200 p-3">
-              Client เรียกเฉพาะ <code>/api/product-video/generate</code>, <code>/decision</code> และ <code>/publish-plan</code>
+              Publish Authorization เป็น local audit เท่านั้น ใช้ยืนยัน manual execution gate แต่ยังคง real_posting_enabled=false
+            </div>
+            <div className="rounded-lg border border-gray-200 p-3">
+              Client เรียกเฉพาะ <code>/api/product-video/generate</code>, <code>/decision</code>, <code>/publish-plan</code> และ <code>/publish-authorization</code>
             </div>
           </CardContent>
         </Card>
@@ -421,7 +490,7 @@ export default function ProductVideoPage() {
         <CardHeader className="flex flex-row items-center justify-between gap-3">
           <div>
             <CardTitle className="text-base">Owner Review Queue</CardTitle>
-            <p className="mt-1 text-xs text-gray-500">Local approval only: approved_for_future_publish สามารถดู Publish Plan Preview ได้ แต่ยังไม่ publish จริง</p>
+            <p className="mt-1 text-xs text-gray-500">Local only: approved_for_future_publish → publish_plan_ready → publish_authorized_for_manual_execution แต่ยังไม่ publish จริง</p>
           </div>
           <Button variant="outline" size="sm" onClick={() => loadPreviewLogs(true)} disabled={loadingLogs}>
             <RefreshCw className={`mr-2 h-4 w-4 ${loadingLogs ? 'animate-spin' : ''}`} />
@@ -519,6 +588,7 @@ export default function ProductVideoPage() {
                       <div>platform: <span className="font-medium">{publishPlanPreviews[item.preview_id].target_page.platform}</span></div>
                       <div>media: <span className="font-medium">{publishPlanPreviews[item.preview_id].media.media_status}</span></div>
                       <div>publish_allowed: <span className="font-medium">false</span></div>
+                      <div className="sm:col-span-2">checksum: <span className="font-mono text-[11px]">{publishPlanPreviews[item.preview_id].publish_plan_checksum}</span></div>
                     </div>
                     <p className="whitespace-pre-wrap rounded-lg bg-white/70 p-3 text-xs text-blue-950">
                       {publishPlanPreviews[item.preview_id].content.caption}
@@ -533,6 +603,30 @@ export default function ProductVideoPage() {
                       <Badge variant="secondary">s3_upload_performed=false</Badge>
                       <Badge variant="secondary">mark_posted_performed=false</Badge>
                     </div>
+                    <Button
+                      size="sm"
+                      onClick={() => handlePublishAuthorization(item.preview_id)}
+                      disabled={authorizingPreviewId === item.preview_id}
+                    >
+                      {authorizingPreviewId === item.preview_id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                      Authorize publish manually
+                    </Button>
+                  </div>
+                ) : null}
+
+                {publishAuthorizations[item.preview_id] ? (
+                  <div className="mt-4 space-y-2 rounded-xl border border-amber-100 bg-amber-50 p-4 text-sm text-amber-950">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="font-semibold">Final Publish Authorization Gate</div>
+                      <Badge variant="secondary">publish_authorized_for_manual_execution</Badge>
+                    </div>
+                    <div className="grid gap-2 text-xs sm:grid-cols-2">
+                      <div>target_page_key: <span className="font-medium">{publishAuthorizations[item.preview_id].target_page_key}</span></div>
+                      <div>publish_allowed: <span className="font-medium">false</span></div>
+                      <div>facebook_post_performed: <span className="font-medium">false</span></div>
+                      <div>idempotency_key: <span className="font-mono text-[11px]">{publishAuthorizations[item.preview_id].idempotency_key}</span></div>
+                    </div>
+                    <p className="text-xs">Audit-only authorization created. Real publish ยังต้องทำใน Phase 4 แบบ one-shot guarded execution เท่านั้น</p>
                   </div>
                 ) : null}
               </div>

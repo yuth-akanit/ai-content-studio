@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import {
   PRODUCT_VIDEO_PREVIEW_SAFETY_FLAGS,
   ProductVideoPreviewLogRecord,
@@ -40,7 +41,37 @@ export interface ProductVideoPublishPlanPreview extends ProductVideoPreviewSafet
     s3_upload_allowed: false;
     mark_posted_allowed: false;
   };
+  publish_plan_checksum: string;
   generated_at: string;
+}
+
+export function buildProductVideoPublishPlanChecksum(
+  item: ProductVideoPreviewLogRecord,
+): string {
+  const checksumPayload = {
+    preview_id: item.preview_id,
+    source_status: item.status,
+    target_page: {
+      page_id: item.selected_page_id,
+      page_name: item.selected_page_name,
+      page_key: item.target_page_key,
+      platform: item.platform,
+    },
+    content: {
+      caption: item.caption,
+      brand_context: item.brand_context,
+    },
+    media: {
+      media_kind: 'product_video_preview',
+      media_status: 'not_rendered',
+      media_url: null,
+    },
+    safety_flags: PRODUCT_VIDEO_PREVIEW_SAFETY_FLAGS,
+  };
+
+  return createHash('sha256')
+    .update(JSON.stringify(checksumPayload))
+    .digest('hex');
 }
 
 export function buildProductVideoPublishPlanPreview(
@@ -52,6 +83,8 @@ export function buildProductVideoPublishPlanPreview(
       status: 409,
     });
   }
+
+  const publishPlanChecksum = buildProductVideoPublishPlanChecksum(item);
 
   return {
     plan_id: `publish-plan-preview-${item.preview_id}`,
@@ -87,6 +120,7 @@ export function buildProductVideoPublishPlanPreview(
       s3_upload_allowed: false,
       mark_posted_allowed: false,
     },
+    publish_plan_checksum: publishPlanChecksum,
     generated_at: new Date().toISOString(),
     ...PRODUCT_VIDEO_PREVIEW_SAFETY_FLAGS,
   };
