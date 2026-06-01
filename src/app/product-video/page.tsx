@@ -44,8 +44,11 @@ type PublishPlanPreview = {
     brand_context: string;
   };
   media: {
-    media_status: 'not_rendered';
-    media_url: null;
+    media_status: 'not_rendered' | 'ready';
+    media_type: 'video' | 'image' | null;
+    media_url: string | null;
+    public_media_url: string | null;
+    media_checksum: string | null;
   };
   publish_allowed: false;
   facebook_post_performed: false;
@@ -74,8 +77,8 @@ type PublishAuthorization = {
 };
 
 type PublishExecutionDryRun = {
-  status: 'publish_execution_blocked';
-  block_reason: 'media_not_rendered';
+  status: 'publish_execution_blocked' | 'publish_execution_ready_dry_run';
+  block_reason: 'media_not_rendered' | null;
   safe_to_audit: true;
   idempotency_key: string;
   target_page_key: string;
@@ -177,6 +180,7 @@ export default function ProductVideoPage() {
   const [decidingPreviewId, setDecidingPreviewId] = useState<string | null>(null);
   const [loadingPublishPlanId, setLoadingPublishPlanId] = useState<string | null>(null);
   const [authorizingPreviewId, setAuthorizingPreviewId] = useState<string | null>(null);
+  const [settingMediaPreviewId, setSettingMediaPreviewId] = useState<string | null>(null);
   const [dryRunningExecutionPreviewId, setDryRunningExecutionPreviewId] = useState<string | null>(null);
   const [publishPlanPreviews, setPublishPlanPreviews] = useState<Record<string, PublishPlanPreview>>({});
   const [publishAuthorizations, setPublishAuthorizations] = useState<Record<string, PublishAuthorization>>({});
@@ -392,6 +396,52 @@ export default function ProductVideoPage() {
     }
   }
 
+  async function handleMockMediaReady(previewId: string) {
+    setSettingMediaPreviewId(previewId);
+    setResult(null);
+
+    try {
+      const response = await fetch(`/api/product-video/preview-logs/${encodeURIComponent(previewId)}/media-metadata`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          preview_id: previewId,
+          media_type: 'video',
+          public_media_url: `https://admin.paaair.online/media/product-video/${previewId}.mp4`,
+          media_checksum: `mock-${previewId}`,
+        }),
+      });
+      const data = await response.json();
+      setResult(data);
+
+      if (!response.ok || !data.ok || !data.metadata) {
+        throw new Error(data.error || 'ตั้งค่า mock media metadata ไม่สำเร็จ');
+      }
+
+      setPublishPlanPreviews((current) => {
+        const next = { ...current };
+        delete next[previewId];
+        return next;
+      });
+      setPublishAuthorizations((current) => {
+        const next = { ...current };
+        delete next[previewId];
+        return next;
+      });
+      setPublishExecutionDryRuns((current) => {
+        const next = { ...current };
+        delete next[previewId];
+        return next;
+      });
+      toast.success('ตั้งค่า mock media-ready metadata แล้ว กรุณาสร้าง Publish Plan ใหม่');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'ตั้งค่า mock media metadata ไม่สำเร็จ';
+      toast.error(message);
+    } finally {
+      setSettingMediaPreviewId(null);
+    }
+  }
+
   async function handlePublishExecutionDryRun(previewId: string) {
     const authorization = publishAuthorizations[previewId];
     if (!authorization) {
@@ -436,7 +486,7 @@ export default function ProductVideoPage() {
     <div className="space-y-6">
       <PageHeader
         title="Product Video"
-        description="Phase 4A: One-shot Guarded Publish Executor Dry-run แบบ local-only/audit-only และ block ก่อน publish จริง"
+        description="Phase 4B: Mock Media-Ready Gate แบบ local-only ทำให้ dry-run executor ผ่าน media gate โดยยังไม่โพสต์จริง"
         actions={(
           <Badge variant="secondary" className="gap-1">
             <ShieldCheck className="h-3.5 w-3.5" />
@@ -544,10 +594,10 @@ export default function ProductVideoPage() {
               Publish Authorization เป็น local audit เท่านั้น ใช้ยืนยัน manual execution gate แต่ยังคง real_posting_enabled=false
             </div>
             <div className="rounded-lg border border-gray-200 p-3">
-              Publish Executor Dry-run ตรวจ authorization + checksum + idempotency แล้ว block ถ้า media_status=not_rendered
+              Publish Executor Dry-run ตรวจ authorization + checksum + idempotency แล้วผ่าน media gate ได้เมื่อ media_status=ready จาก mock metadata
             </div>
             <div className="rounded-lg border border-gray-200 p-3">
-              Client เรียกเฉพาะ <code>/api/product-video/generate</code>, <code>/decision</code>, <code>/publish-plan</code>, <code>/publish-authorization</code> และ <code>/publish-execution-dry-run</code>
+              Client เรียกเฉพาะ <code>/api/product-video/generate</code>, <code>/decision</code>, <code>/media-metadata</code>, <code>/publish-plan</code>, <code>/publish-authorization</code> และ <code>/publish-execution-dry-run</code>
             </div>
           </CardContent>
         </Card>
@@ -557,7 +607,7 @@ export default function ProductVideoPage() {
         <CardHeader className="flex flex-row items-center justify-between gap-3">
           <div>
             <CardTitle className="text-base">Owner Review Queue</CardTitle>
-            <p className="mt-1 text-xs text-gray-500">Local only: approved_for_future_publish → publish_plan_ready → publish_authorized_for_manual_execution → publish_execution_blocked</p>
+            <p className="mt-1 text-xs text-gray-500">Local only: approved_for_future_publish → mock media ready → publish_plan_ready → publish_authorized_for_manual_execution → publish_execution_ready_dry_run</p>
           </div>
           <Button variant="outline" size="sm" onClick={() => loadPreviewLogs(true)} disabled={loadingLogs}>
             <RefreshCw className={`mr-2 h-4 w-4 ${loadingLogs ? 'animate-spin' : ''}`} />
@@ -634,6 +684,16 @@ export default function ProductVideoPage() {
                   </Button>
                   <Button
                     size="sm"
+                    variant="outline"
+                    onClick={() => handleMockMediaReady(item.preview_id)}
+                    disabled={item.status !== 'approved_for_future_publish' || settingMediaPreviewId === item.preview_id}
+                    title={item.status === 'approved_for_future_publish' ? 'ตั้งค่า mock media-ready metadata แบบ local-only' : 'ต้อง approved_for_future_publish ก่อน'}
+                  >
+                    {settingMediaPreviewId === item.preview_id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                    Set mock media ready
+                  </Button>
+                  <Button
+                    size="sm"
                     variant="secondary"
                     onClick={() => handlePublishPlanPreview(item.preview_id)}
                     disabled={item.status !== 'approved_for_future_publish' || loadingPublishPlanId === item.preview_id}
@@ -654,6 +714,7 @@ export default function ProductVideoPage() {
                       <div>target page: <span className="font-medium">{publishPlanPreviews[item.preview_id].target_page.page_name}</span></div>
                       <div>platform: <span className="font-medium">{publishPlanPreviews[item.preview_id].target_page.platform}</span></div>
                       <div>media: <span className="font-medium">{publishPlanPreviews[item.preview_id].media.media_status}</span></div>
+                      <div>media_type: <span className="font-medium">{publishPlanPreviews[item.preview_id].media.media_type || '-'}</span></div>
                       <div>publish_allowed: <span className="font-medium">false</span></div>
                       <div className="sm:col-span-2">checksum: <span className="font-mono text-[11px]">{publishPlanPreviews[item.preview_id].publish_plan_checksum}</span></div>
                     </div>
@@ -709,10 +770,10 @@ export default function ProductVideoPage() {
                   <div className="mt-4 space-y-2 rounded-xl border border-red-100 bg-red-50 p-4 text-sm text-red-950">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="font-semibold">Guarded Publish Executor Dry-run</div>
-                      <Badge variant="secondary">publish_execution_blocked</Badge>
+                      <Badge variant="secondary">{publishExecutionDryRuns[item.preview_id].status}</Badge>
                     </div>
                     <div className="grid gap-2 text-xs sm:grid-cols-2">
-                      <div>block_reason: <span className="font-medium">{publishExecutionDryRuns[item.preview_id].block_reason}</span></div>
+                      <div>block_reason: <span className="font-medium">{publishExecutionDryRuns[item.preview_id].block_reason || 'none'}</span></div>
                       <div>safe_to_audit: <span className="font-medium">true</span></div>
                       <div>publish_allowed: <span className="font-medium">false</span></div>
                       <div>facebook_post_performed: <span className="font-medium">false</span></div>

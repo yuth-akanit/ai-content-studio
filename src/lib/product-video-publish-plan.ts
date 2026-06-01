@@ -4,8 +4,33 @@ import {
   ProductVideoPreviewLogRecord,
   ProductVideoPreviewSafetyFlags,
 } from '@/lib/product-video-preview-log';
+import {
+  ProductVideoMediaMetadataRecord,
+  findLatestProductVideoMediaMetadata,
+} from '@/lib/product-video-media-metadata';
 
 export type ProductVideoPublishPlanStatus = 'publish_plan_ready';
+export type ProductVideoPublishPlanMedia =
+  | {
+      media_kind: 'product_video_preview';
+      media_status: 'not_rendered';
+      media_type: null;
+      media_url: null;
+      public_media_url: null;
+      media_checksum: null;
+      source: null;
+      renderer_required_before_real_publish: true;
+    }
+  | {
+      media_kind: 'product_video_preview';
+      media_status: 'ready';
+      media_type: 'video' | 'image';
+      media_url: string;
+      public_media_url: string;
+      media_checksum: string;
+      source: 'mock_metadata_only';
+      renderer_required_before_real_publish: false;
+    };
 
 export interface ProductVideoPublishPlanPreview extends ProductVideoPreviewSafetyFlags {
   plan_id: string;
@@ -24,12 +49,7 @@ export interface ProductVideoPublishPlanPreview extends ProductVideoPreviewSafet
     caption: string;
     brand_context: string;
   };
-  media: {
-    media_kind: 'product_video_preview';
-    media_status: 'not_rendered';
-    media_url: null;
-    renderer_required_before_real_publish: true;
-  };
+  media: ProductVideoPublishPlanMedia;
   safety_summary: {
     approval_decision_is_publish_permission: false;
     real_publish_blocked: true;
@@ -45,9 +65,37 @@ export interface ProductVideoPublishPlanPreview extends ProductVideoPreviewSafet
   generated_at: string;
 }
 
+function buildPlanMedia(metadata: ProductVideoMediaMetadataRecord | null): ProductVideoPublishPlanMedia {
+  if (!metadata) {
+    return {
+      media_kind: 'product_video_preview',
+      media_status: 'not_rendered',
+      media_type: null,
+      media_url: null,
+      public_media_url: null,
+      media_checksum: null,
+      source: null,
+      renderer_required_before_real_publish: true,
+    };
+  }
+
+  return {
+    media_kind: 'product_video_preview',
+    media_status: 'ready',
+    media_type: metadata.media_type,
+    media_url: metadata.public_media_url,
+    public_media_url: metadata.public_media_url,
+    media_checksum: metadata.media_checksum,
+    source: metadata.source,
+    renderer_required_before_real_publish: false,
+  };
+}
+
 export function buildProductVideoPublishPlanChecksum(
   item: ProductVideoPreviewLogRecord,
+  metadata: ProductVideoMediaMetadataRecord | null = null,
 ): string {
+  const media = buildPlanMedia(metadata);
   const checksumPayload = {
     preview_id: item.preview_id,
     source_status: item.status,
@@ -62,9 +110,13 @@ export function buildProductVideoPublishPlanChecksum(
       brand_context: item.brand_context,
     },
     media: {
-      media_kind: 'product_video_preview',
-      media_status: 'not_rendered',
-      media_url: null,
+      media_kind: media.media_kind,
+      media_status: media.media_status,
+      media_type: media.media_type,
+      media_url: media.media_url,
+      public_media_url: media.public_media_url,
+      media_checksum: media.media_checksum,
+      source: media.source,
     },
     safety_flags: PRODUCT_VIDEO_PREVIEW_SAFETY_FLAGS,
   };
@@ -74,9 +126,9 @@ export function buildProductVideoPublishPlanChecksum(
     .digest('hex');
 }
 
-export function buildProductVideoPublishPlanPreview(
+export async function buildProductVideoPublishPlanPreview(
   item: ProductVideoPreviewLogRecord,
-): ProductVideoPublishPlanPreview {
+): Promise<ProductVideoPublishPlanPreview> {
   if (item.status !== 'approved_for_future_publish') {
     throw Object.assign(new Error('preview_log_not_approved_for_publish_plan'), {
       code: 'preview_log_not_approved_for_publish_plan',
@@ -84,7 +136,9 @@ export function buildProductVideoPublishPlanPreview(
     });
   }
 
-  const publishPlanChecksum = buildProductVideoPublishPlanChecksum(item);
+  const metadata = await findLatestProductVideoMediaMetadata(item.preview_id);
+  const media = buildPlanMedia(metadata);
+  const publishPlanChecksum = buildProductVideoPublishPlanChecksum(item, metadata);
 
   return {
     plan_id: `publish-plan-preview-${item.preview_id}`,
@@ -103,12 +157,7 @@ export function buildProductVideoPublishPlanPreview(
       caption: item.caption,
       brand_context: item.brand_context,
     },
-    media: {
-      media_kind: 'product_video_preview',
-      media_status: 'not_rendered',
-      media_url: null,
-      renderer_required_before_real_publish: true,
-    },
+    media,
     safety_summary: {
       approval_decision_is_publish_permission: false,
       real_publish_blocked: true,

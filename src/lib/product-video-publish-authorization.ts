@@ -26,7 +26,7 @@ export interface ProductVideoPublishAuthorizationRecord extends ProductVideoPrev
   target_page_name: string;
   publish_plan_checksum: string;
   publish_plan_status: 'publish_plan_ready';
-  media_status: 'not_rendered';
+  media_status: 'not_rendered' | 'ready';
   reason: string | null;
   authorized_at: string;
 }
@@ -104,7 +104,7 @@ export async function authorizeProductVideoPublishPlan(input: {
     throw Object.assign(new Error('idempotency_key_required'), { code: 'idempotency_key_required', status: 400 });
   }
 
-  const publishPlan = buildProductVideoPublishPlanPreview(input.item);
+  const publishPlan = await buildProductVideoPublishPlanPreview(input.item);
 
   if (targetPageKey !== publishPlan.target_page.page_key) {
     throw Object.assign(new Error('target_page_key_mismatch'), { code: 'target_page_key_mismatch', status: 409 });
@@ -112,10 +112,6 @@ export async function authorizeProductVideoPublishPlan(input: {
   if (publishPlanChecksum !== publishPlan.publish_plan_checksum) {
     throw Object.assign(new Error('publish_plan_checksum_mismatch'), { code: 'publish_plan_checksum_mismatch', status: 409 });
   }
-  if (publishPlan.media.media_status !== 'not_rendered') {
-    throw Object.assign(new Error('unexpected_media_status'), { code: 'unexpected_media_status', status: 409 });
-  }
-
   const existing = (await listProductVideoPublishAuthorizations()).find(
     (record) => record.preview_id === input.item.preview_id && record.idempotency_key === idempotencyKey,
   );

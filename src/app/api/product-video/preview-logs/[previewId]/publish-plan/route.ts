@@ -42,7 +42,7 @@ export async function GET(
       );
     }
 
-    const publishPlan = buildProductVideoPublishPlanPreview(item);
+    const publishPlan = await buildProductVideoPublishPlanPreview(item);
     return NextResponse.json({
       ok: true,
       local_only: true,
