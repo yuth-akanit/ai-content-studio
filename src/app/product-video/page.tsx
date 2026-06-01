@@ -21,9 +21,18 @@ interface SocialPage {
   } | null;
 }
 
+type PreviewLogStatus =
+  | 'pending_owner_review'
+  | 'approved_for_future_publish'
+  | 'rejected'
+  | 'changes_requested';
+
+type PreviewDecision = 'approve' | 'reject' | 'request_changes';
+
 interface PreviewLogItem {
   preview_id: string;
   created_at: string;
+  updated_at?: string;
   brand_context: string;
   target_page_key: string;
   selected_page_id: string;
@@ -37,9 +46,14 @@ interface PreviewLogItem {
   n8n_forwarded: boolean;
   n8n_status: number | null;
   response_body_exposed: false;
-  status: 'pending_owner_review';
+  status: PreviewLogStatus;
   publish_allowed: false;
   facebook_post_performed: false;
+  line_broadcast_performed: false;
+  renderer_called: false;
+  phaya_called: false;
+  s3_upload_performed: false;
+  mark_posted_performed: false;
 }
 
 type BrandContext = 'syncflow' | 'paa_air';
@@ -64,6 +78,31 @@ function formatDate(value: string): string {
   }
 }
 
+function getStatusLabel(status: PreviewLogStatus): string {
+  switch (status) {
+    case 'approved_for_future_publish':
+      return 'อนุมัติไว้สำหรับเผยแพร่ภายหลัง';
+    case 'rejected':
+      return 'ปฏิเสธแล้ว';
+    case 'changes_requested':
+      return 'ขอแก้ไข';
+    case 'pending_owner_review':
+    default:
+      return 'รอตรวจ owner';
+  }
+}
+
+function getDecisionSuccessMessage(decision: PreviewDecision): string {
+  switch (decision) {
+    case 'approve':
+      return 'อนุมัติแบบ local แล้ว ยังไม่เผยแพร่จริง';
+    case 'reject':
+      return 'ปฏิเสธแบบ local แล้ว';
+    case 'request_changes':
+      return 'บันทึกคำขอแก้ไขแบบ local แล้ว';
+  }
+}
+
 export default function ProductVideoPage() {
   const [pages, setPages] = useState<SocialPage[]>([]);
   const [previewLogs, setPreviewLogs] = useState<PreviewLogItem[]>([]);
@@ -74,6 +113,7 @@ export default function ProductVideoPage() {
   const [targetPageKey, setTargetPageKey] = useState<TargetPageKey>('paa_air');
   const [caption, setCaption] = useState(defaultCaption);
   const [submitting, setSubmitting] = useState(false);
+  const [decidingPreviewId, setDecidingPreviewId] = useState<string | null>(null);
   const [result, setResult] = useState<Record<string, unknown> | null>(null);
 
   const selectedPage = useMemo(
@@ -175,11 +215,38 @@ export default function ProductVideoPage() {
     }
   }
 
+  async function handlePreviewDecision(previewId: string, decision: PreviewDecision) {
+    setDecidingPreviewId(previewId);
+    setResult(null);
+
+    try {
+      const response = await fetch(`/api/product-video/preview-logs/${encodeURIComponent(previewId)}/decision`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ decision }),
+      });
+      const data = await response.json();
+      setResult(data);
+
+      if (!response.ok || !data.ok) {
+        throw new Error(data.error || 'บันทึก decision ไม่สำเร็จ');
+      }
+
+      toast.success(getDecisionSuccessMessage(decision));
+      await loadPreviewLogs();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'บันทึก decision ไม่สำเร็จ';
+      toast.error(message);
+    } finally {
+      setDecidingPreviewId(null);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="Product Video"
-        description="Phase 3A: ส่ง preview-only ไป n8n แล้วบันทึกคิว owner review โดยยังไม่เปิดโพสต์จริง"
+        description="Phase 3B: ตรวจและบันทึก decision แบบ local-only เท่านั้น ยังไม่โพสต์จริง ไม่เปิด schedule และไม่เรียก provider ภายนอก"
         actions={(
           <Badge variant="secondary" className="gap-1">
             <ShieldCheck className="h-3.5 w-3.5" />
@@ -272,11 +339,16 @@ export default function ProductVideoPage() {
           </CardHeader>
           <CardContent className="space-y-3 text-sm text-gray-600">
             <div className="rounded-lg bg-green-50 p-3 text-green-800">preview_only=true</div>
+            <div className="rounded-lg bg-blue-50 p-3 text-blue-800">publish_allowed=false</div>
             <div className="rounded-lg bg-blue-50 p-3 text-blue-800">real_posting_enabled=false</div>
             <div className="rounded-lg bg-blue-50 p-3 text-blue-800">line_broadcast_enabled=false</div>
             <div className="rounded-lg bg-blue-50 p-3 text-blue-800">schedule_enabled=false</div>
+            <div className="rounded-lg bg-blue-50 p-3 text-blue-800">renderer_called=false · phaya_called=false · s3_upload_performed=false</div>
             <div className="rounded-lg border border-gray-200 p-3">
-              Client เรียกเฉพาะ <code>/api/product-video/generate</code> ไม่เรียก n8n โดยตรง
+              Decision ใน Owner Review Queue เป็น local approval เท่านั้น ไม่เผยแพร่จริงและไม่ mark posted
+            </div>
+            <div className="rounded-lg border border-gray-200 p-3">
+              Client เรียกเฉพาะ <code>/api/product-video/generate</code> และ <code>/api/product-video/preview-logs/[previewId]/decision</code>
             </div>
           </CardContent>
         </Card>
@@ -284,7 +356,10 @@ export default function ProductVideoPage() {
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-3">
-          <CardTitle className="text-base">Owner Review Queue</CardTitle>
+          <div>
+            <CardTitle className="text-base">Owner Review Queue</CardTitle>
+            <p className="mt-1 text-xs text-gray-500">Local approval only: ปุ่มด้านล่างเปลี่ยน status และเขียน audit log เท่านั้น ไม่ publish จริง</p>
+          </div>
           <Button variant="outline" size="sm" onClick={() => loadPreviewLogs(true)} disabled={loadingLogs}>
             <RefreshCw className={`mr-2 h-4 w-4 ${loadingLogs ? 'animate-spin' : ''}`} />
             รีเฟรช
@@ -308,13 +383,14 @@ export default function ProductVideoPage() {
                     <div className="text-sm font-semibold text-gray-900">{item.selected_page_name}</div>
                     <div className="text-xs text-gray-500">{formatDate(item.created_at)} · {item.preview_id}</div>
                   </div>
-                  <Badge variant="outline">รอตรวจ owner</Badge>
+                  <Badge variant="outline">{getStatusLabel(item.status)}</Badge>
                 </div>
 
                 <div className="mt-3 grid gap-2 text-xs text-gray-600 sm:grid-cols-2">
                   <div>brand_context: <span className="font-medium text-gray-900">{item.brand_context}</span></div>
                   <div>target_page_key: <span className="font-medium text-gray-900">{item.target_page_key}</span></div>
                   <div>platform: <span className="font-medium text-gray-900">{item.platform}</span></div>
+                  <div>status: <span className="font-medium text-gray-900">{item.status}</span></div>
                   <div>n8n_status: <span className="font-medium text-gray-900">{item.n8n_status}</span></div>
                 </div>
 
@@ -324,11 +400,39 @@ export default function ProductVideoPage() {
                   <Badge variant="secondary">preview_only=true</Badge>
                   <Badge variant="secondary">publish_allowed=false</Badge>
                   <Badge variant="secondary">facebook_post_performed=false</Badge>
+                  <Badge variant="secondary">line_broadcast_performed=false</Badge>
+                  <Badge variant="secondary">schedule_enabled=false</Badge>
+                  <Badge variant="secondary">renderer_called=false</Badge>
+                  <Badge variant="secondary">phaya_called=false</Badge>
+                  <Badge variant="secondary">s3_upload_performed=false</Badge>
+                  <Badge variant="secondary">mark_posted_performed=false</Badge>
                 </div>
 
                 <div className="mt-4 flex flex-wrap gap-2">
-                  <Button size="sm" disabled>Approve — coming soon / design only</Button>
-                  <Button size="sm" variant="outline" disabled>Reject — coming soon / design only</Button>
+                  <Button
+                    size="sm"
+                    onClick={() => handlePreviewDecision(item.preview_id, 'approve')}
+                    disabled={decidingPreviewId === item.preview_id}
+                  >
+                    {decidingPreviewId === item.preview_id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                    Approve for future publish
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handlePreviewDecision(item.preview_id, 'reject')}
+                    disabled={decidingPreviewId === item.preview_id}
+                  >
+                    Reject
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handlePreviewDecision(item.preview_id, 'request_changes')}
+                    disabled={decidingPreviewId === item.preview_id}
+                  >
+                    Request changes
+                  </Button>
                 </div>
               </div>
             ))

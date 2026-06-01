@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import {
+  PRODUCT_VIDEO_PREVIEW_SAFETY_FLAGS,
+  getProductVideoApprovalDecisionLogPathForDiagnostics,
   getProductVideoPreviewLogPathForDiagnostics,
   listProductVideoPreviewLogs,
 } from '@/lib/product-video-preview-log';
@@ -13,9 +15,12 @@ export async function GET() {
       ok: true,
       count: items.length,
       items,
+      local_approval_only: true,
+      ...PRODUCT_VIDEO_PREVIEW_SAFETY_FLAGS,
       storage: {
         type: 'jsonl',
         path: getProductVideoPreviewLogPathForDiagnostics(),
+        decision_audit_log_path: getProductVideoApprovalDecisionLogPathForDiagnostics(),
       },
     });
   } catch (error) {
