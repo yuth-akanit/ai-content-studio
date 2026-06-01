@@ -73,6 +73,7 @@ export async function POST(
       idempotencyKey: cleanText(body.idempotency_key),
       manualExecute: body.manual_execute,
       requestScopedRealPublishApproval: body.request_scoped_real_publish_approval,
+      selectedPageIdOrChannelId: cleanText(body.selected_channel_id) || cleanText(body.selected_page_id),
     });
 
     return NextResponse.json({

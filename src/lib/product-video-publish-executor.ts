@@ -565,6 +565,7 @@ export async function executeProductVideoManualPublish(input: {
   idempotencyKey: string;
   manualExecute?: unknown;
   requestScopedRealPublishApproval?: unknown;
+  selectedPageIdOrChannelId?: string;
 }): Promise<{
   execution: ProductVideoManualPublishExecutionAudit;
   execution_plan: ProductVideoPublishExecutionPlan;
@@ -611,10 +612,15 @@ export async function executeProductVideoManualPublish(input: {
     });
   }
 
-  const selectedPage = await resolveProductVideoSelectedFacebookPage(
-    input.item.selected_channel_id || input.item.selected_page_id || publishPlan.target_page.page_id,
-  );
-  if (selectedPage.facebook_page_id !== publishPlan.target_page.page_id) {
+  const selectedPageSelector = cleanText(input.selectedPageIdOrChannelId)
+    || input.item.selected_channel_id
+    || input.item.selected_page_id
+    || input.item.facebook_page_id
+    || input.item.external_id
+    || publishPlan.target_page.page_id;
+  const selectedPage = await resolveProductVideoSelectedFacebookPage(selectedPageSelector);
+  const expectedFacebookPageId = cleanText(input.item.facebook_page_id || input.item.external_id);
+  if (expectedFacebookPageId && selectedPage.facebook_page_id !== expectedFacebookPageId) {
     throw Object.assign(new Error('selected_facebook_page_mismatch'), {
       code: 'selected_facebook_page_mismatch',
       status: 409,
@@ -630,6 +636,11 @@ export async function executeProductVideoManualPublish(input: {
 
   const executionPlan = buildExecutionPlan(input.item, publishPlan);
   executionPlan.execution_mode = 'manual_publish';
+  executionPlan.would_publish_to.selected_channel_id = selectedPage.selected_channel_id;
+  executionPlan.would_publish_to.external_id = selectedPage.external_id;
+  executionPlan.would_publish_to.facebook_page_id = selectedPage.facebook_page_id;
+  executionPlan.would_publish_to.target_page_id = selectedPage.facebook_page_id;
+  executionPlan.would_publish_to.target_page_name = selectedPage.selected_page_name;
 
   const manualExecute = isTruthy(input.manualExecute);
   const requestScopedRealPublishApproval = isTruthy(input.requestScopedRealPublishApproval);

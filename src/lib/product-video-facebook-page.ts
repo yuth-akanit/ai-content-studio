@@ -42,6 +42,10 @@ function assertSafeSelector(selector: string): void {
   }
 }
 
+function isUuidSelector(selector: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(selector);
+}
+
 function normalizeFacebookPage(row: InboxChannelRow | null): ProductVideoSelectedFacebookPage {
   const id = cleanText(row?.id);
   const name = cleanText(row?.name);
@@ -102,20 +106,22 @@ export async function resolveProductVideoSelectedFacebookPage(
   const supabase = getSupabaseServerClient();
   const selectColumns = 'id,name,provider,external_id,status,meta';
 
-  const { data: byId, error: byIdError } = await supabase
-    .from('inbox_channels')
-    .select(selectColumns)
-    .eq('id', selector)
-    .maybeSingle();
+  if (isUuidSelector(selector)) {
+    const { data: byId, error: byIdError } = await supabase
+      .from('inbox_channels')
+      .select(selectColumns)
+      .eq('id', selector)
+      .maybeSingle();
 
-  if (byIdError) {
-    throw Object.assign(new Error('selected_facebook_page_lookup_failed'), {
-      code: 'selected_facebook_page_lookup_failed',
-      status: 500,
-    });
+    if (byIdError) {
+      throw Object.assign(new Error('selected_facebook_page_lookup_failed'), {
+        code: 'selected_facebook_page_lookup_failed',
+        status: 500,
+      });
+    }
+
+    if (byId) return normalizeFacebookPage(byId as InboxChannelRow);
   }
-
-  if (byId) return normalizeFacebookPage(byId as InboxChannelRow);
 
   const { data: byExternalId, error: byExternalIdError } = await supabase
     .from('inbox_channels')
