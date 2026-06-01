@@ -73,6 +73,23 @@ type PublishAuthorization = {
   mark_posted_performed: false;
 };
 
+type PublishExecutionDryRun = {
+  status: 'publish_execution_blocked';
+  block_reason: 'media_not_rendered';
+  safe_to_audit: true;
+  idempotency_key: string;
+  target_page_key: string;
+  publish_plan_checksum: string;
+  publish_allowed: false;
+  facebook_post_performed: false;
+  line_broadcast_performed: false;
+  schedule_enabled: false;
+  renderer_called: false;
+  phaya_called: false;
+  s3_upload_performed: false;
+  mark_posted_performed: false;
+};
+
 interface PreviewLogItem {
   preview_id: string;
   created_at: string;
@@ -160,8 +177,10 @@ export default function ProductVideoPage() {
   const [decidingPreviewId, setDecidingPreviewId] = useState<string | null>(null);
   const [loadingPublishPlanId, setLoadingPublishPlanId] = useState<string | null>(null);
   const [authorizingPreviewId, setAuthorizingPreviewId] = useState<string | null>(null);
+  const [dryRunningExecutionPreviewId, setDryRunningExecutionPreviewId] = useState<string | null>(null);
   const [publishPlanPreviews, setPublishPlanPreviews] = useState<Record<string, PublishPlanPreview>>({});
   const [publishAuthorizations, setPublishAuthorizations] = useState<Record<string, PublishAuthorization>>({});
+  const [publishExecutionDryRuns, setPublishExecutionDryRuns] = useState<Record<string, PublishExecutionDryRun>>({});
   const [result, setResult] = useState<Record<string, unknown> | null>(null);
 
   const selectedPage = useMemo(
@@ -290,6 +309,11 @@ export default function ProductVideoPage() {
         delete next[previewId];
         return next;
       });
+      setPublishExecutionDryRuns((current) => {
+        const next = { ...current };
+        delete next[previewId];
+        return next;
+      });
       toast.success(getDecisionSuccessMessage(decision));
       await loadPreviewLogs();
     } catch (error) {
@@ -368,11 +392,51 @@ export default function ProductVideoPage() {
     }
   }
 
+  async function handlePublishExecutionDryRun(previewId: string) {
+    const authorization = publishAuthorizations[previewId];
+    if (!authorization) {
+      toast.error('ต้อง Authorize publish manually ก่อน');
+      return;
+    }
+
+    setDryRunningExecutionPreviewId(previewId);
+    setResult(null);
+
+    try {
+      const response = await fetch(`/api/product-video/preview-logs/${encodeURIComponent(previewId)}/publish-execution-dry-run`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          target_page_key: authorization.target_page_key,
+          publish_plan_checksum: authorization.publish_plan_checksum,
+          idempotency_key: authorization.idempotency_key,
+        }),
+      });
+      const data = await response.json();
+      setResult(data);
+
+      if (!response.ok || !data.ok || !data.audit) {
+        throw new Error(data.error || 'รัน Publish Executor Dry-run ไม่สำเร็จ');
+      }
+
+      setPublishExecutionDryRuns((current) => ({
+        ...current,
+        [previewId]: data.audit as PublishExecutionDryRun,
+      }));
+      toast.success('Dry-run executor ถูก block ที่ media_status=not_rendered และบันทึก audit แล้ว');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'รัน Publish Executor Dry-run ไม่สำเร็จ';
+      toast.error(message);
+    } finally {
+      setDryRunningExecutionPreviewId(null);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="Product Video"
-        description="Phase 3D: Final Publish Authorization Gate แบบ local-only/audit-only หลัง publish_plan_ready โดยยังไม่โพสต์จริง"
+        description="Phase 4A: One-shot Guarded Publish Executor Dry-run แบบ local-only/audit-only และ block ก่อน publish จริง"
         actions={(
           <Badge variant="secondary" className="gap-1">
             <ShieldCheck className="h-3.5 w-3.5" />
@@ -480,7 +544,10 @@ export default function ProductVideoPage() {
               Publish Authorization เป็น local audit เท่านั้น ใช้ยืนยัน manual execution gate แต่ยังคง real_posting_enabled=false
             </div>
             <div className="rounded-lg border border-gray-200 p-3">
-              Client เรียกเฉพาะ <code>/api/product-video/generate</code>, <code>/decision</code>, <code>/publish-plan</code> และ <code>/publish-authorization</code>
+              Publish Executor Dry-run ตรวจ authorization + checksum + idempotency แล้ว block ถ้า media_status=not_rendered
+            </div>
+            <div className="rounded-lg border border-gray-200 p-3">
+              Client เรียกเฉพาะ <code>/api/product-video/generate</code>, <code>/decision</code>, <code>/publish-plan</code>, <code>/publish-authorization</code> และ <code>/publish-execution-dry-run</code>
             </div>
           </CardContent>
         </Card>
@@ -490,7 +557,7 @@ export default function ProductVideoPage() {
         <CardHeader className="flex flex-row items-center justify-between gap-3">
           <div>
             <CardTitle className="text-base">Owner Review Queue</CardTitle>
-            <p className="mt-1 text-xs text-gray-500">Local only: approved_for_future_publish → publish_plan_ready → publish_authorized_for_manual_execution แต่ยังไม่ publish จริง</p>
+            <p className="mt-1 text-xs text-gray-500">Local only: approved_for_future_publish → publish_plan_ready → publish_authorized_for_manual_execution → publish_execution_blocked</p>
           </div>
           <Button variant="outline" size="sm" onClick={() => loadPreviewLogs(true)} disabled={loadingLogs}>
             <RefreshCw className={`mr-2 h-4 w-4 ${loadingLogs ? 'animate-spin' : ''}`} />
@@ -627,6 +694,30 @@ export default function ProductVideoPage() {
                       <div>idempotency_key: <span className="font-mono text-[11px]">{publishAuthorizations[item.preview_id].idempotency_key}</span></div>
                     </div>
                     <p className="text-xs">Audit-only authorization created. Real publish ยังต้องทำใน Phase 4 แบบ one-shot guarded execution เท่านั้น</p>
+                    <Button
+                      size="sm"
+                      onClick={() => handlePublishExecutionDryRun(item.preview_id)}
+                      disabled={dryRunningExecutionPreviewId === item.preview_id}
+                    >
+                      {dryRunningExecutionPreviewId === item.preview_id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                      Run guarded dry-run executor
+                    </Button>
+                  </div>
+                ) : null}
+
+                {publishExecutionDryRuns[item.preview_id] ? (
+                  <div className="mt-4 space-y-2 rounded-xl border border-red-100 bg-red-50 p-4 text-sm text-red-950">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="font-semibold">Guarded Publish Executor Dry-run</div>
+                      <Badge variant="secondary">publish_execution_blocked</Badge>
+                    </div>
+                    <div className="grid gap-2 text-xs sm:grid-cols-2">
+                      <div>block_reason: <span className="font-medium">{publishExecutionDryRuns[item.preview_id].block_reason}</span></div>
+                      <div>safe_to_audit: <span className="font-medium">true</span></div>
+                      <div>publish_allowed: <span className="font-medium">false</span></div>
+                      <div>facebook_post_performed: <span className="font-medium">false</span></div>
+                    </div>
+                    <p className="text-xs">Dry-run เท่านั้น: ไม่เรียก Facebook, LINE, n8n, renderer, schedule, S3 หรือ mark posted</p>
                   </div>
                 ) : null}
               </div>
