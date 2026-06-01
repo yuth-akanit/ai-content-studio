@@ -518,7 +518,8 @@ export default function ProductVideoPage() {
     }
   }
 
-  async function handleManualPublishExecute(previewId: string) {
+  async function handleManualPublishExecute(item: PreviewLogItem) {
+    const previewId = item.preview_id;
     const authorization = publishAuthorizations[previewId];
     if (!authorization) {
       toast.error('ต้อง Authorize publish manually ก่อน');
@@ -533,9 +534,12 @@ export default function ProductVideoPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          manual_execute: true,
+          request_scoped_real_publish_approval: true,
           target_page_key: authorization.target_page_key,
           publish_plan_checksum: authorization.publish_plan_checksum,
           idempotency_key: authorization.idempotency_key,
+          selected_channel_id: item.selected_channel_id || item.selected_page_id,
         }),
       });
       const data = await response.json();
@@ -850,7 +854,7 @@ export default function ProductVideoPage() {
                     <Button
                       size="sm"
                       variant="destructive"
-                      onClick={() => handleManualPublishExecute(item.preview_id)}
+                      onClick={() => handleManualPublishExecute(item)}
                       disabled={manualPublishingPreviewId === item.preview_id}
                       title="Manual executor gate: real publish ยังถูก block จนกว่า flag/approval แยกจะเปิด"
                     >
