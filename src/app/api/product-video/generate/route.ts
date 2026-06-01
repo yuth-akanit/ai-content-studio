@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { appendProductVideoPreviewLog } from '@/lib/product-video-preview-log';
+import { appendProductVideoPreviewLog, PRODUCT_VIDEO_PREVIEW_SAFETY_FLAGS } from '@/lib/product-video-preview-log';
 import {
   redactProductVideoFacebookPage,
   resolveProductVideoSelectedFacebookPage,
 } from '@/lib/product-video-facebook-page';
 import { validateMarketingCaption } from '@/lib/product-video-caption-validator';
+import { generateDeterministicAIContent } from '@/lib/product-video-ai-generator';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,6 +28,11 @@ interface ProductVideoGenerateRequest {
   schedule_enabled?: boolean;
   access_token?: unknown;
   page_access_token?: unknown;
+
+  // New fields
+  asset_id?: string;
+  brief?: string;
+  selected_pages?: string[];
 }
 
 interface ProductVideoPayload {
@@ -45,6 +51,16 @@ interface ProductVideoPayload {
   real_posting_enabled: false;
   line_broadcast_enabled: false;
   schedule_enabled: false;
+
+  // New fields
+  asset_id?: string;
+  brief?: string;
+  selected_pages?: string; // stringified JSON
+  video_title?: string;
+  hook?: string;
+  scene_script?: string;
+  overlay_texts?: string;
+  hashtags?: string;
 }
 
 const N8N_FORWARD_TIMEOUT_MS = 15_000;
@@ -54,15 +70,52 @@ function clean(value: unknown): string {
 }
 
 async function buildPayload(body: ProductVideoGenerateRequest): Promise<ProductVideoPayload> {
-  const selectedPageSelector = clean(body.selected_channel_id) || clean(body.selected_page_id);
+  const selectedPagesList = Array.isArray(body.selected_pages) ? body.selected_pages : [];
+  const selectedPageSelector =
+    clean(body.selected_channel_id) ||
+    clean(body.selected_page_id) ||
+    (selectedPagesList.length > 0 ? clean(selectedPagesList[0]) : '');
+
+  if (!selectedPageSelector) {
+    throw Object.assign(new Error('selected_social_page_required'), {
+      code: 'selected_social_page_required',
+      status: 400,
+    });
+  }
+
   const selectedPage = await resolveProductVideoSelectedFacebookPage(selectedPageSelector);
 
-  const marketingCaption = clean(body.marketing_caption || body.caption);
-  const previewNote = clean(body.preview_note || 'สร้างวิดีโอสินค้าแบบ preview เท่านั้น ยังไม่โพสต์จริง และยังไม่เปิด schedule');
+  const brand = clean(body.brand_context) || 'paa_air';
+  const brief = clean(body.brief);
+  const aiContent = generateDeterministicAIContent(brand, brief);
+
+  const marketingCaption = clean(body.marketing_caption || body.caption) || aiContent.marketing_caption;
+  const previewNote = clean(body.preview_note) || aiContent.preview_note;
+
+  // Resolve all selected pages details
+  const resolvedPagesInfo = [];
+  for (const pageSel of selectedPagesList) {
+    try {
+      const pageInfo = await resolveProductVideoSelectedFacebookPage(clean(pageSel));
+      resolvedPagesInfo.push({
+        page_id: pageInfo.selected_page_id,
+        page_name: pageInfo.selected_page_name,
+        target_page_key: clean(body.target_page_key) || 'paa_air',
+        facebook_page_id: pageInfo.facebook_page_id,
+        status: 'pending_authorization',
+        publish_plan_checksum: null,
+        idempotency_key: null,
+        facebook_post_id: null,
+        error: null,
+      });
+    } catch (e) {
+      console.warn(`[product-video] could not resolve page detail for ${pageSel}`, e);
+    }
+  }
 
   return {
-    brand_context: clean(body.brand_context),
-    target_page_key: clean(body.target_page_key),
+    brand_context: brand,
+    target_page_key: clean(body.target_page_key) || 'paa_air',
     selected_channel_id: selectedPage.selected_channel_id,
     selected_page_id: selectedPage.selected_page_id,
     selected_page_name: selectedPage.selected_page_name,
@@ -76,6 +129,16 @@ async function buildPayload(body: ProductVideoGenerateRequest): Promise<ProductV
     real_posting_enabled: false,
     line_broadcast_enabled: false,
     schedule_enabled: false,
+
+    // New fields
+    asset_id: clean(body.asset_id),
+    brief: brief,
+    selected_pages: resolvedPagesInfo.length > 0 ? JSON.stringify(resolvedPagesInfo) : undefined,
+    video_title: aiContent.video_title,
+    hook: aiContent.hook,
+    scene_script: aiContent.scene_script,
+    overlay_texts: aiContent.overlay_texts,
+    hashtags: aiContent.hashtags,
   };
 }
 
@@ -147,22 +210,23 @@ async function forwardToN8n(payload: ProductVideoPayload) {
 }
 
 export async function POST(request: NextRequest) {
+  const supabase_diagnostics = {
+    SUPABASE_URL: Boolean(process.env.SUPABASE_URL),
+    NEXT_PUBLIC_SUPABASE_URL: Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL),
+    SUPABASE_SERVICE_ROLE_KEY: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
+    SUPABASE_SERVICE_KEY: Boolean(process.env.SUPABASE_SERVICE_KEY),
+    SUPABASE_SERVICE_ROLE: Boolean(process.env.SUPABASE_SERVICE_ROLE),
+  };
+
   try {
     const body = await request.json() as ProductVideoGenerateRequest;
     if (body.access_token || body.page_access_token) {
       return NextResponse.json(
-        { ok: false, error: 'request_body_token_rejected' },
-        { status: 400 },
-      );
-    }
-
-    const selectedPageSelector = clean(body.selected_channel_id) || clean(body.selected_page_id);
-    if (!selectedPageSelector) {
-      return NextResponse.json(
         {
           ok: false,
-          error: 'selected_social_page_required',
-          message: 'Please select a Social Page before generating preview',
+          error: 'request_body_token_rejected',
+          supabase_diagnostics,
+          ...PRODUCT_VIDEO_PREVIEW_SAFETY_FLAGS
         },
         { status: 400 },
       );
@@ -187,9 +251,8 @@ export async function POST(request: NextRequest) {
           error: 'invalid_product_video_request',
           message: 'Invalid product video request',
           validation_errors: validationErrors,
-          facebook_post_performed: false,
-          line_broadcast_performed: false,
-          schedule_enabled: false,
+          supabase_diagnostics,
+          ...PRODUCT_VIDEO_PREVIEW_SAFETY_FLAGS,
           guard,
           payload,
         },
@@ -198,7 +261,7 @@ export async function POST(request: NextRequest) {
     }
 
     const n8n = await forwardToN8n(payload);
-    const n8nStatus = 'status' in n8n ? n8n.status : null;
+    const n8nStatus = ('status' in n8n && typeof n8n.status === 'number') ? n8n.status : null;
     const responseBodyExposed = 'response_body_exposed' in n8n ? n8n.response_body_exposed : false;
     const previewSafetyLocked =
       payload.preview_only === true &&
@@ -207,7 +270,10 @@ export async function POST(request: NextRequest) {
       payload.schedule_enabled === false &&
       responseBodyExposed === false;
 
-    const previewLog = n8n.forwarded && n8nStatus === 200 && previewSafetyLocked
+    // By default, since n8n forwarding is disabled under MVP, we still want to append a preview log record
+    const shouldCreateLog = (n8n.forwarded && n8nStatus === 200 && previewSafetyLocked) || (!n8n.forwarded);
+
+    const previewLog = shouldCreateLog
       ? await appendProductVideoPreviewLog({
         brand_context: payload.brand_context,
         target_page_key: payload.target_page_key,
@@ -223,6 +289,16 @@ export async function POST(request: NextRequest) {
         n8n_forwarded: n8n.forwarded,
         n8n_status: n8nStatus,
         response_body_exposed: false,
+
+        // New fields
+        asset_id: payload.asset_id,
+        brief: payload.brief,
+        selected_pages: payload.selected_pages,
+        video_title: payload.video_title,
+        hook: payload.hook,
+        scene_script: payload.scene_script,
+        overlay_texts: payload.overlay_texts,
+        hashtags: payload.hashtags,
       })
       : null;
 
@@ -248,6 +324,7 @@ export async function POST(request: NextRequest) {
         status: 'active',
         page_access_token: 'redacted-present',
       }),
+      supabase_diagnostics,
       guard,
       payload,
       n8n,
@@ -268,9 +345,8 @@ export async function POST(request: NextRequest) {
         ok: false,
         error: code,
         message: error instanceof Error ? error.message : String(error),
-        facebook_post_performed: false,
-        line_broadcast_performed: false,
-        schedule_enabled: false,
+        supabase_diagnostics,
+        ...PRODUCT_VIDEO_PREVIEW_SAFETY_FLAGS,
       },
       { status },
     );

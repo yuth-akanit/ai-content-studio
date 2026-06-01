@@ -65,9 +65,27 @@ export interface ProductVideoPublishPlanPreview extends ProductVideoPreviewSafet
   };
   publish_plan_checksum: string;
   generated_at: string;
+  selected_pages?: string;
+  idempotency_key?: string;
 }
 
-function buildPlanMedia(metadata: ProductVideoMediaMetadataRecord | null): ProductVideoPublishPlanMedia {
+function buildPlanMedia(
+  item: ProductVideoPreviewLogRecord,
+  metadata: ProductVideoMediaMetadataRecord | null
+): ProductVideoPublishPlanMedia {
+  if (item.public_media_url) {
+    return {
+      media_kind: 'product_video_preview',
+      media_status: 'ready',
+      media_type: (item.media_type as 'video' | 'image') || 'video',
+      media_url: item.public_media_url,
+      public_media_url: item.public_media_url,
+      media_checksum: item.media_checksum || `md5-${item.preview_id}`,
+      source: 'mock_metadata_only',
+      renderer_required_before_real_publish: false,
+    };
+  }
+
   if (!metadata) {
     return {
       media_kind: 'product_video_preview',
@@ -116,30 +134,13 @@ export function buildProductVideoPublishPlanChecksum(
   item: ProductVideoPreviewLogRecord,
   metadata: ProductVideoMediaMetadataRecord | null = null,
 ): string {
-  const media = buildPlanMedia(metadata);
+  const media = buildPlanMedia(item, metadata);
   const checksumPayload = {
-    preview_id: item.preview_id,
-    source_status: item.status,
-    target_page: {
-      page_id: getFacebookPageId(item),
-      page_name: item.selected_page_name,
-      page_key: item.target_page_key,
-      platform: item.platform,
-    },
-    content: {
-      caption: item.marketing_caption || item.caption,
-      brand_context: item.brand_context,
-    },
-    media: {
-      media_kind: media.media_kind,
-      media_status: media.media_status,
-      media_type: media.media_type,
-      media_url: media.media_url,
-      public_media_url: media.public_media_url,
-      media_checksum: media.media_checksum,
-      source: media.source,
-    },
-    safety_flags: PRODUCT_VIDEO_PREVIEW_SAFETY_FLAGS,
+    caption: item.marketing_caption || item.publish_caption || item.caption || '',
+    media_checksum_or_url: media.media_checksum || media.public_media_url || '',
+    target_page_id: getFacebookPageId(item),
+    selected_pages: item.selected_pages || '',
+    brand_context: item.brand_context,
   };
 
   return createHash('sha256')
@@ -159,7 +160,7 @@ export async function buildProductVideoPublishPlanPreview(
   assertBrandTargetPageGuard(item);
 
   const metadata = await findLatestProductVideoMediaMetadata(item.preview_id);
-  const media = buildPlanMedia(metadata);
+  const media = buildPlanMedia(item, metadata);
   const publishPlanChecksum = buildProductVideoPublishPlanChecksum(item, metadata);
 
   return {
@@ -195,6 +196,8 @@ export async function buildProductVideoPublishPlanPreview(
     },
     publish_plan_checksum: publishPlanChecksum,
     generated_at: new Date().toISOString(),
+    selected_pages: item.selected_pages,
+    idempotency_key: `manual-publish-auth-${item.preview_id}-${getFacebookPageId(item)}-${publishPlanChecksum}`,
     ...PRODUCT_VIDEO_PREVIEW_SAFETY_FLAGS,
   };
 }

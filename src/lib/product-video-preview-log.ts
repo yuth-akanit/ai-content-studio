@@ -38,6 +38,22 @@ export interface ProductVideoPreviewLogInput {
   n8n_forwarded: boolean;
   n8n_status: number | null;
   response_body_exposed: false;
+  campaign_id?: string;
+  selected_pages?: string;
+  asset_id?: string;
+  brief?: string;
+  publish_caption?: string;
+  video_title?: string;
+  hook?: string;
+  scene_script?: string;
+  overlay_texts?: string;
+  hashtags?: string;
+  render_job_id?: string;
+  render_status?: string;
+  public_media_url?: string;
+  media_type?: string;
+  media_checksum?: string;
+  media_status?: string;
 }
 
 export interface ProductVideoPreviewLogRecord extends ProductVideoPreviewLogInput, ProductVideoPreviewSafetyFlags {
@@ -203,6 +219,22 @@ export async function appendProductVideoPreviewLog(
     n8n_status: input.n8n_status,
     response_body_exposed: false,
     status: 'pending_owner_review',
+    campaign_id: input.campaign_id,
+    selected_pages: input.selected_pages,
+    asset_id: input.asset_id,
+    brief: input.brief,
+    publish_caption: input.publish_caption,
+    video_title: input.video_title,
+    hook: input.hook,
+    scene_script: input.scene_script,
+    overlay_texts: input.overlay_texts,
+    hashtags: input.hashtags,
+    render_job_id: input.render_job_id,
+    render_status: input.render_status,
+    public_media_url: input.public_media_url,
+    media_type: input.media_type,
+    media_checksum: input.media_checksum,
+    media_status: input.media_status,
     ...PRODUCT_VIDEO_PREVIEW_SAFETY_FLAGS,
   };
 
@@ -317,4 +349,57 @@ export async function applyProductVideoPreviewDecision(input: {
     item: updatedItem,
     decision_record: decisionRecord,
   };
+}
+
+export async function updateProductVideoPreviewLog(
+  previewId: string,
+  updates: Partial<ProductVideoPreviewLogRecord>,
+): Promise<ProductVideoPreviewLogRecord> {
+  const cleanPreviewId = cleanText(previewId);
+  if (!cleanPreviewId) {
+    throw Object.assign(new Error('preview_id_required'), { code: 'preview_id_required', status: 400 });
+  }
+
+  const logPath = getPreviewLogPath();
+  let content = '';
+  try {
+    content = await readFile(logPath, 'utf8');
+  } catch {
+    throw Object.assign(new Error('preview_log_not_found'), { code: 'preview_log_not_found', status: 404 });
+  }
+
+  const lines = content.split('\n');
+  const nextLines: string[] = [];
+  let updatedItem: ProductVideoPreviewLogRecord | null = null;
+
+  for (const line of lines) {
+    if (line.trim().length === 0) continue;
+    const raw = parseRawPreviewLogLine(line);
+    const record = normalizePreviewLogRecord(raw);
+
+    if (!raw || !record || record.preview_id !== cleanPreviewId) {
+      nextLines.push(line);
+      continue;
+    }
+
+    updatedItem = {
+      ...record,
+      ...updates,
+      updated_at: new Date().toISOString(),
+    } as ProductVideoPreviewLogRecord;
+
+    nextLines.push(JSON.stringify({
+      ...raw,
+      ...updatedItem,
+    }));
+  }
+
+  if (!updatedItem) {
+    throw Object.assign(new Error('preview_log_not_found'), { code: 'preview_log_not_found', status: 404 });
+  }
+
+  await mkdir(path.dirname(logPath), { recursive: true });
+  await writeFile(logPath, `${nextLines.join('\n')}\n`);
+
+  return updatedItem;
 }
