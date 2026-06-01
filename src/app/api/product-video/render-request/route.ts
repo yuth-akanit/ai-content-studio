@@ -4,7 +4,8 @@ import {
   findProductVideoPreviewLogById,
   updateProductVideoPreviewLog,
 } from '@/lib/product-video-preview-log';
-import { findLatestProductVideoMediaMetadata } from '@/lib/product-video-media-metadata';
+import { findLatestProductVideoMediaMetadata, appendProductVideoMockMediaMetadata } from '@/lib/product-video-media-metadata';
+import { forwardRenderRequestToExternal, validatePublicMediaUrl } from '@/lib/product-video-render-adapter';
 
 export const dynamic = 'force-dynamic';
 
@@ -51,21 +52,139 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Determine payload details
+    const assetId = cleanText(body.asset_id) || item.asset_id || '';
+    const brief = cleanText(body.brief) || item.brief || '';
+    const marketingCaption = cleanText(body.marketing_caption) || item.marketing_caption || item.caption;
+    const sceneScript = cleanText(body.scene_script) || item.scene_script || '';
+    const overlayTexts = cleanText(body.overlay_texts) || item.overlay_texts || '';
+    const selectedPagesList = Array.isArray(body.selected_pages) ? body.selected_pages : [];
+
+    // Forward request if external renderer is enabled
+    const forwardResult = await forwardRenderRequestToExternal({
+      preview_id: previewId,
+      brand_context: item.brand_context,
+      asset_id: assetId,
+      brief: brief,
+      marketing_caption: marketingCaption,
+      scene_script: sceneScript,
+      overlay_texts: overlayTexts,
+      selected_pages: selectedPagesList,
+    });
+
+    if (forwardResult.forwarded) {
+      if (!forwardResult.ok) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: forwardResult.reason || 'render_failed',
+            message: `Renderer returned an error: ${forwardResult.reason}`,
+            ...PRODUCT_VIDEO_PREVIEW_SAFETY_FLAGS,
+          },
+          { status: 500 }
+        );
+      }
+
+      const jobId = forwardResult.job_id || `job-${previewId}`;
+
+      if (forwardResult.public_media_url) {
+        // Validate URL HTTP 200/206
+        const validation = await validatePublicMediaUrl(forwardResult.public_media_url);
+        if (!validation.ok) {
+          return NextResponse.json(
+            {
+              ok: false,
+              error: 'media_url_validation_failed',
+              message: `Public media URL validation failed: ${validation.error}`,
+              status: 'render_failed',
+              ...PRODUCT_VIDEO_PREVIEW_SAFETY_FLAGS,
+            },
+            { status: 400 }
+          );
+        }
+
+        // Try writing to metadata log (ignores prefix constraint failure in MVP mode)
+        try {
+          if (forwardResult.public_media_url.startsWith('https://admin.paaair.online/media/')) {
+            await appendProductVideoMockMediaMetadata({
+              previewId,
+              mediaType: forwardResult.media_type || 'video',
+              publicMediaUrl: forwardResult.public_media_url,
+              mediaChecksum: forwardResult.media_checksum || `md5-${previewId}`,
+            });
+          }
+        } catch (e) {
+          console.warn('[product-video] append mock media metadata bypassed', e);
+        }
+
+        await updateProductVideoPreviewLog(previewId, {
+          render_job_id: jobId,
+          render_status: 'mock_render_ready',
+          public_media_url: forwardResult.public_media_url,
+          media_checksum: forwardResult.media_checksum || `md5-${previewId}`,
+          media_status: 'ready',
+          media_type: forwardResult.media_type || 'video',
+          asset_id: assetId,
+          brief: brief,
+          marketing_caption: marketingCaption,
+          scene_script: sceneScript,
+          overlay_texts: overlayTexts,
+          selected_pages: JSON.stringify(selectedPagesList),
+        });
+
+        return NextResponse.json({
+          ok: true,
+          job_id: jobId,
+          status: 'mock_render_ready',
+          public_media_url: forwardResult.public_media_url,
+          media_type: forwardResult.media_type || 'video',
+          media_checksum: forwardResult.media_checksum || `md5-${previewId}`,
+          ...PRODUCT_VIDEO_PREVIEW_SAFETY_FLAGS,
+          mock_render: false,
+          renderer_called: true,
+        });
+      } else {
+        // Async rendering flow: status is render_pending
+        await updateProductVideoPreviewLog(previewId, {
+          render_job_id: jobId,
+          render_status: 'render_pending',
+          asset_id: assetId,
+          brief: brief,
+          marketing_caption: marketingCaption,
+          scene_script: sceneScript,
+          overlay_texts: overlayTexts,
+          selected_pages: JSON.stringify(selectedPagesList),
+        });
+
+        return NextResponse.json({
+          ok: true,
+          job_id: jobId,
+          status: 'render_pending',
+          public_media_url: null,
+          media_type: 'video',
+          media_checksum: null,
+          ...PRODUCT_VIDEO_PREVIEW_SAFETY_FLAGS,
+          mock_render: false,
+          renderer_called: true,
+        });
+      }
+    }
+
+    // Default mock behavior if renderer forwarding is disabled
     const jobId = `job-${previewId}`;
     const metadata = await findLatestProductVideoMediaMetadata(previewId);
     const hasFixture = Boolean(metadata);
     const status = hasFixture ? 'mock_render_ready' : 'render_pending';
 
-    // Update preview log with render request info
     await updateProductVideoPreviewLog(previewId, {
       render_job_id: jobId,
       render_status: status,
-      asset_id: cleanText(body.asset_id) || item.asset_id,
-      brief: cleanText(body.brief) || item.brief,
-      marketing_caption: cleanText(body.marketing_caption) || item.marketing_caption,
-      scene_script: cleanText(body.scene_script) || item.scene_script,
-      overlay_texts: cleanText(body.overlay_texts) || item.overlay_texts,
-      selected_pages: Array.isArray(body.selected_pages) ? JSON.stringify(body.selected_pages) : item.selected_pages,
+      asset_id: assetId,
+      brief: brief,
+      marketing_caption: marketingCaption,
+      scene_script: sceneScript,
+      overlay_texts: overlayTexts,
+      selected_pages: JSON.stringify(selectedPagesList),
       public_media_url: metadata?.public_media_url || item.public_media_url,
       media_checksum: metadata?.media_checksum || item.media_checksum,
       media_status: metadata ? 'ready' : item.media_status,

@@ -511,15 +511,35 @@ export default function ProductVideoPage() {
       try {
         const response = await fetch(`/api/product-video/render-status/${encodeURIComponent(jobId)}`);
         const data = await safeParseJson(response, 'checking render status');
-        if (response.ok && data.ok) {
-          setRenderStatus(data.status);
-          if (data.status === 'mock_render_ready') {
-            clearInterval(interval);
-            setRenderingPreviewId(null);
-            setRenderingJobId(null);
-            toast.success('การ Render เสร็จสิ้น! วิดีโอพร้อมแสดงผล');
-            await loadPreviewLogs();
-          }
+
+        if (!response.ok || !data.ok) {
+          clearInterval(interval);
+          setRenderingPreviewId(null);
+          setRenderingJobId(null);
+          setRenderStatus('failed');
+          toast.error(data.message || 'การ Render ล้มเหลว');
+          return;
+        }
+
+        setRenderStatus(data.status);
+        if (data.status === 'mock_render_ready') {
+          clearInterval(interval);
+          setRenderingPreviewId(null);
+          setRenderingJobId(null);
+
+          setPublishPlanPreviews((current) => {
+            const next = { ...current };
+            delete next[previewId];
+            return next;
+          });
+          setPublishAuthorizations((current) => {
+            const next = { ...current };
+            delete next[previewId];
+            return next;
+          });
+
+          toast.success('การ Render เสร็จสิ้น! วิดีโอพร้อมแสดงผล');
+          await loadPreviewLogs();
         }
       } catch (error) {
         console.error('error polling render status', error);

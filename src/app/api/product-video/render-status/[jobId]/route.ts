@@ -5,6 +5,7 @@ import {
   updateProductVideoPreviewLog,
 } from '@/lib/product-video-preview-log';
 import { findLatestProductVideoMediaMetadata } from '@/lib/product-video-media-metadata';
+import { validatePublicMediaUrl } from '@/lib/product-video-render-adapter';
 
 export const dynamic = 'force-dynamic';
 
@@ -39,29 +40,61 @@ export async function GET(
     }
 
     const metadata = await findLatestProductVideoMediaMetadata(previewId);
-    const hasFixture = Boolean(metadata);
-    const status = hasFixture ? 'mock_render_ready' : 'render_pending';
+    const mediaUrl = metadata?.public_media_url || item.public_media_url;
+    const mediaChecksum = metadata?.media_checksum || item.media_checksum;
+    const mediaType = metadata?.media_type || item.media_type || 'video';
 
-    if (hasFixture && metadata) {
+    if (mediaUrl) {
+      // Validate URL HTTP 200/206
+      const validation = await validatePublicMediaUrl(mediaUrl);
+      if (!validation.ok) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: 'media_url_validation_failed',
+            message: `Public media URL validation failed: ${validation.error}`,
+            job_id: jobId,
+            status: 'render_pending',
+            public_media_url: mediaUrl,
+            ...PRODUCT_VIDEO_PREVIEW_SAFETY_FLAGS,
+          },
+          { status: 400 }
+        );
+      }
+
       await updateProductVideoPreviewLog(previewId, {
-        render_status: status,
-        public_media_url: metadata.public_media_url,
-        media_checksum: metadata.media_checksum,
+        render_status: 'mock_render_ready',
+        public_media_url: mediaUrl,
+        media_checksum: mediaChecksum || `md5-${previewId}`,
         media_status: 'ready',
-        media_type: metadata.media_type,
+        media_type: mediaType,
+      });
+
+      return NextResponse.json({
+        ok: true,
+        job_id: jobId,
+        status: 'mock_render_ready',
+        public_media_url: mediaUrl,
+        media_type: mediaType,
+        media_checksum: mediaChecksum || `md5-${previewId}`,
+        error: null,
+        ...PRODUCT_VIDEO_PREVIEW_SAFETY_FLAGS,
+        mock_render: !item.renderer_called,
+        renderer_called: Boolean(item.renderer_called),
       });
     }
 
     return NextResponse.json({
       ok: true,
       job_id: jobId,
-      status,
-      mock_render: true,
-      public_media_url: metadata?.public_media_url || null,
-      media_type: metadata?.media_type || 'video',
-      media_checksum: metadata?.media_checksum || null,
+      status: 'render_pending',
+      public_media_url: null,
+      media_type: 'video',
+      media_checksum: null,
       error: null,
       ...PRODUCT_VIDEO_PREVIEW_SAFETY_FLAGS,
+      mock_render: !item.renderer_called,
+      renderer_called: Boolean(item.renderer_called),
     });
   } catch (error) {
     console.error('[product-video-render] status check failed', error);
