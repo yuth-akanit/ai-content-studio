@@ -156,6 +156,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const selectedPageSelector = clean(body.selected_channel_id) || clean(body.selected_page_id);
+    if (!selectedPageSelector) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'selected_social_page_required',
+          message: 'Please select a Social Page before generating preview',
+        },
+        { status: 400 },
+      );
+    }
+
     const payload = await buildPayload(body);
     const validationErrors = validatePayload(payload);
 
@@ -170,7 +182,17 @@ export async function POST(request: NextRequest) {
 
     if (validationErrors.length > 0) {
       return NextResponse.json(
-        { ok: false, error: 'Invalid product video request', guard, payload },
+        {
+          ok: false,
+          error: 'invalid_product_video_request',
+          message: 'Invalid product video request',
+          validation_errors: validationErrors,
+          facebook_post_performed: false,
+          line_broadcast_performed: false,
+          schedule_enabled: false,
+          guard,
+          payload,
+        },
         { status: 400 },
       );
     }
@@ -236,13 +258,20 @@ export async function POST(request: NextRequest) {
       : 500;
     const code = typeof (error as { code?: unknown }).code === 'string'
       ? (error as { code: string }).code
-      : 'Failed to prepare product video request';
+      : 'failed_to_prepare_product_video_request';
 
     if (status >= 500) {
       console.error('[product-video] generate wrapper failed', error);
     }
     return NextResponse.json(
-      { ok: false, error: code },
+      {
+        ok: false,
+        error: code,
+        message: error instanceof Error ? error.message : String(error),
+        facebook_post_performed: false,
+        line_broadcast_performed: false,
+        schedule_enabled: false,
+      },
       { status },
     );
   }

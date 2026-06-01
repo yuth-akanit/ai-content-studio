@@ -171,6 +171,27 @@ PAA Air บริการล้างแอร์ฆ่าเชื้อโร
 
 #PAAAir #ล้างแอร์ #ช่างแอร์มืออาชีพ #แอร์บ้าน #บริการล้างแอร์ #กรุงเทพ`;
 
+async function safeParseJson(response: Response): Promise<any> {
+  const text = await response.text();
+  if (!text || text.trim() === '') {
+    return {
+      ok: false,
+      error: 'product_video_api_empty_response',
+      message: `Empty response received from API (Status: ${response.status})`,
+    };
+  }
+  try {
+    return JSON.parse(text);
+  } catch (err) {
+    const snippet = text.slice(0, 100);
+    return {
+      ok: false,
+      error: 'product_video_api_invalid_json',
+      message: `Invalid JSON response: ${snippet}... (Status: ${response.status})`,
+    };
+  }
+}
+
 function inferTargetPageKey(page: SocialPage | undefined): TargetPageKey {
   const raw = `${page?.name || ''} ${page?.provider || ''}`.toLowerCase();
   if (raw.includes('syncflow') || raw.includes('paa tech')) return 'syncflow';
@@ -248,9 +269,9 @@ export default function ProductVideoPage() {
     setLoadingLogs(true);
     try {
       const response = await fetch('/api/product-video/preview-logs');
-      const data = await response.json();
+      const data = await safeParseJson(response);
       if (!response.ok || !data.ok || !Array.isArray(data.items)) {
-        throw new Error(data.error || 'โหลดคิวตรวจไม่สำเร็จ');
+        throw new Error(data.error || data.message || 'โหลดคิวตรวจไม่สำเร็จ');
       }
       setPreviewLogs(data.items);
       if (showToast) toast.success('รีเฟรชคิวตรวจแล้ว');
@@ -266,8 +287,8 @@ export default function ProductVideoPage() {
     (async () => {
       try {
         const response = await fetch('/api/social-pages?provider=facebook&status=active');
-        const data = await response.json();
-        if (!response.ok || !Array.isArray(data)) throw new Error('โหลดรายการเพจไม่สำเร็จ');
+        const data = await safeParseJson(response);
+        if (!response.ok || !Array.isArray(data)) throw new Error(data.error || data.message || 'โหลดรายการเพจไม่สำเร็จ');
 
         setPages(data);
         if (data[0]?.id) {
@@ -323,11 +344,11 @@ export default function ProductVideoPage() {
         }),
       });
 
-      const data = await response.json();
+      const data = await safeParseJson(response);
       setResult(data);
 
       if (!response.ok || !data.ok) {
-        throw new Error(data.error || 'เตรียม payload ไม่สำเร็จ');
+        throw new Error(data.error || data.message || 'เตรียม payload ไม่สำเร็จ');
       }
 
       toast.success(data.preview_log_created ? 'บันทึก Preview Log เข้าคิวตรวจแล้ว' : 'เตรียม Product Video preview payload แล้ว');
@@ -350,11 +371,11 @@ export default function ProductVideoPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ decision }),
       });
-      const data = await response.json();
+      const data = await safeParseJson(response);
       setResult(data);
 
       if (!response.ok || !data.ok) {
-        throw new Error(data.error || 'บันทึก decision ไม่สำเร็จ');
+        throw new Error(data.error || data.message || 'บันทึก decision ไม่สำเร็จ');
       }
 
       setPublishPlanPreviews((current) => {
@@ -393,11 +414,11 @@ export default function ProductVideoPage() {
 
     try {
       const response = await fetch(`/api/product-video/preview-logs/${encodeURIComponent(previewId)}/publish-plan`);
-      const data = await response.json();
+      const data = await safeParseJson(response);
       setResult(data);
 
       if (!response.ok || !data.ok || !data.publish_plan) {
-        throw new Error(data.error || 'สร้าง Publish Plan Preview ไม่สำเร็จ');
+        throw new Error(data.error || data.message || 'สร้าง Publish Plan Preview ไม่สำเร็จ');
       }
 
       setPublishPlanPreviews((current) => ({
@@ -435,11 +456,11 @@ export default function ProductVideoPage() {
           reason: 'owner confirmed local-only manual publish authorization gate',
         }),
       });
-      const data = await response.json();
+      const data = await safeParseJson(response);
       setResult(data);
 
       if (!response.ok || !data.ok || !data.authorization) {
-        throw new Error(data.error || 'บันทึก Publish Authorization ไม่สำเร็จ');
+        throw new Error(data.error || data.message || 'บันทึก Publish Authorization ไม่สำเร็จ');
       }
 
       setPublishAuthorizations((current) => ({
@@ -470,11 +491,11 @@ export default function ProductVideoPage() {
           media_checksum: `mock-${previewId}`,
         }),
       });
-      const data = await response.json();
+      const data = await safeParseJson(response);
       setResult(data);
 
       if (!response.ok || !data.ok || !data.metadata) {
-        throw new Error(data.error || 'ตั้งค่า mock media metadata ไม่สำเร็จ');
+        throw new Error(data.error || data.message || 'ตั้งค่า mock media metadata ไม่สำเร็จ');
       }
 
       setPublishPlanPreviews((current) => {
@@ -526,11 +547,11 @@ export default function ProductVideoPage() {
           idempotency_key: authorization.idempotency_key,
         }),
       });
-      const data = await response.json();
+      const data = await safeParseJson(response);
       setResult(data);
 
       if (!response.ok || !data.ok || !data.audit) {
-        throw new Error(data.error || 'รัน Publish Executor Dry-run ไม่สำเร็จ');
+        throw new Error(data.error || data.message || 'รัน Publish Executor Dry-run ไม่สำเร็จ');
       }
 
       setPublishExecutionDryRuns((current) => ({
@@ -570,11 +591,11 @@ export default function ProductVideoPage() {
           selected_channel_id: item.selected_channel_id || item.selected_page_id,
         }),
       });
-      const data = await response.json();
+      const data = await safeParseJson(response);
       setResult(data);
 
       if (!response.ok || !data.ok || !data.execution) {
-        throw new Error(data.error || 'Manual publish executor ไม่สำเร็จ');
+        throw new Error(data.error || data.message || 'Manual publish executor ไม่สำเร็จ');
       }
 
       setManualPublishExecutions((current) => ({
