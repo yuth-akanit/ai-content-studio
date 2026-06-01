@@ -93,6 +93,25 @@ type PublishExecutionDryRun = {
   mark_posted_performed: false;
 };
 
+type ManualPublishExecution = {
+  status: 'blocked' | 'published';
+  block_reason: 'real_posting_flag_off' | null;
+  manual_execution: true;
+  safe_to_audit: true;
+  idempotency_key: string;
+  target_page_key: string;
+  publish_plan_checksum: string;
+  publish_allowed: false;
+  real_posting_enabled: false;
+  facebook_post_performed: false;
+  line_broadcast_performed: false;
+  schedule_enabled: false;
+  renderer_called: false;
+  phaya_called: false;
+  s3_upload_performed: false;
+  mark_posted_performed: false;
+};
+
 interface PreviewLogItem {
   preview_id: string;
   created_at: string;
@@ -182,9 +201,11 @@ export default function ProductVideoPage() {
   const [authorizingPreviewId, setAuthorizingPreviewId] = useState<string | null>(null);
   const [settingMediaPreviewId, setSettingMediaPreviewId] = useState<string | null>(null);
   const [dryRunningExecutionPreviewId, setDryRunningExecutionPreviewId] = useState<string | null>(null);
+  const [manualPublishingPreviewId, setManualPublishingPreviewId] = useState<string | null>(null);
   const [publishPlanPreviews, setPublishPlanPreviews] = useState<Record<string, PublishPlanPreview>>({});
   const [publishAuthorizations, setPublishAuthorizations] = useState<Record<string, PublishAuthorization>>({});
   const [publishExecutionDryRuns, setPublishExecutionDryRuns] = useState<Record<string, PublishExecutionDryRun>>({});
+  const [manualPublishExecutions, setManualPublishExecutions] = useState<Record<string, ManualPublishExecution>>({});
   const [result, setResult] = useState<Record<string, unknown> | null>(null);
 
   const selectedPage = useMemo(
@@ -318,6 +339,11 @@ export default function ProductVideoPage() {
         delete next[previewId];
         return next;
       });
+      setManualPublishExecutions((current) => {
+        const next = { ...current };
+        delete next[previewId];
+        return next;
+      });
       toast.success(getDecisionSuccessMessage(decision));
       await loadPreviewLogs();
     } catch (error) {
@@ -433,6 +459,11 @@ export default function ProductVideoPage() {
         delete next[previewId];
         return next;
       });
+      setManualPublishExecutions((current) => {
+        const next = { ...current };
+        delete next[previewId];
+        return next;
+      });
       toast.success('ตั้งค่า mock media-ready metadata แล้ว กรุณาสร้าง Publish Plan ใหม่');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'ตั้งค่า mock media metadata ไม่สำเร็จ';
@@ -482,11 +513,53 @@ export default function ProductVideoPage() {
     }
   }
 
+  async function handleManualPublishExecute(previewId: string) {
+    const authorization = publishAuthorizations[previewId];
+    if (!authorization) {
+      toast.error('ต้อง Authorize publish manually ก่อน');
+      return;
+    }
+
+    setManualPublishingPreviewId(previewId);
+    setResult(null);
+
+    try {
+      const response = await fetch(`/api/product-video/preview-logs/${encodeURIComponent(previewId)}/publish-execute`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          target_page_key: authorization.target_page_key,
+          publish_plan_checksum: authorization.publish_plan_checksum,
+          idempotency_key: authorization.idempotency_key,
+        }),
+      });
+      const data = await response.json();
+      setResult(data);
+
+      if (!response.ok || !data.ok || !data.execution) {
+        throw new Error(data.error || 'Manual publish executor ไม่สำเร็จ');
+      }
+
+      setManualPublishExecutions((current) => ({
+        ...current,
+        [previewId]: data.execution as ManualPublishExecution,
+      }));
+      toast.success(data.status === 'blocked'
+        ? 'Publish to Facebook ถูก block เพราะ real publish flag ยังไม่เปิด และไม่มีการเรียก Facebook'
+        : 'Publish to Facebook สำเร็จ');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Manual publish executor ไม่สำเร็จ';
+      toast.error(message);
+    } finally {
+      setManualPublishingPreviewId(null);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="Product Video"
-        description="Phase 4B: Mock Media-Ready Gate แบบ local-only ทำให้ dry-run executor ผ่าน media gate โดยยังไม่โพสต์จริง"
+        description="Phase 4C: Manual Publish Executor Gate แบบ local-only บล็อกการโพสต์จริงจนกว่า flag/approval แยกจะเปิด"
         actions={(
           <Badge variant="secondary" className="gap-1">
             <ShieldCheck className="h-3.5 w-3.5" />
@@ -597,7 +670,10 @@ export default function ProductVideoPage() {
               Publish Executor Dry-run ตรวจ authorization + checksum + idempotency แล้วผ่าน media gate ได้เมื่อ media_status=ready จาก mock metadata
             </div>
             <div className="rounded-lg border border-gray-200 p-3">
-              Client เรียกเฉพาะ <code>/api/product-video/generate</code>, <code>/decision</code>, <code>/media-metadata</code>, <code>/publish-plan</code>, <code>/publish-authorization</code> และ <code>/publish-execution-dry-run</code>
+              Manual Publish Executor มีปุ่ม Publish to Facebook แต่จะ return blocked ถ้า flag/approval สำหรับ real publish ยังไม่เปิด
+            </div>
+            <div className="rounded-lg border border-gray-200 p-3">
+              Client เรียกเฉพาะ <code>/api/product-video/generate</code>, <code>/decision</code>, <code>/media-metadata</code>, <code>/publish-plan</code>, <code>/publish-authorization</code>, <code>/publish-execution-dry-run</code> และ <code>/publish-execute</code>
             </div>
           </CardContent>
         </Card>
@@ -607,7 +683,7 @@ export default function ProductVideoPage() {
         <CardHeader className="flex flex-row items-center justify-between gap-3">
           <div>
             <CardTitle className="text-base">Owner Review Queue</CardTitle>
-            <p className="mt-1 text-xs text-gray-500">Local only: approved_for_future_publish → mock media ready → publish_plan_ready → publish_authorized_for_manual_execution → publish_execution_ready_dry_run</p>
+            <p className="mt-1 text-xs text-gray-500">Local only: approved_for_future_publish → mock media ready → publish_plan_ready → publish_authorized_for_manual_execution → Publish to Facebook returns blocked when real flag is off</p>
           </div>
           <Button variant="outline" size="sm" onClick={() => loadPreviewLogs(true)} disabled={loadingLogs}>
             <RefreshCw className={`mr-2 h-4 w-4 ${loadingLogs ? 'animate-spin' : ''}`} />
@@ -754,7 +830,10 @@ export default function ProductVideoPage() {
                       <div>facebook_post_performed: <span className="font-medium">false</span></div>
                       <div>idempotency_key: <span className="font-mono text-[11px]">{publishAuthorizations[item.preview_id].idempotency_key}</span></div>
                     </div>
-                    <p className="text-xs">Audit-only authorization created. Real publish ยังต้องทำใน Phase 4 แบบ one-shot guarded execution เท่านั้น</p>
+                    <p className="text-xs">Audit-only authorization created. Real publish ยังต้องทำผ่าน manual executor gate และต้องเปิด flag/approval แยกเท่านั้น</p>
+                    <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-800">
+                      Warning: ปุ่ม Publish to Facebook ยังไม่โพสต์จริงถ้า real publish flag/approval แยกยังไม่เปิด ระบบจะบันทึก audit และ return blocked โดยไม่เรียก Facebook Graph
+                    </div>
                     <Button
                       size="sm"
                       onClick={() => handlePublishExecutionDryRun(item.preview_id)}
@@ -762,6 +841,16 @@ export default function ProductVideoPage() {
                     >
                       {dryRunningExecutionPreviewId === item.preview_id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                       Run guarded dry-run executor
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => handleManualPublishExecute(item.preview_id)}
+                      disabled={manualPublishingPreviewId === item.preview_id}
+                      title="Manual executor gate: real publish ยังถูก block จนกว่า flag/approval แยกจะเปิด"
+                    >
+                      {manualPublishingPreviewId === item.preview_id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                      Publish to Facebook
                     </Button>
                   </div>
                 ) : null}
@@ -779,6 +868,22 @@ export default function ProductVideoPage() {
                       <div>facebook_post_performed: <span className="font-medium">false</span></div>
                     </div>
                     <p className="text-xs">Dry-run เท่านั้น: ไม่เรียก Facebook, LINE, n8n, renderer, schedule, S3 หรือ mark posted</p>
+                  </div>
+                ) : null}
+
+                {manualPublishExecutions[item.preview_id] ? (
+                  <div className="mt-4 space-y-2 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-950">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="font-semibold">Manual Publish Executor Gate</div>
+                      <Badge variant="secondary">{manualPublishExecutions[item.preview_id].status}</Badge>
+                    </div>
+                    <div className="grid gap-2 text-xs sm:grid-cols-2">
+                      <div>block_reason: <span className="font-medium">{manualPublishExecutions[item.preview_id].block_reason || 'none'}</span></div>
+                      <div>real_posting_enabled: <span className="font-medium">false</span></div>
+                      <div>publish_allowed: <span className="font-medium">false</span></div>
+                      <div>facebook_post_performed: <span className="font-medium">false</span></div>
+                    </div>
+                    <p className="text-xs">ผลลัพธ์นี้ยืนยันว่า real publish ยังต้องเปิด flag/approve แยก และไม่มีการเรียก Facebook Graph</p>
                   </div>
                 ) : null}
               </div>
