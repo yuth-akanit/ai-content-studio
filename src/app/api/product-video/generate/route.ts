@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { appendProductVideoPreviewLog } from '@/lib/product-video-preview-log';
 
 export const dynamic = 'force-dynamic';
 
@@ -137,17 +138,41 @@ export async function POST(request: NextRequest) {
     }
 
     const n8n = await forwardToN8n(payload);
+    const n8nStatus = 'status' in n8n ? n8n.status : null;
+    const responseBodyExposed = 'response_body_exposed' in n8n ? n8n.response_body_exposed : false;
+    const previewSafetyLocked =
+      payload.preview_only === true &&
+      payload.real_posting_enabled === false &&
+      payload.line_broadcast_enabled === false &&
+      payload.schedule_enabled === false &&
+      responseBodyExposed === false;
+
+    const previewLog = n8n.forwarded && n8nStatus === 200 && previewSafetyLocked
+      ? await appendProductVideoPreviewLog({
+        brand_context: payload.brand_context,
+        target_page_key: payload.target_page_key,
+        selected_page_id: payload.selected_page_id,
+        selected_page_name: payload.selected_page_name,
+        platform: payload.platform,
+        caption: payload.caption,
+        n8n_forwarded: n8n.forwarded,
+        n8n_status: n8nStatus,
+        response_body_exposed: false,
+      })
+      : null;
 
     return NextResponse.json({
       ok: true,
       status: n8n.forwarded ? 'forwarded_to_server_side_wrapper_target' : 'preview_payload_ready',
       n8n_forwarded: n8n.forwarded,
-      n8n_status: 'status' in n8n ? n8n.status : null,
-      response_body_exposed: 'response_body_exposed' in n8n ? n8n.response_body_exposed : false,
+      n8n_status: n8nStatus,
+      response_body_exposed: responseBodyExposed,
       preview_only: guard.preview_only,
       real_posting_enabled: guard.real_posting_enabled,
       line_broadcast_enabled: guard.line_broadcast_enabled,
       schedule_enabled: guard.schedule_enabled,
+      preview_log_created: Boolean(previewLog),
+      preview_log: previewLog,
       guard,
       payload,
       n8n,

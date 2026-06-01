@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { LoadingSpinner } from '@/components/shared/loading-spinner';
-import { Clapperboard, Loader2, ShieldCheck } from 'lucide-react';
+import { Clapperboard, Loader2, RefreshCw, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface SocialPage {
@@ -19,6 +19,27 @@ interface SocialPage {
   meta?: {
     is_instagram?: boolean;
   } | null;
+}
+
+interface PreviewLogItem {
+  preview_id: string;
+  created_at: string;
+  brand_context: string;
+  target_page_key: string;
+  selected_page_id: string;
+  selected_page_name: string;
+  platform: string;
+  caption: string;
+  preview_only: true;
+  real_posting_enabled: false;
+  line_broadcast_enabled: false;
+  schedule_enabled: false;
+  n8n_forwarded: boolean;
+  n8n_status: number | null;
+  response_body_exposed: false;
+  status: 'pending_owner_review';
+  publish_allowed: false;
+  facebook_post_performed: false;
 }
 
 type BrandContext = 'syncflow' | 'paa_air';
@@ -32,9 +53,22 @@ function inferTargetPageKey(page: SocialPage | undefined): TargetPageKey {
   return 'paa_air';
 }
 
+function formatDate(value: string): string {
+  try {
+    return new Intl.DateTimeFormat('th-TH', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    }).format(new Date(value));
+  } catch {
+    return value;
+  }
+}
+
 export default function ProductVideoPage() {
   const [pages, setPages] = useState<SocialPage[]>([]);
+  const [previewLogs, setPreviewLogs] = useState<PreviewLogItem[]>([]);
   const [loadingPages, setLoadingPages] = useState(true);
+  const [loadingLogs, setLoadingLogs] = useState(true);
   const [selectedPageId, setSelectedPageId] = useState('');
   const [brandContext, setBrandContext] = useState<BrandContext>('paa_air');
   const [targetPageKey, setTargetPageKey] = useState<TargetPageKey>('paa_air');
@@ -46,6 +80,24 @@ export default function ProductVideoPage() {
     () => pages.find((page) => page.id === selectedPageId),
     [pages, selectedPageId],
   );
+
+  async function loadPreviewLogs(showToast = false) {
+    setLoadingLogs(true);
+    try {
+      const response = await fetch('/api/product-video/preview-logs');
+      const data = await response.json();
+      if (!response.ok || !data.ok || !Array.isArray(data.items)) {
+        throw new Error(data.error || 'โหลดคิวตรวจไม่สำเร็จ');
+      }
+      setPreviewLogs(data.items);
+      if (showToast) toast.success('รีเฟรชคิวตรวจแล้ว');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'โหลดคิวตรวจไม่สำเร็จ';
+      toast.error(message);
+    } finally {
+      setLoadingLogs(false);
+    }
+  }
 
   useEffect(() => {
     (async () => {
@@ -68,6 +120,7 @@ export default function ProductVideoPage() {
         setLoadingPages(false);
       }
     })();
+    void loadPreviewLogs();
   }, []);
 
   function handlePageChange(pageId: string) {
@@ -112,7 +165,8 @@ export default function ProductVideoPage() {
         throw new Error(data.error || 'เตรียม payload ไม่สำเร็จ');
       }
 
-      toast.success('เตรียม Product Video preview payload แล้ว');
+      toast.success(data.preview_log_created ? 'บันทึก Preview Log เข้าคิวตรวจแล้ว' : 'เตรียม Product Video preview payload แล้ว');
+      await loadPreviewLogs();
     } catch (error) {
       const message = error instanceof Error ? error.message : 'เตรียม Product Video preview ไม่สำเร็จ';
       toast.error(message);
@@ -125,7 +179,7 @@ export default function ProductVideoPage() {
     <div className="space-y-6">
       <PageHeader
         title="Product Video"
-        description="Phase 1: เตรียม payload ฝั่ง server สำหรับส่งต่อ n8n แบบ preview-only โดยไม่โพสต์จริง"
+        description="Phase 3A: ส่ง preview-only ไป n8n แล้วบันทึกคิว owner review โดยยังไม่เปิดโพสต์จริง"
         actions={(
           <Badge variant="secondary" className="gap-1">
             <ShieldCheck className="h-3.5 w-3.5" />
@@ -207,7 +261,7 @@ export default function ProductVideoPage() {
 
             <Button onClick={handleGeneratePreview} disabled={submitting || !selectedPage} className="w-full sm:w-auto">
               {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Clapperboard className="mr-2 h-4 w-4" />}
-              สร้าง Preview Payload
+              สร้าง Preview และเข้าคิวตรวจ
             </Button>
           </CardContent>
         </Card>
@@ -227,6 +281,60 @@ export default function ProductVideoPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between gap-3">
+          <CardTitle className="text-base">Owner Review Queue</CardTitle>
+          <Button variant="outline" size="sm" onClick={() => loadPreviewLogs(true)} disabled={loadingLogs}>
+            <RefreshCw className={`mr-2 h-4 w-4 ${loadingLogs ? 'animate-spin' : ''}`} />
+            รีเฟรช
+          </Button>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {loadingLogs ? (
+            <div className="flex items-center gap-2 text-sm text-gray-500">
+              <LoadingSpinner className="py-0" />
+              กำลังโหลด preview logs
+            </div>
+          ) : previewLogs.length === 0 ? (
+            <div className="rounded-lg border border-dashed p-6 text-center text-sm text-gray-500">
+              ยังไม่มี Product Video preview ที่รอ owner review
+            </div>
+          ) : (
+            previewLogs.map((item) => (
+              <div key={item.preview_id} className="rounded-xl border border-gray-200 p-4 shadow-sm">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <div className="text-sm font-semibold text-gray-900">{item.selected_page_name}</div>
+                    <div className="text-xs text-gray-500">{formatDate(item.created_at)} · {item.preview_id}</div>
+                  </div>
+                  <Badge variant="outline">รอตรวจ owner</Badge>
+                </div>
+
+                <div className="mt-3 grid gap-2 text-xs text-gray-600 sm:grid-cols-2">
+                  <div>brand_context: <span className="font-medium text-gray-900">{item.brand_context}</span></div>
+                  <div>target_page_key: <span className="font-medium text-gray-900">{item.target_page_key}</span></div>
+                  <div>platform: <span className="font-medium text-gray-900">{item.platform}</span></div>
+                  <div>n8n_status: <span className="font-medium text-gray-900">{item.n8n_status}</span></div>
+                </div>
+
+                <p className="mt-3 whitespace-pre-wrap rounded-lg bg-gray-50 p-3 text-sm text-gray-700">{item.caption}</p>
+
+                <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                  <Badge variant="secondary">preview_only=true</Badge>
+                  <Badge variant="secondary">publish_allowed=false</Badge>
+                  <Badge variant="secondary">facebook_post_performed=false</Badge>
+                </div>
+
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <Button size="sm" disabled>Approve — coming soon / design only</Button>
+                  <Button size="sm" variant="outline" disabled>Reject — coming soon / design only</Button>
+                </div>
+              </div>
+            ))
+          )}
+        </CardContent>
+      </Card>
 
       {result && (
         <Card>
