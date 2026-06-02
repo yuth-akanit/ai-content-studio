@@ -5,7 +5,7 @@ import {
   updateProductVideoPreviewLog,
 } from '@/lib/product-video-preview-log';
 import { findLatestProductVideoMediaMetadata, appendProductVideoMockMediaMetadata } from '@/lib/product-video-media-metadata';
-import { forwardRenderRequestToExternal, validatePublicMediaUrl } from '@/lib/product-video-render-adapter';
+import { forwardRenderRequestToExternal, validatePublicImageUrl, validatePublicMediaUrl } from '@/lib/product-video-render-adapter';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,15 +13,37 @@ interface RenderRequestBody {
   preview_id?: unknown;
   brand_context?: unknown;
   asset_id?: unknown;
+  uploaded_asset_id?: unknown;
+  public_image_url?: unknown;
+  image_urls?: unknown;
   brief?: unknown;
   marketing_caption?: unknown;
   scene_script?: unknown;
   overlay_texts?: unknown;
   selected_pages?: unknown;
+  target_page_key?: unknown;
+  selected_page_id?: unknown;
+  selected_page_name?: unknown;
 }
 
 function cleanText(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
+}
+
+function cleanStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.map(cleanText).filter(Boolean);
+}
+
+function parseSelectedPages(value: unknown): unknown[] {
+  if (Array.isArray(value)) return value;
+  if (typeof value !== 'string' || !value.trim()) return [];
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -52,25 +74,72 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Determine payload details
-    const assetId = cleanText(body.asset_id) || item.asset_id || '';
+    const assetId = cleanText(body.asset_id) || cleanText(body.uploaded_asset_id) || item.uploaded_asset_id || item.asset_id || '';
+    const uploadedAssetId = cleanText(body.uploaded_asset_id) || assetId;
+    const bodyImageUrls = cleanStringArray(body.image_urls);
+    const itemImageUrls = Array.isArray(item.image_urls) ? item.image_urls.map(cleanText).filter(Boolean) : [];
+    const publicImageUrl = cleanText(body.public_image_url) || item.public_image_url || bodyImageUrls[0] || itemImageUrls[0] || '';
+    const imageUrls = publicImageUrl
+      ? Array.from(new Set([publicImageUrl, ...bodyImageUrls, ...itemImageUrls]))
+      : Array.from(new Set([...bodyImageUrls, ...itemImageUrls]));
     const brief = cleanText(body.brief) || item.brief || '';
     const marketingCaption = cleanText(body.marketing_caption) || item.marketing_caption || item.caption;
     const sceneScript = cleanText(body.scene_script) || item.scene_script || '';
     const overlayTexts = cleanText(body.overlay_texts) || item.overlay_texts || '';
-    const selectedPagesList = Array.isArray(body.selected_pages) ? body.selected_pages : [];
+    const selectedPagesList = parseSelectedPages(body.selected_pages).length > 0
+      ? parseSelectedPages(body.selected_pages)
+      : parseSelectedPages(item.selected_pages);
+    const targetPageKey = cleanText(body.target_page_key) || item.target_page_key || '';
+    const selectedPageId = cleanText(body.selected_page_id) || item.selected_page_id || '';
+    const selectedPageName = cleanText(body.selected_page_name) || item.selected_page_name || '';
 
-    // Forward request if external renderer is enabled
-    const forwardResult = await forwardRenderRequestToExternal({
+    if (!publicImageUrl || imageUrls.length === 0) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'image_public_url_required',
+          message: 'Upload an image before rendering',
+          ...PRODUCT_VIDEO_PREVIEW_SAFETY_FLAGS,
+        },
+        { status: 400 },
+      );
+    }
+
+    const imageValidation = await validatePublicImageUrl(publicImageUrl);
+    if (!imageValidation.ok) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'image_public_url_not_reachable',
+          message: 'Uploaded image public URL is not reachable by the app container',
+          validation_status: imageValidation.status || null,
+          validation_content_type: imageValidation.contentType || null,
+          validation_error: imageValidation.error || null,
+          ...PRODUCT_VIDEO_PREVIEW_SAFETY_FLAGS,
+        },
+        { status: 400 },
+      );
+    }
+
+    const renderPayload = {
       preview_id: previewId,
       brand_context: item.brand_context,
       asset_id: assetId,
-      brief: brief,
+      uploaded_asset_id: uploadedAssetId,
+      public_image_url: publicImageUrl,
+      image_urls: imageUrls,
+      brief,
       marketing_caption: marketingCaption,
       scene_script: sceneScript,
       overlay_texts: overlayTexts,
       selected_pages: selectedPagesList,
-    });
+      target_page_key: targetPageKey,
+      selected_page_id: selectedPageId,
+      selected_page_name: selectedPageName,
+    };
+
+    // Forward request if external renderer is enabled
+    const forwardResult = await forwardRenderRequestToExternal(renderPayload);
 
     if (forwardResult.forwarded) {
       if (!forwardResult.ok) {
@@ -125,6 +194,9 @@ export async function POST(request: NextRequest) {
           media_status: 'ready',
           media_type: forwardResult.media_type || 'video',
           asset_id: assetId,
+          uploaded_asset_id: uploadedAssetId,
+          public_image_url: publicImageUrl,
+          image_urls: imageUrls,
           brief: brief,
           marketing_caption: marketingCaption,
           scene_script: sceneScript,
@@ -149,6 +221,9 @@ export async function POST(request: NextRequest) {
           render_job_id: jobId,
           render_status: 'render_pending',
           asset_id: assetId,
+          uploaded_asset_id: uploadedAssetId,
+          public_image_url: publicImageUrl,
+          image_urls: imageUrls,
           brief: brief,
           marketing_caption: marketingCaption,
           scene_script: sceneScript,
@@ -180,6 +255,9 @@ export async function POST(request: NextRequest) {
       render_job_id: jobId,
       render_status: status,
       asset_id: assetId,
+      uploaded_asset_id: uploadedAssetId,
+      public_image_url: publicImageUrl,
+      image_urls: imageUrls,
       brief: brief,
       marketing_caption: marketingCaption,
       scene_script: sceneScript,

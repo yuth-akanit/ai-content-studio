@@ -41,6 +41,9 @@ export interface ProductVideoPreviewLogInput {
   campaign_id?: string;
   selected_pages?: string;
   asset_id?: string;
+  uploaded_asset_id?: string;
+  public_image_url?: string;
+  image_urls?: string[];
   brief?: string;
   publish_caption?: string;
   video_title?: string;
@@ -222,6 +225,9 @@ export async function appendProductVideoPreviewLog(
     campaign_id: input.campaign_id,
     selected_pages: input.selected_pages,
     asset_id: input.asset_id,
+    uploaded_asset_id: input.uploaded_asset_id,
+    public_image_url: input.public_image_url,
+    image_urls: input.image_urls,
     brief: input.brief,
     publish_caption: input.publish_caption,
     video_title: input.video_title,

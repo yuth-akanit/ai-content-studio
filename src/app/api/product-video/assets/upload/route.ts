@@ -1,21 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { mkdir, writeFile } from 'node:fs/promises';
-import path from 'node:path';
-import { randomUUID } from 'node:crypto';
 import { PRODUCT_VIDEO_PREVIEW_SAFETY_FLAGS } from '@/lib/product-video-preview-log';
+import {
+  createProductVideoUploadedAssetMetadata,
+  saveProductVideoUploadedAsset,
+} from '@/lib/product-video-assets';
 
 export const dynamic = 'force-dynamic';
 
-const UPLOAD_DIR = '/app/runtime/product-video-assets/uploads';
-const METADATA_LOG_PATH = '/app/runtime/product-video-uploaded-assets.jsonl';
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
-
-function cleanFilename(name: string): string {
-  // Use path.basename to strip directory components
-  const base = path.basename(name);
-  // Keep only safe characters: alphanumeric, dots, dashes, underscores
-  return base.replace(/[^a-zA-Z0-9._-]/g, '_');
-}
 
 export async function POST(request: NextRequest) {
   try {
@@ -59,55 +51,26 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const originalFilename = cleanFilename(file.name || 'uploaded_image');
-    const ext = path.extname(originalFilename) || '.png';
-    const assetId = randomUUID();
-    const savedFilename = `${assetId}${ext}`;
-    const localAssetPath = path.join(UPLOAD_DIR, savedFilename);
+    const metadata = createProductVideoUploadedAssetMetadata({
+      request,
+      originalFilename: file.name || 'uploaded_image',
+      mimeType,
+      sizeBytes: file.size,
+    });
 
-    // Strict path verification to ensure no directory traversal
-    const resolvedPath = path.resolve(localAssetPath);
-    const resolvedUploadDir = path.resolve(UPLOAD_DIR);
-    if (!resolvedPath.startsWith(resolvedUploadDir + path.sep)) {
-      return NextResponse.json(
-        {
-          ok: false,
-          error: 'directory_traversal_detected',
-          message: 'Invalid path generation detected',
-          ...PRODUCT_VIDEO_PREVIEW_SAFETY_FLAGS,
-        },
-        { status: 400 }
-      );
-    }
-
-    // Read buffer and save file
     const buffer = Buffer.from(await file.arrayBuffer());
-    await mkdir(resolvedUploadDir, { recursive: true });
-    await writeFile(resolvedPath, buffer);
-
-    // Save metadata in JSONL log
-    const metadata = {
-      asset_id: assetId,
-      filename: originalFilename,
-      saved_filename: savedFilename,
-      mime_type: mimeType,
-      size_bytes: file.size,
-      local_asset_path: resolvedPath,
-      uploaded_at: new Date().toISOString(),
-    };
-
-    await mkdir(path.dirname(METADATA_LOG_PATH), { recursive: true });
-    await writeFile(METADATA_LOG_PATH, `${JSON.stringify(metadata)}\n`, { flag: 'a' });
+    await saveProductVideoUploadedAsset(metadata, buffer);
 
     return NextResponse.json({
       ok: true,
-      asset_id: assetId,
-      filename: originalFilename,
-      mime_type: mimeType,
-      size_bytes: file.size,
-      local_asset_path: resolvedPath,
-      public_image_url: null,
-      explanation: 'Public image serving is not configured for runtime uploaded assets. Files are stored locally in the container filesystem.',
+      asset_id: metadata.asset_id,
+      uploaded_asset_id: metadata.asset_id,
+      filename: metadata.filename,
+      mime_type: metadata.mime_type,
+      size_bytes: metadata.size_bytes,
+      local_asset_path: metadata.local_asset_path,
+      public_image_url: metadata.public_image_url,
+      image_urls: metadata.image_urls,
       ...PRODUCT_VIDEO_PREVIEW_SAFETY_FLAGS,
     });
   } catch (error) {

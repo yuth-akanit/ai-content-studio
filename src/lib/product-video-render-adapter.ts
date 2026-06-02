@@ -2,11 +2,17 @@ export interface RenderRequestPayload {
   preview_id: string;
   brand_context: string;
   asset_id: string;
+  uploaded_asset_id: string;
+  public_image_url: string;
+  image_urls: string[];
   brief: string;
   marketing_caption: string;
   scene_script: string;
   overlay_texts: string;
-  selected_pages: string[];
+  selected_pages: unknown[];
+  target_page_key: string;
+  selected_page_id: string;
+  selected_page_name: string;
 }
 
 export interface RenderAdapterResult {
@@ -97,6 +103,17 @@ export async function forwardRenderRequestToExternal(payload: RenderRequestPaylo
 }
 
 export async function validatePublicMediaUrl(url: string): Promise<{ ok: boolean; contentType?: string; status?: number; error?: string }> {
+  return validateReachableMediaUrl(url, ['video/', 'image/']);
+}
+
+export async function validatePublicImageUrl(url: string): Promise<{ ok: boolean; contentType?: string; status?: number; error?: string }> {
+  return validateReachableMediaUrl(url, ['image/']);
+}
+
+async function validateReachableMediaUrl(
+  url: string,
+  allowedContentTypePrefixes: string[],
+): Promise<{ ok: boolean; contentType?: string; status?: number; error?: string }> {
   try {
     const cleanUrl = (url || '').trim();
     if (!cleanUrl) {
@@ -115,7 +132,7 @@ export async function validatePublicMediaUrl(url: string): Promise<{ ok: boolean
       return { ok: false, status: response.status, contentType, error: 'media_url_not_http_200_or_206' };
     }
 
-    const contentTypeAllowed = contentType.startsWith('video/') || contentType.startsWith('image/');
+    const contentTypeAllowed = allowedContentTypePrefixes.some((prefix) => contentType.startsWith(prefix));
     if (!contentTypeAllowed) {
       return { ok: false, status: response.status, contentType, error: 'media_url_content_type_invalid' };
     }

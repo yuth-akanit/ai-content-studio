@@ -31,6 +31,9 @@ interface ProductVideoGenerateRequest {
 
   // New fields
   asset_id?: string;
+  uploaded_asset_id?: string;
+  public_image_url?: string;
+  image_urls?: string[];
   brief?: string;
   selected_pages?: string[];
 }
@@ -54,6 +57,9 @@ interface ProductVideoPayload {
 
   // New fields
   asset_id?: string;
+  uploaded_asset_id?: string;
+  public_image_url?: string;
+  image_urls?: string[];
   brief?: string;
   selected_pages?: string; // stringified JSON
   video_title?: string;
@@ -91,6 +97,13 @@ async function buildPayload(body: ProductVideoGenerateRequest): Promise<ProductV
 
   const marketingCaption = clean(body.marketing_caption || body.caption) || aiContent.marketing_caption;
   const previewNote = clean(body.preview_note) || aiContent.preview_note;
+  const publicImageUrl = clean(body.public_image_url);
+  const imageUrls = Array.isArray(body.image_urls)
+    ? body.image_urls.map(clean).filter(Boolean)
+    : [];
+  const normalizedImageUrls = publicImageUrl
+    ? Array.from(new Set([publicImageUrl, ...imageUrls]))
+    : imageUrls;
 
   // Resolve all selected pages details
   const resolvedPagesInfo = [];
@@ -131,7 +144,10 @@ async function buildPayload(body: ProductVideoGenerateRequest): Promise<ProductV
     schedule_enabled: false,
 
     // New fields
-    asset_id: clean(body.asset_id),
+    asset_id: clean(body.asset_id || body.uploaded_asset_id),
+    uploaded_asset_id: clean(body.uploaded_asset_id || body.asset_id),
+    public_image_url: publicImageUrl || normalizedImageUrls[0] || '',
+    image_urls: normalizedImageUrls,
     brief: brief,
     selected_pages: resolvedPagesInfo.length > 0 ? JSON.stringify(resolvedPagesInfo) : undefined,
     video_title: aiContent.video_title,
@@ -292,6 +308,9 @@ export async function POST(request: NextRequest) {
 
         // New fields
         asset_id: payload.asset_id,
+        uploaded_asset_id: payload.uploaded_asset_id,
+        public_image_url: payload.public_image_url,
+        image_urls: payload.image_urls,
         brief: payload.brief,
         selected_pages: payload.selected_pages,
         video_title: payload.video_title,

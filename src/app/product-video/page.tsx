@@ -146,6 +146,9 @@ interface PreviewLogItem {
 
   // New fields
   asset_id?: string;
+  uploaded_asset_id?: string;
+  public_image_url?: string;
+  image_urls?: string[];
   brief?: string;
   selected_pages?: string;
   video_title?: string;
@@ -277,7 +280,9 @@ export default function ProductVideoPage() {
   const [uploading, setUploading] = useState(false);
   const [uploadedAssetId, setUploadedAssetId] = useState('');
   const [uploadedFilename, setUploadedFilename] = useState('');
-  const [uploadedFileUrl, setUploadedFileUrl] = useState<string | null>(null);
+  const [uploadedPublicImageUrl, setUploadedPublicImageUrl] = useState('');
+  const [uploadedImageUrls, setUploadedImageUrls] = useState<string[]>([]);
+  const [uploadError, setUploadError] = useState('');
 
   // User brief state
   const [brief, setBrief] = useState('');
@@ -376,6 +381,11 @@ export default function ProductVideoPage() {
     if (!file) return;
 
     setUploading(true);
+    setUploadError('');
+    setUploadedAssetId('');
+    setUploadedFilename('');
+    setUploadedPublicImageUrl('');
+    setUploadedImageUrls([]);
     const formData = new FormData();
     formData.append('file', file);
 
@@ -389,12 +399,20 @@ export default function ProductVideoPage() {
         throw new Error(data.error || data.message || 'อัปโหลดรูปภาพไม่สำเร็จ');
       }
 
+      const publicImageUrl = typeof data.public_image_url === 'string' ? data.public_image_url.trim() : '';
+      const imageUrls = Array.isArray(data.image_urls) ? data.image_urls.filter((url: unknown): url is string => typeof url === 'string' && url.trim().length > 0) : [];
+      if (!publicImageUrl || imageUrls.length === 0) {
+        throw new Error('อัปโหลดแล้วแต่ยังไม่ได้ public image URL สำหรับ renderer');
+      }
+
       setUploadedAssetId(data.asset_id);
       setUploadedFilename(data.filename);
-      setUploadedFileUrl(URL.createObjectURL(file)); // Local preview URL
-      toast.success('อัปโหลดรูปภาพเสร็จสิ้น (Local MVP)');
+      setUploadedPublicImageUrl(publicImageUrl);
+      setUploadedImageUrls(imageUrls);
+      toast.success('อัปโหลดรูปภาพเสร็จสิ้น พร้อม public URL สำหรับ renderer');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'อัปโหลดรูปภาพไม่สำเร็จ';
+      setUploadError(message);
       toast.error(message);
     } finally {
       setUploading(false);
@@ -404,6 +422,11 @@ export default function ProductVideoPage() {
   async function handleGeneratePreview() {
     if (selectedPageIds.length === 0) {
       toast.error('กรุณาเลือกเพจอย่างน้อยหนึ่งเพจ');
+      return;
+    }
+
+    if (!uploadedPublicImageUrl || uploadedImageUrls.length === 0) {
+      toast.error('กรุณาอัปโหลดรูปภาพให้ได้ public image URL ก่อนสร้าง preview');
       return;
     }
 
@@ -425,6 +448,9 @@ export default function ProductVideoPage() {
           marketing_caption: caption,
           brief,
           asset_id: uploadedAssetId,
+          uploaded_asset_id: uploadedAssetId,
+          public_image_url: uploadedPublicImageUrl,
+          image_urls: uploadedImageUrls,
           preview_note: 'สร้างวิดีโอสินค้าแบบ preview เท่านั้น ยังไม่โพสต์จริง และยังไม่เปิด schedule',
           preview_only: true,
           real_posting_enabled: false,
@@ -453,6 +479,10 @@ export default function ProductVideoPage() {
   async function handleRenderRequest(previewId: string) {
     const item = previewLogs.find((p) => p.preview_id === previewId);
     if (!item) return;
+    if (!item.public_image_url || !item.image_urls?.length) {
+      toast.error('ต้องมี public_image_url จากรูปที่อัปโหลดก่อน Generate Video Preview');
+      return;
+    }
 
     setRenderingPreviewId(previewId);
     setRenderStatus('initializing');
@@ -465,12 +495,18 @@ export default function ProductVideoPage() {
         body: JSON.stringify({
           preview_id: previewId,
           brand_context: item.brand_context,
-          asset_id: item.asset_id || '',
+          asset_id: item.asset_id || item.uploaded_asset_id || '',
+          uploaded_asset_id: item.uploaded_asset_id || item.asset_id || '',
+          public_image_url: item.public_image_url || '',
+          image_urls: item.image_urls || [],
           brief: item.brief || '',
           marketing_caption: item.marketing_caption || item.caption,
           scene_script: item.scene_script || '',
           overlay_texts: item.overlay_texts || '',
           selected_pages: item.selected_pages ? JSON.parse(item.selected_pages) : [],
+          target_page_key: item.target_page_key,
+          selected_page_id: item.selected_page_id,
+          selected_page_name: item.selected_page_name,
         }),
       });
 
@@ -909,13 +945,19 @@ export default function ProductVideoPage() {
                 {uploading && <Loader2 className="h-4 w-4 animate-spin text-blue-600" />}
               </div>
               {uploadedFilename && (
-                <div className="text-xs text-green-700 flex items-center gap-1 font-medium">
-                  อัปโหลดสำเร็จ: {uploadedFilename} (ID: {uploadedAssetId})
+                <div className="text-xs text-green-700 flex flex-col gap-1 font-medium">
+                  <span>อัปโหลดสำเร็จ: {uploadedFilename} (ID: {uploadedAssetId})</span>
+                  <span className="font-mono text-[10px] text-green-800 break-all">public_image_url: {uploadedPublicImageUrl || 'ยังไม่พร้อม'}</span>
                 </div>
               )}
-              {uploadedFileUrl && (
+              {uploadError && (
+                <div className="rounded-md border border-red-200 bg-red-50 p-2 text-xs text-red-700">
+                  {uploadError}
+                </div>
+              )}
+              {uploadedPublicImageUrl && (
                 <div className="mt-2 max-w-[180px] overflow-hidden rounded-md border border-gray-200 shadow-sm bg-white p-1">
-                  <img src={uploadedFileUrl} alt="Uploaded asset preview" className="h-auto w-full rounded" />
+                  <img src={uploadedPublicImageUrl} alt="Uploaded asset preview" className="h-auto w-full rounded" />
                 </div>
               )}
             </div>
@@ -942,7 +984,12 @@ export default function ProductVideoPage() {
               />
             </div>
 
-            <Button onClick={handleGeneratePreview} disabled={submitting || selectedPageIds.length === 0} className="w-full sm:w-auto">
+            <Button
+              onClick={handleGeneratePreview}
+              disabled={submitting || selectedPageIds.length === 0 || !uploadedPublicImageUrl || uploadedImageUrls.length === 0}
+              title={uploadedPublicImageUrl && uploadedImageUrls.length > 0 ? 'สร้าง preview พร้อม public image URL' : 'ต้องอัปโหลดรูปและได้ public image URL ก่อน'}
+              className="w-full sm:w-auto"
+            >
               {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Clapperboard className="mr-2 h-4 w-4" />}
               สร้าง Preview และเข้าคิวตรวจ
             </Button>
@@ -1019,7 +1066,8 @@ export default function ProductVideoPage() {
                   </div>
                   <div className="grid gap-2 text-xs sm:grid-cols-2">
                     <div>บรีฟลูกค้า: <span className="font-medium text-gray-800">{item.brief || '-'}</span></div>
-                    <div>Asset ID: <span className="font-mono text-gray-600">{item.asset_id || '-'}</span></div>
+                    <div>Asset ID: <span className="font-mono text-gray-600">{item.asset_id || item.uploaded_asset_id || '-'}</span></div>
+                    <div className="sm:col-span-2">Public image: <span className="font-mono text-[10px] text-gray-600 break-all">{item.public_image_url || '-'}</span></div>
                     <div>หัวข้อวิดีโอ: <span className="font-medium text-gray-800">{item.video_title || '-'}</span></div>
                     <div>จุดฮุค (Hook): <span className="font-medium text-gray-800">{item.hook || '-'}</span></div>
                     <div className="sm:col-span-2">บทภาพ (Script): <span className="font-medium text-gray-800 block whitespace-pre-wrap mt-1 bg-white p-2 rounded border border-gray-200/50">{item.scene_script || '-'}</span></div>
@@ -1078,7 +1126,8 @@ export default function ProductVideoPage() {
                     <Button
                       size="sm"
                       onClick={() => handleRenderRequest(item.preview_id)}
-                      disabled={renderingPreviewId === item.preview_id}
+                      disabled={renderingPreviewId === item.preview_id || !item.public_image_url || !item.image_urls?.length}
+                      title={item.public_image_url && item.image_urls?.length ? 'ส่งคำขอ render ด้วย public image URL' : 'ต้องมี public_image_url จากรูปที่อัปโหลดก่อน'}
                     >
                       {renderingPreviewId === item.preview_id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Clapperboard className="mr-2 h-4 w-4" />}
                       Generate Video Preview
