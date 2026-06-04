@@ -265,6 +265,14 @@ function getDecisionSuccessMessage(decision: PreviewDecision): string {
   }
 }
 
+function isRenderedWithMedia(data: any): boolean {
+  const status = typeof data?.status === 'string' ? data.status : '';
+  const renderStatus = typeof data?.render_status === 'string' ? data.render_status : '';
+  const publicMediaUrl = typeof data?.public_media_url === 'string' ? data.public_media_url.trim() : '';
+
+  return publicMediaUrl.length > 0 && (status === 'rendered' || renderStatus === 'rendered');
+}
+
 export default function ProductVideoPage() {
   const [pages, setPages] = useState<SocialPage[]>([]);
   const [previewLogs, setPreviewLogs] = useState<PreviewLogItem[]>([]);
@@ -484,7 +492,9 @@ export default function ProductVideoPage() {
       return;
     }
 
+    toast.dismiss();
     setRenderingPreviewId(previewId);
+    setRenderingJobId(null);
     setRenderStatus('initializing');
     setResult(null);
 
@@ -517,16 +527,41 @@ export default function ProductVideoPage() {
         throw new Error(data.error || data.message || 'ส่งคำขอ render ไม่สำเร็จ');
       }
 
-      setRenderStatus(data.status);
-      setRenderingJobId(data.job_id);
-      toast.success(`ริเริ่มการ Render แล้ว สถานะ: ${data.status}`);
+      const nextStatus = typeof data.render_status === 'string' ? data.render_status : data.status;
+      setRenderStatus(nextStatus);
+      setRenderingJobId(data.render_job_id || data.job_id || null);
 
-      // Start polling status
-      pollRenderStatus(data.job_id, previewId);
+      if (isRenderedWithMedia(data)) {
+        setRenderingPreviewId(null);
+        setRenderingJobId(null);
+        setPublishPlanPreviews((current) => {
+          const next = { ...current };
+          delete next[previewId];
+          return next;
+        });
+        setPublishAuthorizations((current) => {
+          const next = { ...current };
+          delete next[previewId];
+          return next;
+        });
+        toast.success('การ Render เสร็จสิ้น! วิดีโอพร้อมแสดงผล');
+        await loadPreviewLogs();
+        return;
+      }
+
+      toast.success(`รับคำสั่ง Render แล้ว สถานะ: ${nextStatus}`);
+
+      if (data.job_id || data.render_job_id) {
+        pollRenderStatus(data.render_job_id || data.job_id, previewId);
+      } else {
+        setRenderingPreviewId(null);
+        setRenderingJobId(null);
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'ส่งคำขอ render ไม่สำเร็จ';
       toast.error(message);
       setRenderingPreviewId(null);
+      setRenderingJobId(null);
       setRenderStatus('');
     }
   }
@@ -558,7 +593,7 @@ export default function ProductVideoPage() {
         }
 
         setRenderStatus(data.status);
-        if (data.status === 'mock_render_ready') {
+        if (isRenderedWithMedia(data) || data.status === 'mock_render_ready') {
           clearInterval(interval);
           setRenderingPreviewId(null);
           setRenderingJobId(null);
