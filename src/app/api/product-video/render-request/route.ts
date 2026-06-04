@@ -154,7 +154,7 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      const jobId = forwardResult.job_id || `job-${previewId}`;
+      const jobId = forwardResult.render_job_id || forwardResult.job_id || `job-${previewId}`;
 
       if (forwardResult.public_media_url) {
         // Validate URL HTTP 200/206
@@ -187,12 +187,20 @@ export async function POST(request: NextRequest) {
         }
 
         await updateProductVideoPreviewLog(previewId, {
+          status: 'rendered',
           render_job_id: jobId,
-          render_status: 'mock_render_ready',
+          render_status: 'rendered',
           public_media_url: forwardResult.public_media_url,
+          thumbnail_url: forwardResult.thumbnail_url || undefined,
           media_checksum: forwardResult.media_checksum || `md5-${previewId}`,
           media_status: 'ready',
           media_type: forwardResult.media_type || 'video',
+          renderer_called: true,
+          error: null,
+          facebook_post_performed: false,
+          line_broadcast_performed: false,
+          schedule_enabled: false,
+          mark_posted_performed: false,
           asset_id: assetId,
           uploaded_asset_id: uploadedAssetId,
           public_image_url: publicImageUrl,
@@ -207,8 +215,12 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({
           ok: true,
           job_id: jobId,
-          status: 'mock_render_ready',
+          render_job_id: jobId,
+          status: 'rendered',
+          render_status: 'rendered',
+          media_status: 'ready',
           public_media_url: forwardResult.public_media_url,
+          thumbnail_url: forwardResult.thumbnail_url || null,
           media_type: forwardResult.media_type || 'video',
           media_checksum: forwardResult.media_checksum || `md5-${previewId}`,
           ...PRODUCT_VIDEO_PREVIEW_SAFETY_FLAGS,
@@ -220,6 +232,8 @@ export async function POST(request: NextRequest) {
         await updateProductVideoPreviewLog(previewId, {
           render_job_id: jobId,
           render_status: 'render_pending',
+          renderer_called: true,
+          error: null,
           asset_id: assetId,
           uploaded_asset_id: uploadedAssetId,
           public_image_url: publicImageUrl,

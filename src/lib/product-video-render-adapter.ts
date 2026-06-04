@@ -20,13 +20,16 @@ export interface RenderAdapterResult {
   ok: boolean;
   reason?: string;
   job_id?: string;
+  render_job_id?: string;
   status?: string;
   public_media_url?: string | null;
+  thumbnail_url?: string | null;
   media_type?: string;
   media_checksum?: string | null;
+  renderer_called?: boolean;
 }
 
-const RENDER_TIMEOUT_MS = 15_000;
+const RENDER_TIMEOUT_MS = 240_000;
 
 export async function forwardRenderRequestToExternal(payload: RenderRequestPayload): Promise<RenderAdapterResult> {
   const forwardEnabled = process.env.PRODUCT_VIDEO_RENDER_FORWARD_ENABLED === 'true';
@@ -61,6 +64,10 @@ export async function forwardRenderRequestToExternal(payload: RenderRequestPaylo
 
     const data = await response.json().catch(() => ({})) as Record<string, unknown>;
     const publicMediaUrl = typeof data.public_media_url === 'string' ? data.public_media_url.trim() : null;
+    const thumbnailUrl = typeof data.thumbnail_url === 'string' ? data.thumbnail_url.trim() : null;
+    const renderJobId = typeof data.render_job_id === 'string'
+      ? data.render_job_id.trim()
+      : (typeof data.job_id === 'string' ? data.job_id.trim() : `job-${payload.preview_id}`);
 
     if (!publicMediaUrl) {
       // Support async response if status is pending or job_id is returned
@@ -68,11 +75,14 @@ export async function forwardRenderRequestToExternal(payload: RenderRequestPaylo
         return {
           forwarded: true,
           ok: true,
-          job_id: typeof data.job_id === 'string' ? data.job_id : `job-${payload.preview_id}`,
+          job_id: renderJobId,
+          render_job_id: renderJobId,
           status: 'render_pending',
           public_media_url: null,
+          thumbnail_url: thumbnailUrl,
           media_type: 'video',
           media_checksum: null,
+          renderer_called: data.renderer_called === true,
         };
       }
       return {
@@ -85,11 +95,14 @@ export async function forwardRenderRequestToExternal(payload: RenderRequestPaylo
     return {
       forwarded: true,
       ok: true,
-      job_id: typeof data.job_id === 'string' ? data.job_id : `job-${payload.preview_id}`,
-      status: typeof data.status === 'string' ? data.status : 'mock_render_ready',
+      job_id: renderJobId,
+      render_job_id: renderJobId,
+      status: typeof data.status === 'string' ? data.status : 'rendered',
       public_media_url: publicMediaUrl,
+      thumbnail_url: thumbnailUrl,
       media_type: typeof data.media_type === 'string' ? data.media_type : 'video',
       media_checksum: typeof data.media_checksum === 'string' ? data.media_checksum : `md5-${payload.preview_id}`,
+      renderer_called: data.renderer_called === true,
     };
   } catch (error) {
     return {

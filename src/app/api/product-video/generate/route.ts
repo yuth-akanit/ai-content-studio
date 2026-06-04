@@ -206,13 +206,29 @@ async function forwardToN8n(payload: ProductVideoPayload) {
       signal: controller.signal,
     });
 
-    await response.arrayBuffer().catch(() => null);
+    const data = await response.json().catch(() => ({})) as Record<string, unknown>;
+    const renderJobId = typeof data.render_job_id === 'string'
+      ? data.render_job_id.trim()
+      : (typeof data.job_id === 'string' ? data.job_id.trim() : '');
+    const publicMediaUrl = typeof data.public_media_url === 'string' ? data.public_media_url.trim() : '';
+    const thumbnailUrl = typeof data.thumbnail_url === 'string' ? data.thumbnail_url.trim() : '';
+    const renderStatus = typeof data.render_status === 'string'
+      ? data.render_status.trim()
+      : (typeof data.status === 'string' ? data.status.trim() : '');
+    const rendererCalled = data.renderer_called === true;
 
     return {
       forwarded: true,
       ok: response.ok,
       status: response.status,
       response_body_exposed: false,
+      render_job_id: renderJobId,
+      render_status: renderStatus,
+      public_media_url: publicMediaUrl,
+      thumbnail_url: thumbnailUrl,
+      media_type: typeof data.media_type === 'string' ? data.media_type.trim() : '',
+      media_status: typeof data.media_status === 'string' ? data.media_status.trim() : '',
+      renderer_called: rendererCalled,
     };
   } catch {
     return {
@@ -285,6 +301,14 @@ export async function POST(request: NextRequest) {
       payload.line_broadcast_enabled === false &&
       payload.schedule_enabled === false &&
       responseBodyExposed === false;
+    const n8nPublicMediaUrl = ('public_media_url' in n8n && typeof n8n.public_media_url === 'string') ? n8n.public_media_url : '';
+    const n8nThumbnailUrl = ('thumbnail_url' in n8n && typeof n8n.thumbnail_url === 'string') ? n8n.thumbnail_url : '';
+    const n8nRenderJobId = ('render_job_id' in n8n && typeof n8n.render_job_id === 'string') ? n8n.render_job_id : '';
+    const n8nRenderStatus = ('render_status' in n8n && typeof n8n.render_status === 'string') ? n8n.render_status : '';
+    const n8nMediaType = ('media_type' in n8n && typeof n8n.media_type === 'string') ? n8n.media_type : '';
+    const n8nMediaStatus = ('media_status' in n8n && typeof n8n.media_status === 'string') ? n8n.media_status : '';
+    const n8nRendererCalled = 'renderer_called' in n8n && n8n.renderer_called === true;
+    const n8nRendered = n8n.forwarded && n8nStatus === 200 && n8nPublicMediaUrl.length > 0;
 
     // By default, since n8n forwarding is disabled under MVP, we still want to append a preview log record
     const shouldCreateLog = (n8n.forwarded && n8nStatus === 200 && previewSafetyLocked) || (!n8n.forwarded);
@@ -318,6 +342,15 @@ export async function POST(request: NextRequest) {
         scene_script: payload.scene_script,
         overlay_texts: payload.overlay_texts,
         hashtags: payload.hashtags,
+        status: n8nRendered ? 'rendered' : 'pending_owner_review',
+        render_status: n8nRendered ? 'rendered' : (n8nRenderStatus || undefined),
+        media_status: n8nRendered ? 'ready' : (n8nMediaStatus || undefined),
+        public_media_url: n8nPublicMediaUrl || undefined,
+        thumbnail_url: n8nThumbnailUrl || undefined,
+        render_job_id: n8nRenderJobId || undefined,
+        media_type: n8nRendered ? (n8nMediaType || 'video') : (n8nMediaType || undefined),
+        renderer_called: n8nRendererCalled || n8nRendered,
+        error: null,
       })
       : null;
 

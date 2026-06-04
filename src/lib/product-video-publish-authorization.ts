@@ -106,6 +106,13 @@ export async function authorizeProductVideoPublishPlan(input: {
 
   const publishPlan = await buildProductVideoPublishPlanPreview(input.item);
 
+  if (!cleanText(input.item.public_media_url)) {
+    throw Object.assign(new Error('public_media_url_required_for_authorization'), {
+      code: 'public_media_url_required_for_authorization',
+      status: 409,
+    });
+  }
+
   if (targetPageKey !== publishPlan.target_page.page_key) {
     throw Object.assign(new Error('target_page_key_mismatch'), { code: 'target_page_key_mismatch', status: 409 });
   }

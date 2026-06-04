@@ -8,6 +8,7 @@ export type ProductVideoApprovalDecision = 'approve' | 'reject' | 'request_chang
 
 export type ProductVideoPreviewLogStatus =
   | 'pending_owner_review'
+  | 'rendered'
   | 'approved_for_future_publish'
   | 'rejected'
   | 'changes_requested';
@@ -17,7 +18,7 @@ export interface ProductVideoPreviewSafetyFlags {
   facebook_post_performed: false;
   line_broadcast_performed: false;
   schedule_enabled: false;
-  renderer_called: false;
+  renderer_called: boolean;
   phaya_called: false;
   s3_upload_performed: false;
   mark_posted_performed: false;
@@ -54,12 +55,16 @@ export interface ProductVideoPreviewLogInput {
   render_job_id?: string;
   render_status?: string;
   public_media_url?: string;
+  thumbnail_url?: string;
   media_type?: string;
   media_checksum?: string;
   media_status?: string;
+  error?: string | null;
+  status?: ProductVideoPreviewLogStatus;
+  renderer_called?: boolean;
 }
 
-export interface ProductVideoPreviewLogRecord extends ProductVideoPreviewLogInput, ProductVideoPreviewSafetyFlags {
+export interface ProductVideoPreviewLogRecord extends Omit<ProductVideoPreviewLogInput, 'renderer_called'>, ProductVideoPreviewSafetyFlags {
   preview_id: string;
   created_at: string;
   updated_at?: string;
@@ -104,6 +109,7 @@ const DECISION_TO_STATUS: Record<ProductVideoApprovalDecision, ProductVideoPrevi
 
 const VALID_STATUSES = new Set<ProductVideoPreviewLogStatus>([
   'pending_owner_review',
+  'rendered',
   'approved_for_future_publish',
   'rejected',
   'changes_requested',
@@ -148,7 +154,7 @@ function normalizePreviewLogRecord(value: unknown): ProductVideoPreviewLogRecord
     facebook_post_performed: false,
     line_broadcast_performed: false,
     schedule_enabled: false,
-    renderer_called: false,
+    renderer_called: value.renderer_called === true,
     phaya_called: false,
     s3_upload_performed: false,
     mark_posted_performed: false,
@@ -221,7 +227,7 @@ export async function appendProductVideoPreviewLog(
     n8n_forwarded: input.n8n_forwarded,
     n8n_status: input.n8n_status,
     response_body_exposed: false,
-    status: 'pending_owner_review',
+    status: input.status || 'pending_owner_review',
     campaign_id: input.campaign_id,
     selected_pages: input.selected_pages,
     asset_id: input.asset_id,
@@ -238,10 +244,13 @@ export async function appendProductVideoPreviewLog(
     render_job_id: input.render_job_id,
     render_status: input.render_status,
     public_media_url: input.public_media_url,
+    thumbnail_url: input.thumbnail_url,
     media_type: input.media_type,
     media_checksum: input.media_checksum,
     media_status: input.media_status,
+    error: input.error ?? null,
     ...PRODUCT_VIDEO_PREVIEW_SAFETY_FLAGS,
+    renderer_called: input.renderer_called === true,
   };
 
   await writeFile(logPath, `${JSON.stringify(record)}\n`, { flag: 'a' });
@@ -315,6 +324,12 @@ export async function applyProductVideoPreviewDecision(input: {
     }
 
     previousStatus = record.status;
+    if (input.decision === 'approve' && !cleanText(record.public_media_url)) {
+      throw Object.assign(new Error('public_media_url_required_for_approval'), {
+        code: 'public_media_url_required_for_approval',
+        status: 409,
+      });
+    }
     const nextStatus = getProductVideoPreviewStatusForDecision(input.decision);
     updatedItem = {
       ...record,
@@ -391,6 +406,13 @@ export async function updateProductVideoPreviewLog(
     updatedItem = {
       ...record,
       ...updates,
+      publish_allowed: false,
+      facebook_post_performed: false,
+      line_broadcast_performed: false,
+      schedule_enabled: false,
+      phaya_called: false,
+      s3_upload_performed: false,
+      mark_posted_performed: false,
       updated_at: new Date().toISOString(),
     } as ProductVideoPreviewLogRecord;
 
