@@ -25,6 +25,7 @@ interface SocialPage {
 
 type PreviewLogStatus =
   | 'pending_owner_review'
+  | 'rendered'
   | 'approved_for_future_publish'
   | 'rejected'
   | 'changes_requested';
@@ -156,6 +157,11 @@ interface PreviewLogItem {
   scene_script?: string;
   overlay_texts?: string;
   hashtags?: string;
+  creative_angle?: string;
+  voiceover_style?: string;
+  opening_pattern?: string;
+  scene_variation_seed?: string;
+  voiceover_full?: string;
   render_job_id?: string;
   render_status?: string;
   public_media_url?: string;
@@ -265,6 +271,30 @@ function getDecisionSuccessMessage(decision: PreviewDecision): string {
   }
 }
 
+function isFallbackAppIconUrl(value: string | undefined): boolean {
+  const url = (value || '').trim();
+  if (!url) return false;
+  try {
+    return new URL(url, window.location.origin).pathname === '/app-icon.png';
+  } catch {
+    return url.endsWith('/app-icon.png');
+  }
+}
+
+function isUploadedProductVideoAssetUrl(value: string | undefined): boolean {
+  const url = (value || '').trim();
+  if (!url) return false;
+  try {
+    return new URL(url, window.location.origin).pathname.startsWith('/api/product-video/assets/');
+  } catch {
+    return url.includes('/api/product-video/assets/');
+  }
+}
+
+function hasRealUploadedAsset(assetId: string | undefined, publicImageUrl: string | undefined): boolean {
+  return Boolean((assetId || '').trim()) && isUploadedProductVideoAssetUrl(publicImageUrl);
+}
+
 function isRenderedWithMedia(data: any): boolean {
   const status = typeof data?.status === 'string' ? data.status : '';
   const renderStatus = typeof data?.render_status === 'string' ? data.render_status : '';
@@ -341,13 +371,14 @@ export default function ProductVideoPage() {
   const [publishExecutionDryRuns, setPublishExecutionDryRuns] = useState<Record<string, PublishExecutionDryRun>>({});
   const [manualPublishExecutions, setManualPublishExecutions] = useState<Record<string, ManualPublishExecution>>({});
   const [result, setResult] = useState<Record<string, unknown> | null>(null);
+  const [highlightedPreviewId, setHighlightedPreviewId] = useState<string | null>(null);
 
   const selectedPage = useMemo(
     () => pages.find((page) => page.id === selectedPageId),
     [pages, selectedPageId],
   );
 
-  async function loadPreviewLogs(showToast = false) {
+  async function loadPreviewLogs(showToast = false): Promise<PreviewLogItem[]> {
     setLoadingLogs(true);
     try {
       const response = await fetch('/api/product-video/preview-logs');
@@ -357,12 +388,23 @@ export default function ProductVideoPage() {
       }
       setPreviewLogs(data.items);
       if (showToast) toast.success('รีเฟรชคิวตรวจแล้ว');
+      return data.items;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'โหลดคิวตรวจไม่สำเร็จ';
       toast.error(message);
+      return [];
     } finally {
       setLoadingLogs(false);
     }
+  }
+
+  function scrollToPreview(previewId: string) {
+    window.setTimeout(() => {
+      document.getElementById(`product-video-preview-${previewId}`)?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
+      });
+    }, 150);
   }
 
   useEffect(() => {
@@ -463,10 +505,16 @@ export default function ProductVideoPage() {
       return;
     }
 
+    if (!hasRealUploadedAsset(uploadedAssetId, uploadedPublicImageUrl) || isFallbackAppIconUrl(uploadedPublicImageUrl)) {
+      toast.error('ต้องใช้รูปที่อัปโหลดจริงจาก /api/product-video/assets/<uuid> ห้ามใช้ fallback app-icon.png');
+      return;
+    }
+
     setSubmitting(true);
     setResult(null);
 
     try {
+      const selectedPageName = selectedPage?.name || '';
       const response = await fetch('/api/product-video/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -476,6 +524,7 @@ export default function ProductVideoPage() {
           selected_pages: selectedPageIds,
           selected_channel_id: selectedPageIds[0],
           selected_page_id: selectedPageIds[0],
+          selected_page_name: selectedPageName,
           platform: 'facebook_page',
           caption,
           marketing_caption: caption,
@@ -499,8 +548,20 @@ export default function ProductVideoPage() {
         throw new Error(data.error || data.message || 'เตรียม payload ไม่สำเร็จ');
       }
 
-      toast.success(data.preview_log_created ? 'บันทึก Preview Log เข้าคิวตรวจแล้ว' : 'เตรียม Product Video preview payload แล้ว');
-      await loadPreviewLogs();
+      if (data.n8n_forwarded !== true || data.n8n_status !== 200 || data.preview_log_created !== true || !data.preview_log?.preview_id) {
+        throw new Error('ยังไม่ได้สร้าง Preview Log ใหม่: n8n ต้องตอบ 200 และ preview_log_created=true ก่อนเข้าคิวตรวจ');
+      }
+
+      const createdPreviewId = String(data.preview_log.preview_id);
+      const latestLogs = await loadPreviewLogs();
+      const createdLog = latestLogs.find((item) => item.preview_id === createdPreviewId);
+      if (!createdLog) {
+        throw new Error(`สร้าง preview แล้วแต่ยังไม่พบใน Owner Review Queue: ${createdPreviewId}`);
+      }
+
+      setHighlightedPreviewId(createdPreviewId);
+      toast.success(`บันทึก Preview Log เข้าคิวตรวจแล้ว: ${createdPreviewId}`);
+      scrollToPreview(createdPreviewId);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'เตรียม Product Video preview ไม่สำเร็จ';
       toast.error(message);
@@ -514,6 +575,11 @@ export default function ProductVideoPage() {
     if (!item) return;
     if (!item.public_image_url || !item.image_urls?.length) {
       toast.error('ต้องมี public_image_url จากรูปที่อัปโหลดก่อน Generate Video Preview');
+      return;
+    }
+
+    if (!hasRealUploadedAsset(item.asset_id || item.uploaded_asset_id, item.public_image_url) || isFallbackAppIconUrl(item.public_image_url)) {
+      toast.error('Render ถูกบล็อก: ต้องใช้รูปที่อัปโหลดจริงจาก /api/product-video/assets/<uuid> ไม่ใช่ app-icon fallback');
       return;
     }
 
@@ -1015,6 +1081,11 @@ export default function ProductVideoPage() {
                   {uploadError}
                 </div>
               )}
+              {uploadedPublicImageUrl && !hasRealUploadedAsset(uploadedAssetId, uploadedPublicImageUrl) ? (
+                <div className="rounded-md border border-red-200 bg-red-50 p-2 text-xs font-semibold text-red-700">
+                  รูปนี้ไม่ใช่ uploaded asset URL ที่ถูกต้อง หรือเป็น fallback app-icon.png — ต้องเป็น /api/product-video/assets/&lt;uuid&gt; ก่อนสร้าง preview
+                </div>
+              ) : null}
               {uploadedPublicImageUrl && (
                 <div className="mt-2 max-w-[180px] overflow-hidden rounded-md border border-gray-200 shadow-sm bg-white p-1">
                   <img src={uploadedPublicImageUrl} alt="Uploaded asset preview" className="h-auto w-full rounded" />
@@ -1046,7 +1117,7 @@ export default function ProductVideoPage() {
 
             <Button
               onClick={handleGeneratePreview}
-              disabled={submitting || selectedPageIds.length === 0 || !uploadedPublicImageUrl || uploadedImageUrls.length === 0}
+              disabled={submitting || selectedPageIds.length === 0 || !uploadedPublicImageUrl || uploadedImageUrls.length === 0 || !hasRealUploadedAsset(uploadedAssetId, uploadedPublicImageUrl) || isFallbackAppIconUrl(uploadedPublicImageUrl)}
               title={uploadedPublicImageUrl && uploadedImageUrls.length > 0 ? 'สร้าง preview พร้อม public image URL' : 'ต้องอัปโหลดรูปและได้ public image URL ก่อน'}
               className="w-full sm:w-auto"
             >
@@ -1117,7 +1188,11 @@ export default function ProductVideoPage() {
               const facebookPageId = getFacebookPageId(item, publishPlan);
 
               return (
-              <div key={item.preview_id} className="rounded-xl border border-gray-200 p-4 shadow-sm space-y-4">
+              <div
+                id={`product-video-preview-${item.preview_id}`}
+                key={item.preview_id}
+                className={`rounded-xl border p-4 shadow-sm space-y-4 ${highlightedPreviewId === item.preview_id ? 'border-blue-500 bg-blue-50/40 ring-2 ring-blue-200' : 'border-gray-200'}`}
+              >
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 pb-3">
                   <div>
                     <div className="text-sm font-semibold text-gray-900">{item.selected_page_name}</div>
@@ -1136,8 +1211,18 @@ export default function ProductVideoPage() {
                     <div>บรีฟลูกค้า: <span className="font-medium text-gray-800">{item.brief || '-'}</span></div>
                     <div>Asset ID: <span className="font-mono text-gray-600">{item.asset_id || item.uploaded_asset_id || '-'}</span></div>
                     <div className="sm:col-span-2">Public image: <span className="font-mono text-[10px] text-gray-600 break-all">{item.public_image_url || '-'}</span></div>
+                    {!hasRealUploadedAsset(item.asset_id || item.uploaded_asset_id, item.public_image_url) || isFallbackAppIconUrl(item.public_image_url) ? (
+                      <div className="sm:col-span-2 rounded-lg border border-red-300 bg-red-50 p-2 font-semibold text-red-800">
+                        Image validation warning: ต้องใช้ public_image_url จาก /api/product-video/assets/&lt;uuid&gt; เท่านั้น ห้ามใช้ fallback app-icon.png
+                      </div>
+                    ) : null}
                     <div>หัวข้อวิดีโอ: <span className="font-medium text-gray-800">{item.video_title || '-'}</span></div>
                     <div>จุดฮุค (Hook): <span className="font-medium text-gray-800">{item.hook || '-'}</span></div>
+                    <ContextField label="creative_angle" value={item.creative_angle || '-'} />
+                    <ContextField label="voiceover_style" value={item.voiceover_style || '-'} />
+                    <ContextField label="opening_pattern" value={item.opening_pattern || '-'} />
+                    <ContextField label="scene_variation_seed" value={item.scene_variation_seed || '-'} mono />
+                    <div className="sm:col-span-2">voiceover_full: <span className="font-medium text-gray-800 block whitespace-pre-wrap mt-1 bg-white p-2 rounded border border-gray-200/50">{item.voiceover_full || '-'}</span></div>
                     <div className="sm:col-span-2">บทภาพ (Script): <span className="font-medium text-gray-800 block whitespace-pre-wrap mt-1 bg-white p-2 rounded border border-gray-200/50">{item.scene_script || '-'}</span></div>
                     <div className="sm:col-span-2">ข้อความซ้อนวิดีโอ (Overlays): <span className="font-medium text-gray-800">{item.overlay_texts || '-'}</span></div>
                     <div className="sm:col-span-2">แฮชแท็ก: <span className="font-medium text-gray-800 font-mono text-[10px]">{item.hashtags || '-'}</span></div>
@@ -1194,7 +1279,7 @@ export default function ProductVideoPage() {
                     <Button
                       size="sm"
                       onClick={() => handleRenderRequest(item.preview_id)}
-                      disabled={renderingPreviewId === item.preview_id || !item.public_image_url || !item.image_urls?.length}
+                      disabled={renderingPreviewId === item.preview_id || !item.public_image_url || !item.image_urls?.length || !hasRealUploadedAsset(item.asset_id || item.uploaded_asset_id, item.public_image_url) || isFallbackAppIconUrl(item.public_image_url)}
                       title={item.public_image_url && item.image_urls?.length ? 'ส่งคำขอ render ด้วย public image URL' : 'ต้องมี public_image_url จากรูปที่อัปโหลดก่อน'}
                     >
                       {renderingPreviewId === item.preview_id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Clapperboard className="mr-2 h-4 w-4" />}

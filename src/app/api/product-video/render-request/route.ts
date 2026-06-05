@@ -30,6 +30,22 @@ function cleanText(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+function isFallbackAppIconUrl(value: string): boolean {
+  try {
+    return new URL(value).pathname === '/app-icon.png';
+  } catch {
+    return value.endsWith('/app-icon.png');
+  }
+}
+
+function isUploadedProductVideoAssetUrl(value: string): boolean {
+  try {
+    return new URL(value).pathname.startsWith('/api/product-video/assets/');
+  } catch {
+    return value.includes('/api/product-video/assets/');
+  }
+}
+
 function cleanStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value.map(cleanText).filter(Boolean);
@@ -92,6 +108,18 @@ export async function POST(request: NextRequest) {
     const targetPageKey = cleanText(body.target_page_key) || item.target_page_key || '';
     const selectedPageId = cleanText(body.selected_page_id) || item.selected_page_id || '';
     const selectedPageName = cleanText(body.selected_page_name) || item.selected_page_name || '';
+
+    if (!assetId || !publicImageUrl || imageUrls.length === 0 || isFallbackAppIconUrl(publicImageUrl) || !isUploadedProductVideoAssetUrl(publicImageUrl)) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'real_uploaded_product_video_asset_required',
+          message: 'Use a real uploaded Product Video asset URL, not the app-icon fallback',
+          ...PRODUCT_VIDEO_PREVIEW_SAFETY_FLAGS,
+        },
+        { status: 400 },
+      );
+    }
 
     if (!publicImageUrl || imageUrls.length === 0) {
       return NextResponse.json(
@@ -209,6 +237,11 @@ export async function POST(request: NextRequest) {
           marketing_caption: marketingCaption,
           scene_script: sceneScript,
           overlay_texts: overlayTexts,
+          creative_angle: forwardResult.creative_angle || item.creative_angle,
+          voiceover_style: forwardResult.voiceover_style || item.voiceover_style,
+          opening_pattern: forwardResult.opening_pattern || item.opening_pattern,
+          scene_variation_seed: forwardResult.scene_variation_seed || item.scene_variation_seed,
+          voiceover_full: forwardResult.voiceover_full || item.voiceover_full,
           selected_pages: JSON.stringify(selectedPagesList),
         });
 
@@ -242,6 +275,11 @@ export async function POST(request: NextRequest) {
           marketing_caption: marketingCaption,
           scene_script: sceneScript,
           overlay_texts: overlayTexts,
+          creative_angle: forwardResult.creative_angle || item.creative_angle,
+          voiceover_style: forwardResult.voiceover_style || item.voiceover_style,
+          opening_pattern: forwardResult.opening_pattern || item.opening_pattern,
+          scene_variation_seed: forwardResult.scene_variation_seed || item.scene_variation_seed,
+          voiceover_full: forwardResult.voiceover_full || item.voiceover_full,
           selected_pages: JSON.stringify(selectedPagesList),
         });
 

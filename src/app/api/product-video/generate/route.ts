@@ -67,9 +67,30 @@ interface ProductVideoPayload {
   scene_script?: string;
   overlay_texts?: string;
   hashtags?: string;
+  creative_angle?: string;
+  voiceover_style?: string;
+  opening_pattern?: string;
+  scene_variation_seed?: string;
+  voiceover_full?: string;
 }
 
 const N8N_FORWARD_TIMEOUT_MS = 15_000;
+
+function isFallbackAppIconUrl(value: string): boolean {
+  try {
+    return new URL(value).pathname === '/app-icon.png';
+  } catch {
+    return value.endsWith('/app-icon.png');
+  }
+}
+
+function isUploadedProductVideoAssetUrl(value: string): boolean {
+  try {
+    return new URL(value).pathname.startsWith('/api/product-video/assets/');
+  } catch {
+    return value.includes('/api/product-video/assets/');
+  }
+}
 
 function clean(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
@@ -98,6 +119,13 @@ async function buildPayload(body: ProductVideoGenerateRequest): Promise<ProductV
   const marketingCaption = clean(body.marketing_caption || body.caption) || aiContent.marketing_caption;
   const previewNote = clean(body.preview_note) || aiContent.preview_note;
   const publicImageUrl = clean(body.public_image_url);
+  const assetId = clean(body.asset_id || body.uploaded_asset_id);
+  if (!assetId || !publicImageUrl || isFallbackAppIconUrl(publicImageUrl) || !isUploadedProductVideoAssetUrl(publicImageUrl)) {
+    throw Object.assign(new Error('real_uploaded_product_video_asset_required'), {
+      code: 'real_uploaded_product_video_asset_required',
+      status: 400,
+    });
+  }
   const imageUrls = Array.isArray(body.image_urls)
     ? body.image_urls.map(clean).filter(Boolean)
     : [];
@@ -144,8 +172,8 @@ async function buildPayload(body: ProductVideoGenerateRequest): Promise<ProductV
     schedule_enabled: false,
 
     // New fields
-    asset_id: clean(body.asset_id || body.uploaded_asset_id),
-    uploaded_asset_id: clean(body.uploaded_asset_id || body.asset_id),
+    asset_id: assetId,
+    uploaded_asset_id: assetId,
     public_image_url: publicImageUrl || normalizedImageUrls[0] || '',
     image_urls: normalizedImageUrls,
     brief: brief,
@@ -216,6 +244,13 @@ async function forwardToN8n(payload: ProductVideoPayload) {
       ? data.render_status.trim()
       : (typeof data.status === 'string' ? data.status.trim() : '');
     const rendererCalled = data.renderer_called === true;
+    const creativeFields = {
+      creative_angle: typeof data.creative_angle === 'string' ? data.creative_angle.trim() : '',
+      voiceover_style: typeof data.voiceover_style === 'string' ? data.voiceover_style.trim() : '',
+      opening_pattern: typeof data.opening_pattern === 'string' ? data.opening_pattern.trim() : '',
+      scene_variation_seed: typeof data.scene_variation_seed === 'string' ? data.scene_variation_seed.trim() : '',
+      voiceover_full: typeof data.voiceover_full === 'string' ? data.voiceover_full.trim() : '',
+    };
 
     return {
       forwarded: true,
@@ -229,6 +264,7 @@ async function forwardToN8n(payload: ProductVideoPayload) {
       media_type: typeof data.media_type === 'string' ? data.media_type.trim() : '',
       media_status: typeof data.media_status === 'string' ? data.media_status.trim() : '',
       renderer_called: rendererCalled,
+      ...creativeFields,
     };
   } catch {
     return {
@@ -307,11 +343,37 @@ export async function POST(request: NextRequest) {
     const n8nRenderStatus = ('render_status' in n8n && typeof n8n.render_status === 'string') ? n8n.render_status : '';
     const n8nMediaType = ('media_type' in n8n && typeof n8n.media_type === 'string') ? n8n.media_type : '';
     const n8nMediaStatus = ('media_status' in n8n && typeof n8n.media_status === 'string') ? n8n.media_status : '';
+    const n8nCreativeAngle = ('creative_angle' in n8n && typeof n8n.creative_angle === 'string') ? n8n.creative_angle : '';
+    const n8nVoiceoverStyle = ('voiceover_style' in n8n && typeof n8n.voiceover_style === 'string') ? n8n.voiceover_style : '';
+    const n8nOpeningPattern = ('opening_pattern' in n8n && typeof n8n.opening_pattern === 'string') ? n8n.opening_pattern : '';
+    const n8nSceneVariationSeed = ('scene_variation_seed' in n8n && typeof n8n.scene_variation_seed === 'string') ? n8n.scene_variation_seed : '';
+    const n8nVoiceoverFull = ('voiceover_full' in n8n && typeof n8n.voiceover_full === 'string') ? n8n.voiceover_full : '';
     const n8nRendererCalled = 'renderer_called' in n8n && n8n.renderer_called === true;
     const n8nRendered = n8n.forwarded && n8nStatus === 200 && n8nPublicMediaUrl.length > 0;
 
-    // By default, since n8n forwarding is disabled under MVP, we still want to append a preview log record
-    const shouldCreateLog = (n8n.forwarded && n8nStatus === 200 && previewSafetyLocked) || (!n8n.forwarded);
+    if (!n8n.forwarded || n8nStatus !== 200 || !previewSafetyLocked) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'product_video_preview_not_queued',
+          message: 'Product Video preview was not queued because n8n did not return HTTP 200.',
+          n8n_forwarded: n8n.forwarded,
+          n8n_status: n8nStatus,
+          response_body_exposed: responseBodyExposed,
+          preview_log_created: false,
+          preview_log: null,
+          preview_only: guard.preview_only,
+          real_posting_enabled: guard.real_posting_enabled,
+          line_broadcast_enabled: guard.line_broadcast_enabled,
+          supabase_diagnostics,
+          guard,
+          ...PRODUCT_VIDEO_PREVIEW_SAFETY_FLAGS,
+        },
+        { status: 502 },
+      );
+    }
+
+    const shouldCreateLog = n8n.forwarded && n8nStatus === 200 && previewSafetyLocked;
 
     const previewLog = shouldCreateLog
       ? await appendProductVideoPreviewLog({
@@ -342,6 +404,11 @@ export async function POST(request: NextRequest) {
         scene_script: payload.scene_script,
         overlay_texts: payload.overlay_texts,
         hashtags: payload.hashtags,
+        creative_angle: n8nCreativeAngle || payload.creative_angle,
+        voiceover_style: n8nVoiceoverStyle || payload.voiceover_style,
+        opening_pattern: n8nOpeningPattern || payload.opening_pattern,
+        scene_variation_seed: n8nSceneVariationSeed || payload.scene_variation_seed,
+        voiceover_full: n8nVoiceoverFull || payload.voiceover_full,
         status: n8nRendered ? 'rendered' : 'pending_owner_review',
         render_status: n8nRendered ? 'rendered' : (n8nRenderStatus || undefined),
         media_status: n8nRendered ? 'ready' : (n8nMediaStatus || undefined),

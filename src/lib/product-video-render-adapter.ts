@@ -27,6 +27,11 @@ export interface RenderAdapterResult {
   media_type?: string;
   media_checksum?: string | null;
   renderer_called?: boolean;
+  creative_angle?: string;
+  voiceover_style?: string;
+  opening_pattern?: string;
+  scene_variation_seed?: string;
+  voiceover_full?: string;
 }
 
 const RENDER_TIMEOUT_MS = 240_000;
@@ -65,6 +70,13 @@ export async function forwardRenderRequestToExternal(payload: RenderRequestPaylo
     const data = await response.json().catch(() => ({})) as Record<string, unknown>;
     const publicMediaUrl = typeof data.public_media_url === 'string' ? data.public_media_url.trim() : null;
     const thumbnailUrl = typeof data.thumbnail_url === 'string' ? data.thumbnail_url.trim() : null;
+    const creativeFields = {
+      creative_angle: typeof data.creative_angle === 'string' ? data.creative_angle.trim() : '',
+      voiceover_style: typeof data.voiceover_style === 'string' ? data.voiceover_style.trim() : '',
+      opening_pattern: typeof data.opening_pattern === 'string' ? data.opening_pattern.trim() : '',
+      scene_variation_seed: typeof data.scene_variation_seed === 'string' ? data.scene_variation_seed.trim() : '',
+      voiceover_full: typeof data.voiceover_full === 'string' ? data.voiceover_full.trim() : '',
+    };
     const renderJobId = typeof data.render_job_id === 'string'
       ? data.render_job_id.trim()
       : (typeof data.job_id === 'string' ? data.job_id.trim() : `job-${payload.preview_id}`);
@@ -83,6 +95,7 @@ export async function forwardRenderRequestToExternal(payload: RenderRequestPaylo
           media_type: 'video',
           media_checksum: null,
           renderer_called: data.renderer_called === true,
+          ...creativeFields,
         };
       }
       return {
@@ -103,6 +116,7 @@ export async function forwardRenderRequestToExternal(payload: RenderRequestPaylo
       media_type: typeof data.media_type === 'string' ? data.media_type : 'video',
       media_checksum: typeof data.media_checksum === 'string' ? data.media_checksum : `md5-${payload.preview_id}`,
       renderer_called: data.renderer_called === true,
+      ...creativeFields,
     };
   } catch (error) {
     return {

@@ -52,6 +52,11 @@ export interface ProductVideoPreviewLogInput {
   scene_script?: string;
   overlay_texts?: string;
   hashtags?: string;
+  creative_angle?: string;
+  voiceover_style?: string;
+  opening_pattern?: string;
+  scene_variation_seed?: string;
+  voiceover_full?: string;
   render_job_id?: string;
   render_status?: string;
   public_media_url?: string;
@@ -241,6 +246,11 @@ export async function appendProductVideoPreviewLog(
     scene_script: input.scene_script,
     overlay_texts: input.overlay_texts,
     hashtags: input.hashtags,
+    creative_angle: input.creative_angle,
+    voiceover_style: input.voiceover_style,
+    opening_pattern: input.opening_pattern,
+    scene_variation_seed: input.scene_variation_seed,
+    voiceover_full: input.voiceover_full,
     render_job_id: input.render_job_id,
     render_status: input.render_status,
     public_media_url: input.public_media_url,
