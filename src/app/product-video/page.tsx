@@ -273,6 +273,31 @@ function isRenderedWithMedia(data: any): boolean {
   return publicMediaUrl.length > 0 && (status === 'rendered' || renderStatus === 'rendered');
 }
 
+function getBrandPageMismatchMessage(item: PreviewLogItem): string | null {
+  if (item.brand_context === 'syncflow' && item.target_page_key !== 'syncflow') {
+    return 'Brand/page mismatch: syncflow must target syncflow';
+  }
+
+  if (item.brand_context === 'paa_air' && item.target_page_key !== 'paa_air') {
+    return 'Brand/page mismatch: paa_air must target paa_air';
+  }
+
+  return null;
+}
+
+function getFacebookPageId(item: PreviewLogItem, plan?: PublishPlanPreview): string {
+  return item.facebook_page_id || item.external_id || plan?.target_page.page_id || item.selected_page_id || '-';
+}
+
+function ContextField({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <div className="rounded-lg border border-white/70 bg-white/65 p-2.5">
+      <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">{label}</div>
+      <div className={`${mono ? 'font-mono text-[10px]' : 'font-medium text-gray-950'} break-all`}>{value || '-'}</div>
+    </div>
+  );
+}
+
 export default function ProductVideoPage() {
   const [pages, setPages] = useState<SocialPage[]>([]);
   const [previewLogs, setPreviewLogs] = useState<PreviewLogItem[]>([]);
@@ -1083,7 +1108,15 @@ export default function ProductVideoPage() {
               ยังไม่มี Product Video preview ที่รอ owner review
             </div>
           ) : (
-            previewLogs.map((item) => (
+            previewLogs.map((item) => {
+              const brandPageMismatchMessage = getBrandPageMismatchMessage(item);
+              const publishPlan = publishPlanPreviews[item.preview_id];
+              const publishAuthorization = publishAuthorizations[item.preview_id];
+              const publishExecutionDryRun = publishExecutionDryRuns[item.preview_id];
+              const manualPublishExecution = manualPublishExecutions[item.preview_id];
+              const facebookPageId = getFacebookPageId(item, publishPlan);
+
+              return (
               <div key={item.preview_id} className="rounded-xl border border-gray-200 p-4 shadow-sm space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 pb-3">
                   <div>
@@ -1229,19 +1262,34 @@ export default function ProductVideoPage() {
                   </Button>
                 </div>
 
-                {publishPlanPreviews[item.preview_id] ? (
+                {brandPageMismatchMessage ? (
+                  <div className="rounded-lg border border-red-300 bg-red-50 p-3 text-xs font-semibold text-red-800">
+                    {brandPageMismatchMessage}
+                  </div>
+                ) : null}
+
+                <div className="rounded-xl border-2 border-amber-200 bg-amber-50/40 p-4 shadow-sm space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-200/70 pb-2">
+                    <div>
+                      <div className="text-sm font-semibold text-amber-950">Publish Gates for Current Preview Card</div>
+                      <div className="text-[11px] text-amber-800">ทุก gate ด้านล่างผูกกับ preview_id นี้เท่านั้น: <span className="font-mono">{item.preview_id}</span></div>
+                    </div>
+                    <Badge variant="secondary">selected page: {item.selected_page_name || '-'}</Badge>
+                  </div>
+
+                {publishPlan ? (
                   <div className="space-y-3 rounded-xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-950">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="font-semibold">Publish Plan Preview</div>
                       <Badge variant="secondary">publish_plan_ready</Badge>
                     </div>
                     <div className="grid gap-2 text-xs sm:grid-cols-2">
-                      <div>target page: <span className="font-medium">{publishPlanPreviews[item.preview_id].target_page.page_name}</span></div>
-                      <div>platform: <span className="font-medium">{publishPlanPreviews[item.preview_id].target_page.platform}</span></div>
-                      <div>media: <span className="font-medium">{publishPlanPreviews[item.preview_id].media.media_status}</span></div>
-                      <div>media_type: <span className="font-medium">{publishPlanPreviews[item.preview_id].media.media_type || '-'}</span></div>
+                      <div>target page: <span className="font-medium">{publishPlan.target_page.page_name}</span></div>
+                      <div>platform: <span className="font-medium">{publishPlan.target_page.platform}</span></div>
+                      <div>media: <span className="font-medium">{publishPlan.media.media_status}</span></div>
+                      <div>media_type: <span className="font-medium">{publishPlan.media.media_type || '-'}</span></div>
                       <div>publish_allowed: <span className="font-medium">false</span></div>
-                      <div className="sm:col-span-2">checksum: <span className="font-mono text-[11px]">{publishPlanPreviews[item.preview_id].publish_plan_checksum}</span></div>
+                      <div className="sm:col-span-2">checksum: <span className="font-mono text-[11px]">{publishPlan.publish_plan_checksum}</span></div>
                     </div>
 
                     {/* Per-Page Publish Queue Preview */}
@@ -1264,7 +1312,7 @@ export default function ProductVideoPage() {
                     )}
 
                     <p className="whitespace-pre-wrap rounded-lg bg-white/70 p-3 text-xs text-blue-950">
-                      {publishPlanPreviews[item.preview_id].content.caption}
+                      {publishPlan.content.caption}
                     </p>
                     <div className="flex flex-wrap gap-2 text-xs">
                       <Badge variant="secondary">read_only=true</Badge>
@@ -1287,17 +1335,29 @@ export default function ProductVideoPage() {
                   </div>
                 ) : null}
 
-                {publishAuthorizations[item.preview_id] ? (
-                  <div className="space-y-2 rounded-xl border border-amber-100 bg-amber-50 p-4 text-sm text-amber-950">
+                {publishAuthorization ? (
+                  <div className="space-y-3 rounded-xl border-2 border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 shadow-sm">
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="font-semibold">Final Publish Authorization Gate</div>
+                      <div>
+                        <div className="font-semibold">Final Publish Authorization Gate</div>
+                        <div className="text-[11px] text-amber-800">Current preview card only · {item.preview_id}</div>
+                      </div>
                       <Badge variant="secondary">publish_authorized_for_manual_execution</Badge>
                     </div>
+                    {brandPageMismatchMessage ? (
+                      <div className="rounded-lg border border-red-300 bg-red-50 p-3 text-xs font-semibold text-red-800">
+                        {brandPageMismatchMessage}
+                      </div>
+                    ) : null}
                     <div className="grid gap-2 text-xs sm:grid-cols-2">
-                      <div>target_page_key: <span className="font-medium">{publishAuthorizations[item.preview_id].target_page_key}</span></div>
+                      <ContextField label="preview_id" value={item.preview_id} mono />
+                      <ContextField label="brand_context" value={item.brand_context || '-'} />
+                      <ContextField label="selected_page_name" value={item.selected_page_name || '-'} />
+                      <ContextField label="target_page_key" value={publishAuthorization.target_page_key || item.target_page_key || '-'} />
+                      <ContextField label="facebook_page_id" value={facebookPageId} mono />
+                      <ContextField label="idempotency_key" value={publishAuthorization.idempotency_key} mono />
                       <div>publish_allowed: <span className="font-medium">false</span></div>
                       <div>facebook_post_performed: <span className="font-medium">false</span></div>
-                      <div>idempotency_key: <span className="font-mono text-[11px]">{publishAuthorizations[item.preview_id].idempotency_key}</span></div>
                     </div>
                     <p className="text-xs">Audit-only authorization created. Real publish ยังต้องทำผ่าน manual executor gate และต้องเปิด flag/approval แยกเท่านั้น</p>
                     <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-800">
@@ -1324,14 +1384,16 @@ export default function ProductVideoPage() {
                   </div>
                 ) : null}
 
-                {publishExecutionDryRuns[item.preview_id] ? (
+                {publishExecutionDryRun ? (
                   <div className="space-y-2 rounded-xl border border-red-100 bg-red-50 p-4 text-sm text-red-950">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="font-semibold">Guarded Publish Executor Dry-run</div>
-                      <Badge variant="secondary">{publishExecutionDryRuns[item.preview_id].status}</Badge>
+                      <Badge variant="secondary">{publishExecutionDryRun.status}</Badge>
                     </div>
                     <div className="grid gap-2 text-xs sm:grid-cols-2">
-                      <div>block_reason: <span className="font-medium">{publishExecutionDryRuns[item.preview_id].block_reason || 'none'}</span></div>
+                      <ContextField label="preview_id" value={item.preview_id} mono />
+                      <ContextField label="selected_page_name" value={item.selected_page_name || '-'} />
+                      <div>block_reason: <span className="font-medium">{publishExecutionDryRun.block_reason || 'none'}</span></div>
                       <div>safe_to_audit: <span className="font-medium">true</span></div>
                       <div>publish_allowed: <span className="font-medium">false</span></div>
                       <div>facebook_post_performed: <span className="font-medium">false</span></div>
@@ -1340,14 +1402,16 @@ export default function ProductVideoPage() {
                   </div>
                 ) : null}
 
-                {manualPublishExecutions[item.preview_id] ? (
+                {manualPublishExecution ? (
                   <div className="space-y-2 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-950">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="font-semibold">Manual Publish Executor Gate</div>
-                      <Badge variant="secondary">{manualPublishExecutions[item.preview_id].status}</Badge>
+                      <Badge variant="secondary">{manualPublishExecution.status}</Badge>
                     </div>
                     <div className="grid gap-2 text-xs sm:grid-cols-2">
-                      <div>block_reason: <span className="font-medium">{manualPublishExecutions[item.preview_id].block_reason || 'none'}</span></div>
+                      <ContextField label="preview_id" value={item.preview_id} mono />
+                      <ContextField label="selected_page_name" value={item.selected_page_name || '-'} />
+                      <div>block_reason: <span className="font-medium">{manualPublishExecution.block_reason || 'none'}</span></div>
                       <div>real_posting_enabled: <span className="font-medium">false</span></div>
                       <div>publish_allowed: <span className="font-medium">false</span></div>
                       <div>facebook_post_performed: <span className="font-medium">false</span></div>
@@ -1355,8 +1419,10 @@ export default function ProductVideoPage() {
                     <p className="text-xs">ผลลัพธ์นี้ยืนยันว่า real publish ยังต้องเปิด flag/approve แยก และไม่มีการเรียก Facebook Graph</p>
                   </div>
                 ) : null}
+                </div>
               </div>
-            ))
+              );
+            })
           )}
         </CardContent>
       </Card>
