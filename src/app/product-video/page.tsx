@@ -165,6 +165,7 @@ interface PreviewLogItem {
   render_job_id?: string;
   render_status?: string;
   public_media_url?: string;
+  video_url?: string;
   media_type?: string;
   media_checksum?: string;
   media_status?: string;
@@ -1186,6 +1187,8 @@ export default function ProductVideoPage() {
               const publishExecutionDryRun = publishExecutionDryRuns[item.preview_id];
               const manualPublishExecution = manualPublishExecutions[item.preview_id];
               const facebookPageId = getFacebookPageId(item, publishPlan);
+              const renderedVideoUrl = item.public_media_url || item.video_url || '';
+              const downloadVideoUrl = `/api/product-video/preview-logs/${encodeURIComponent(item.preview_id)}/download-video`;
 
               return (
               <div
@@ -1258,15 +1261,32 @@ export default function ProductVideoPage() {
                     </div>
                   ) : null}
 
-                  {item.public_media_url ? (
+                  {renderedVideoUrl ? (
                     <div className="overflow-hidden rounded-lg border border-gray-200 bg-gray-950 p-4 text-white flex flex-col items-center justify-center mb-2 shadow-inner">
                       <div className="flex items-center gap-2 mb-2">
                         <Clapperboard className="h-5 w-5 text-blue-500 animate-pulse" />
                         <span className="text-xs font-semibold text-gray-300">ตัวอย่างวิดีโอสินค้า (Preview Player)</span>
                       </div>
-                      <video src={item.public_media_url} controls className="max-h-56 w-full rounded border border-gray-800" />
+                      <video src={renderedVideoUrl} controls className="max-h-56 w-full rounded border border-gray-800" />
+                      <div className="mt-3 flex w-full flex-col gap-2 sm:flex-row sm:items-center sm:justify-center">
+                        <a
+                          href={downloadVideoUrl}
+                          download={`product-video-${item.preview_id}.mp4`}
+                          className="inline-flex h-9 items-center justify-center rounded-lg bg-blue-600 px-3 text-sm font-semibold text-white transition hover:bg-blue-700"
+                        >
+                          ดาวน์โหลดวิดีโอ
+                        </a>
+                        <a
+                          href={renderedVideoUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex h-9 items-center justify-center rounded-lg border border-gray-600 px-3 text-sm font-medium text-gray-100 transition hover:bg-gray-800"
+                        >
+                          เปิดวิดีโอในแท็บใหม่
+                        </a>
+                      </div>
                       <div className="text-[10px] text-gray-400 font-mono mt-2 truncate w-full text-center">
-                        URL: {item.public_media_url}
+                        URL: {renderedVideoUrl}
                       </div>
                     </div>
                   ) : (
