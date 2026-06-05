@@ -152,9 +152,20 @@ function normalizePreviewLogRecord(value: unknown): ProductVideoPreviewLogRecord
   const status = normalizeStatus(value.status);
   if (!status) return null;
 
+  const creativeAngle = cleanText(value.creative_angle) || pickPreviewVariationText(value, 'creative_angle');
+  const voiceoverStyle = cleanText(value.voiceover_style) || pickPreviewVariationText(value, 'voiceover_style');
+  const openingPattern = cleanText(value.opening_pattern) || pickPreviewVariationText(value, 'opening_pattern');
+  const sceneVariationSeed = cleanText(value.scene_variation_seed) || pickPreviewVariationText(value, 'scene_variation_seed');
+  const voiceoverFull = cleanText(value.voiceover_full) || pickPreviewVariationText(value, 'voiceover_full');
+
   return {
     ...(value as unknown as ProductVideoPreviewLogRecord),
     status,
+    creative_angle: creativeAngle || undefined,
+    voiceover_style: voiceoverStyle || undefined,
+    opening_pattern: openingPattern || undefined,
+    scene_variation_seed: sceneVariationSeed || undefined,
+    voiceover_full: voiceoverFull || undefined,
     publish_allowed: false,
     facebook_post_performed: false,
     line_broadcast_performed: false,
@@ -185,6 +196,40 @@ function parseRawPreviewLogLine(line: string): Record<string, unknown> | null {
 
 function cleanText(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
+}
+
+function pickNestedText(data: Record<string, unknown>, pathSegments: string[]): string {
+  let current: unknown = data;
+  for (const segment of pathSegments) {
+    const record = isRecord(current) ? current : null;
+    if (!record) return '';
+    current = record[segment];
+  }
+  return cleanText(current);
+}
+
+function pickPreviewVariationText(value: Record<string, unknown>, key: string): string {
+  const containers: Record<string, unknown>[] = [value];
+  const containerKeys = ['preview', 'ai_generated_copy', 'script', 'metadata', 'n8n_response'];
+
+  for (const containerKey of containerKeys) {
+    const container = isRecord(value[containerKey]) ? value[containerKey] as Record<string, unknown> : null;
+    if (container) containers.push(container);
+  }
+
+  for (const container of containers) {
+    const directValue = cleanText(container[key]);
+    if (directValue) return directValue;
+  }
+
+  if (key === 'voiceover_full') {
+    for (const container of containers) {
+      const nestedValue = pickNestedText(container, ['voiceover', 'full']);
+      if (nestedValue) return nestedValue;
+    }
+  }
+
+  return '';
 }
 
 export function parseProductVideoApprovalDecision(value: unknown): ProductVideoApprovalDecision | null {

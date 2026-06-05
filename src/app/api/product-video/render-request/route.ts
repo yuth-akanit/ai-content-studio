@@ -24,6 +24,11 @@ interface RenderRequestBody {
   target_page_key?: unknown;
   selected_page_id?: unknown;
   selected_page_name?: unknown;
+  creative_angle?: unknown;
+  voiceover_style?: unknown;
+  opening_pattern?: unknown;
+  scene_variation_seed?: unknown;
+  voiceover_full?: unknown;
 }
 
 function cleanText(value: unknown): string {
@@ -108,6 +113,11 @@ export async function POST(request: NextRequest) {
     const targetPageKey = cleanText(body.target_page_key) || item.target_page_key || '';
     const selectedPageId = cleanText(body.selected_page_id) || item.selected_page_id || '';
     const selectedPageName = cleanText(body.selected_page_name) || item.selected_page_name || '';
+    const creativeAngle = cleanText(body.creative_angle) || item.creative_angle || '';
+    const voiceoverStyle = cleanText(body.voiceover_style) || item.voiceover_style || '';
+    const openingPattern = cleanText(body.opening_pattern) || item.opening_pattern || '';
+    const sceneVariationSeed = cleanText(body.scene_variation_seed) || item.scene_variation_seed || '';
+    const voiceoverFull = cleanText(body.voiceover_full) || item.voiceover_full || '';
 
     if (!assetId || !publicImageUrl || imageUrls.length === 0 || isFallbackAppIconUrl(publicImageUrl) || !isUploadedProductVideoAssetUrl(publicImageUrl)) {
       return NextResponse.json(
@@ -164,6 +174,11 @@ export async function POST(request: NextRequest) {
       target_page_key: targetPageKey,
       selected_page_id: selectedPageId,
       selected_page_name: selectedPageName,
+      creative_angle: creativeAngle,
+      voiceover_style: voiceoverStyle,
+      opening_pattern: openingPattern,
+      scene_variation_seed: sceneVariationSeed,
+      voiceover_full: voiceoverFull,
     };
 
     // Forward request if external renderer is enabled
@@ -237,11 +252,11 @@ export async function POST(request: NextRequest) {
           marketing_caption: marketingCaption,
           scene_script: sceneScript,
           overlay_texts: overlayTexts,
-          creative_angle: forwardResult.creative_angle || item.creative_angle,
-          voiceover_style: forwardResult.voiceover_style || item.voiceover_style,
-          opening_pattern: forwardResult.opening_pattern || item.opening_pattern,
-          scene_variation_seed: forwardResult.scene_variation_seed || item.scene_variation_seed,
-          voiceover_full: forwardResult.voiceover_full || item.voiceover_full,
+          creative_angle: forwardResult.creative_angle || creativeAngle || item.creative_angle,
+          voiceover_style: forwardResult.voiceover_style || voiceoverStyle || item.voiceover_style,
+          opening_pattern: forwardResult.opening_pattern || openingPattern || item.opening_pattern,
+          scene_variation_seed: forwardResult.scene_variation_seed || sceneVariationSeed || item.scene_variation_seed,
+          voiceover_full: forwardResult.voiceover_full || voiceoverFull || item.voiceover_full,
           selected_pages: JSON.stringify(selectedPagesList),
         });
 
@@ -275,11 +290,11 @@ export async function POST(request: NextRequest) {
           marketing_caption: marketingCaption,
           scene_script: sceneScript,
           overlay_texts: overlayTexts,
-          creative_angle: forwardResult.creative_angle || item.creative_angle,
-          voiceover_style: forwardResult.voiceover_style || item.voiceover_style,
-          opening_pattern: forwardResult.opening_pattern || item.opening_pattern,
-          scene_variation_seed: forwardResult.scene_variation_seed || item.scene_variation_seed,
-          voiceover_full: forwardResult.voiceover_full || item.voiceover_full,
+          creative_angle: forwardResult.creative_angle || creativeAngle || item.creative_angle,
+          voiceover_style: forwardResult.voiceover_style || voiceoverStyle || item.voiceover_style,
+          opening_pattern: forwardResult.opening_pattern || openingPattern || item.opening_pattern,
+          scene_variation_seed: forwardResult.scene_variation_seed || sceneVariationSeed || item.scene_variation_seed,
+          voiceover_full: forwardResult.voiceover_full || voiceoverFull || item.voiceover_full,
           selected_pages: JSON.stringify(selectedPagesList),
         });
 
@@ -314,6 +329,11 @@ export async function POST(request: NextRequest) {
       marketing_caption: marketingCaption,
       scene_script: sceneScript,
       overlay_texts: overlayTexts,
+      creative_angle: creativeAngle || item.creative_angle,
+      voiceover_style: voiceoverStyle || item.voiceover_style,
+      opening_pattern: openingPattern || item.opening_pattern,
+      scene_variation_seed: sceneVariationSeed || item.scene_variation_seed,
+      voiceover_full: voiceoverFull || item.voiceover_full,
       selected_pages: JSON.stringify(selectedPagesList),
       public_media_url: metadata?.public_media_url || item.public_media_url,
       media_checksum: metadata?.media_checksum || item.media_checksum,
