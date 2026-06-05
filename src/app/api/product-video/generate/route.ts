@@ -72,6 +72,7 @@ interface ProductVideoPayload {
   opening_pattern?: string;
   scene_variation_seed?: string;
   voiceover_full?: string;
+  voiceover_prompt_requirements?: string;
 }
 
 const N8N_FORWARD_TIMEOUT_MS = 15_000;
@@ -94,6 +95,276 @@ function isUploadedProductVideoAssetUrl(value: string): boolean {
 
 function clean(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
+}
+
+function hashString(value: string): number {
+  let hash = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = ((hash << 5) - hash + value.charCodeAt(index)) | 0;
+  }
+  return Math.abs(hash);
+}
+
+function normalizeForSimilarity(value: string): string {
+  return value
+    .replace(/Scene\s*\d+\s*:/gi, ' ')
+    .replace(/ซีน\s*\d+\s*:/gi, ' ')
+    .replace(/[\s\n\r\t,.:;!?'"“”‘’()\-[\]{}]+/g, '')
+    .toLowerCase();
+}
+
+function stripSceneLabels(value: string): string {
+  return value
+    .replace(/^\s*(Scene|ซีน)\s*\d+\s*[:：-]\s*/gim, '')
+    .replace(/\s*(Scene|ซีน)\s*\d+\s*[:：-]\s*/gi, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
+function isNearIdenticalVoiceover(voiceover: string, sceneScript: string): boolean {
+  const normalizedVoiceover = normalizeForSimilarity(voiceover);
+  const normalizedSceneScript = normalizeForSimilarity(sceneScript);
+
+  if (!normalizedVoiceover || !normalizedSceneScript) return false;
+  if (normalizedVoiceover === normalizedSceneScript) return true;
+
+  const shorterLength = Math.min(normalizedVoiceover.length, normalizedSceneScript.length);
+  const longerLength = Math.max(normalizedVoiceover.length, normalizedSceneScript.length);
+  if (shorterLength / longerLength < 0.72) return false;
+
+  return normalizedVoiceover.includes(normalizedSceneScript.slice(0, shorterLength))
+    || normalizedSceneScript.includes(normalizedVoiceover.slice(0, shorterLength));
+}
+
+function buildVoiceoverPromptRequirements(input: {
+  brand: string;
+  creativeAngle: string;
+  voiceoverStyle: string;
+  openingPattern: string;
+  sceneVariationSeed: string;
+}): string {
+  const productName = input.brand === 'syncflow' ? 'SyncFlow by PAA Tech' : 'PAA Air Service';
+  return [
+    `Generate a Thai short-form video voiceover for ${productName}.`,
+    'Do not copy the scene script word-for-word; use scene_script only as visual context.',
+    'Do not include Scene 1 / Scene 2 / Scene 3 labels or Thai scene labels in voiceover_full.',
+    'Start with a pain-point hook, explain the solution in simple words, and end with a soft CTA.',
+    'Use natural Thai spoken narration for a 20–30 second vertical reel.',
+    'Avoid hard-selling, robotic wording, repeated sentence structure, fake claims, pricing, and emojis.',
+    `Keep tone aligned with voiceover_style=${input.voiceoverStyle}.`,
+    `Use creative_angle=${input.creativeAngle}, opening_pattern=${input.openingPattern}, scene_variation_seed=${input.sceneVariationSeed}.`,
+  ].join('\n');
+}
+
+function resolveSafeVoiceoverFull(input: {
+  candidate: string;
+  fallback: string;
+  sceneScript: string;
+}): string {
+  const candidate = stripSceneLabels(clean(input.candidate));
+  if (!candidate) return input.fallback;
+  if (/Scene\s*\d+\s*[:：-]/i.test(input.candidate) || /ซีน\s*\d+\s*[:：-]/i.test(input.candidate)) {
+    return input.fallback;
+  }
+  if (isNearIdenticalVoiceover(candidate, input.sceneScript)) {
+    return input.fallback;
+  }
+  return candidate;
+}
+
+function buildThaiVoiceover(input: {
+  brand: string;
+  brief: string;
+  creativeAngle: string;
+  voiceoverStyle: string;
+  openingPattern: string;
+  seed: number;
+}): string {
+  const brief = clean(input.brief);
+  const isSyncFlow = input.brand === 'syncflow';
+
+  if (isSyncFlow) {
+    const hooks = [
+      'งานเข้าหลายทาง แต่ทีมยังต้องคอยไล่เช็กเองอยู่หรือเปล่า?',
+      'เคยไหม ลูกค้าทักมาแล้วงานหลุด เพราะข้อมูลกระจายอยู่คนละที่?',
+      'ถ้าวันหนึ่งมีทั้งแชท โทร และงานหน้างานเข้าพร้อมกัน ทีมจะตามทันไหม?',
+      'เจ้าของธุรกิจบริการเสียโอกาสได้ง่ายมาก แค่ตอบช้าหรือคิวตกหล่นหนึ่งงาน',
+      'ปัญหาไม่ได้อยู่ที่ทีมไม่ขยัน แต่อยู่ที่งานกระจายจนมองภาพรวมไม่ทัน',
+      'พองานเยอะขึ้น การจำด้วยแชทหรือกระดาษอย่างเดียวเริ่มไม่พอแล้ว',
+    ];
+    const solutions = [
+      'SyncFlow by PAA Tech ช่วยรวมงานและสถานะลูกค้าไว้ในที่เดียว ให้ทีมเห็นคิวเดียวกัน',
+      'ระบบช่วยให้รับเรื่อง จัดช่าง และติดตามงานได้ชัดขึ้น โดยไม่ต้องสลับหลายหน้าจอ',
+      'เจ้าของร้านเห็นภาพรวมงานที่รอทำ งานที่กำลังทำ และงานที่ต้องปิดบิลได้ง่ายขึ้น',
+      'จากแชทที่กระจัดกระจาย เปลี่ยนเป็นรายการงานที่ทีมตามต่อได้เป็นขั้นตอน',
+      'เหมาะกับธุรกิจบริการที่อยากลดงานหลุด ตอบลูกค้าไวขึ้น และคุมทีมง่ายกว่าเดิม',
+      'ทีมแอดมินและช่างทำงานจากข้อมูลชุดเดียวกัน ลูกค้าก็ได้รับคำตอบเร็วขึ้น',
+    ];
+    const ctas = [
+      'ถ้าอยากเห็นว่าระบบเข้ากับงานของคุณไหม ทักมาขอดูตัวอย่างได้เลยครับ',
+      'ลองเริ่มจากดูเดโมสั้น ๆ ก่อน แล้วค่อยปรับให้เหมาะกับทีมของคุณได้ครับ',
+      'สนใจให้เราช่วยดู flow งานปัจจุบัน ทัก SyncFlow by PAA Tech ได้เลยครับ',
+      'ถ้าธุรกิจคุณกำลังโต ลองคุยกันก่อนว่า SyncFlow ช่วยลดจุดไหนได้บ้าง',
+      'อยากเริ่มแบบไม่ซับซ้อน ทักมาขอดูตัวอย่างการใช้งานจริงได้ครับ',
+      'ทักมาคุยกันเบา ๆ ได้ครับ ว่างานแบบคุณควรเริ่มจัดระบบตรงไหนก่อน',
+    ];
+    const index = input.seed % hooks.length;
+    const context = brief ? ` จากโจทย์นี้ ${brief}` : '';
+    return `${hooks[index]} ${solutions[(index + 2) % solutions.length]}${context} ใช้งานแบบเข้าใจง่ายสำหรับเจ้าของธุรกิจ ไม่ใช่ ERP หรือ MES เต็มระบบ แต่ช่วยให้รับงาน จัดทีม และติดตามสถานะเป็นระบบขึ้น ${ctas[(index + 4) % ctas.length]}`;
+  }
+
+  const hooks = [
+    'แอร์เริ่มไม่เย็น มีกลิ่นอับ หรือมีน้ำหยด อย่าปล่อยให้ปัญหาบานปลาย',
+    'ถ้าเปิดแอร์แล้วรู้สึกไม่สดชื่น อาจถึงเวลาตรวจเช็กก่อนเสียหนัก',
+    'บ้านหรือร้านที่ใช้แอร์ทุกวัน ฝุ่นสะสมเร็วกว่าที่คิด',
+    'ค่าไฟสูงขึ้นแต่แอร์ยังไม่ค่อยเย็น อาการนี้ควรให้ช่างดูหน้างาน',
+  ];
+  const solutions = [
+    'PAA Air Service ช่วยตรวจเช็กและทำความสะอาดตามอาการจริงของเครื่อง',
+    'ทีมช่างดูหน้างานให้ชัดก่อน แล้วแนะนำบริการที่เหมาะกับเครื่องของคุณ',
+    'การล้างและตรวจระบบอย่างถูกวิธี ช่วยให้แอร์ทำงานดีขึ้นและลดความเสี่ยงเสียซ้ำ',
+    'เราเน้นอธิบายง่าย นัดหมายชัด และให้ลูกค้าตัดสินใจก่อนเริ่มงาน',
+  ];
+  const ctas = [
+    'ถ้าอยากเช็กอาการแอร์ ทักมาปรึกษา PAA Air ได้ครับ',
+    'ส่งรูปหรืออาการเบื้องต้นมาได้ เดี๋ยวช่วยประเมินขั้นต่อไปให้ครับ',
+    'สนใจจองคิวหรือสอบถามรายละเอียด ทักหาเราได้เลยครับ',
+    'คุยกับช่างก่อนตัดสินใจได้ครับ ไม่มี hard sell',
+  ];
+  const index = input.seed % hooks.length;
+  const context = brief ? ` จากรายละเอียดที่แจ้งมา ${brief}` : '';
+  return `${hooks[index]} ${solutions[(index + 1) % solutions.length]}${context} เหมาะสำหรับคนที่อยากแก้ปัญหาให้ตรงจุดและรู้ขั้นตอนก่อนตัดสินใจ ${ctas[(index + 2) % ctas.length]}`;
+}
+
+function buildVariationMetadata(input: {
+  brand: string;
+  brief: string;
+  assetId: string;
+  publicImageUrl: string;
+  aiContent: ReturnType<typeof generateDeterministicAIContent>;
+}): Pick<ProductVideoPayload, 'creative_angle' | 'voiceover_style' | 'opening_pattern' | 'scene_variation_seed' | 'voiceover_full' | 'voiceover_prompt_requirements'> {
+  const uniqueSource = `${Date.now()}|${Math.random()}|${crypto.randomUUID?.() || ''}`;
+  const seedSource = [
+    input.brand,
+    input.brief,
+    input.assetId,
+    input.publicImageUrl,
+    input.aiContent.hook,
+    input.aiContent.scene_script,
+    uniqueSource,
+  ].filter(Boolean).join('|');
+  const seed = hashString(seedSource || JSON.stringify(input.aiContent));
+  const syncflowAngles = [
+    'pain_first',
+    'owner_dashboard',
+    'customer_reply_speed',
+    'job_tracking',
+    'reduce_lost_jobs',
+    'before_after',
+    'service_business_case',
+    'demo_invite',
+  ];
+  const paaAirAngles = [
+    'symptom_first',
+    'homeowner_warning',
+    'technician_inspection',
+    'cost_prevention',
+    'before_after_cleaning',
+    'repair_case',
+    'seasonal_check',
+    'booking_cta',
+  ];
+  const voiceoverStyles = [
+    'เจ้าของธุรกิจเล่าเองแบบกระชับ',
+    'ที่ปรึกษาชี้ปัญหาและทางออก',
+    'เล่าเป็นเคสหน้างานจริง',
+    'เปรียบเทียบก่อนและหลัง',
+    'คำถามเปิดให้คนดูคิดตาม',
+    'สรุปขั้นตอนแบบมืออาชีพ',
+  ];
+  const openingPatterns = [
+    'เริ่มจาก pain-point hook',
+    'เปิดด้วยคำถามเฉพาะจาก brief',
+    'เปิดด้วยสถานการณ์หนึ่งวันทำงาน',
+    'เปิดด้วยผลเสียถ้าปล่อยไว้นาน',
+    'เปิดด้วยมุมมองเจ้าของกิจการหรือลูกค้าหน้างาน',
+    'เปิดด้วย before-after โดยไม่ใช้ประโยคเดิม',
+  ];
+  const angles = input.brand === 'syncflow' ? syncflowAngles : paaAirAngles;
+  const creativeAngle = angles[seed % angles.length];
+  const voiceoverStyle = voiceoverStyles[Math.floor(seed / angles.length) % voiceoverStyles.length];
+  const openingPattern = openingPatterns[Math.floor(seed / (angles.length * voiceoverStyles.length)) % openingPatterns.length];
+  const generatedVoiceover = stripSceneLabels(buildThaiVoiceover({
+    brand: input.brand,
+    brief: input.brief,
+    creativeAngle,
+    voiceoverStyle,
+    openingPattern,
+    seed,
+  }));
+  const fallbackVoiceover = input.brand === 'syncflow'
+    ? 'งานเข้าหลายช่องทางแล้วทีมเริ่มตามไม่ทันใช่ไหมครับ SyncFlow by PAA Tech ช่วยรวมงาน จัดคิว และติดตามสถานะให้เห็นชัดในที่เดียว ใช้งานง่ายสำหรับเจ้าของธุรกิจบริการ ไม่ใช่ระบบใหญ่ที่ซับซ้อน ถ้าอยากดูว่าเหมาะกับทีมคุณไหม ทักมาขอดูตัวอย่างได้ครับ'
+    : 'แอร์มีอาการผิดปกติแล้วไม่แน่ใจควรเริ่มตรงไหน ให้ PAA Air ช่วยตรวจเช็กและอธิบายทางเลือกแบบเข้าใจง่ายก่อนตัดสินใจครับ';
+  const voiceoverFull = isNearIdenticalVoiceover(generatedVoiceover, input.aiContent.scene_script)
+    ? fallbackVoiceover
+    : generatedVoiceover;
+
+  const sceneVariationSeed = `studio-${seed}-${Date.now()}`;
+
+  return {
+    creative_angle: creativeAngle,
+    voiceover_style: voiceoverStyle,
+    opening_pattern: openingPattern,
+    scene_variation_seed: sceneVariationSeed,
+    voiceover_full: voiceoverFull,
+    voiceover_prompt_requirements: buildVoiceoverPromptRequirements({
+      brand: input.brand,
+      creativeAngle,
+      voiceoverStyle,
+      openingPattern,
+      sceneVariationSeed,
+    }),
+  };
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function pickNestedString(data: Record<string, unknown>, path: string[]): string {
+  let current: unknown = data;
+  for (const segment of path) {
+    const record = asRecord(current);
+    if (!record) return '';
+    current = record[segment];
+  }
+  return clean(current);
+}
+
+function pickN8nString(data: Record<string, unknown>, key: string): string {
+  const containers: Record<string, unknown>[] = [data];
+  const containerKeys = ['payload', 'result', 'preview', 'body', 'ai_generated_copy', 'script', 'metadata', 'n8n_response'];
+
+  for (const containerKey of containerKeys) {
+    const container = asRecord(data[containerKey]);
+    if (container) containers.push(container);
+  }
+
+  for (const container of containers) {
+    const value = clean(container[key]);
+    if (value) return value;
+  }
+
+  if (key === 'voiceover_full') {
+    for (const container of containers) {
+      const value = pickNestedString(container, ['voiceover', 'full']);
+      if (value) return value;
+    }
+  }
+
+  return '';
 }
 
 async function buildPayload(body: ProductVideoGenerateRequest): Promise<ProductVideoPayload> {
@@ -126,6 +397,13 @@ async function buildPayload(body: ProductVideoGenerateRequest): Promise<ProductV
       status: 400,
     });
   }
+  const variationMetadata = buildVariationMetadata({
+    brand,
+    brief,
+    assetId,
+    publicImageUrl,
+    aiContent,
+  });
   const imageUrls = Array.isArray(body.image_urls)
     ? body.image_urls.map(clean).filter(Boolean)
     : [];
@@ -183,6 +461,7 @@ async function buildPayload(body: ProductVideoGenerateRequest): Promise<ProductV
     scene_script: aiContent.scene_script,
     overlay_texts: aiContent.overlay_texts,
     hashtags: aiContent.hashtags,
+    ...variationMetadata,
   };
 }
 
@@ -212,6 +491,10 @@ function validatePayload(payload: ProductVideoPayload): string[] {
   return errors;
 }
 
+function buildN8nForwardPayload(payload: ProductVideoPayload): ProductVideoPayload {
+  return payload;
+}
+
 async function forwardToN8n(payload: ProductVideoPayload) {
   const webhookUrl = process.env.PRODUCT_VIDEO_N8N_WEBHOOK_URL;
   const forwardEnabled = process.env.PRODUCT_VIDEO_N8N_FORWARD_ENABLED === 'true';
@@ -230,26 +513,22 @@ async function forwardToN8n(payload: ProductVideoPayload) {
     const response = await fetch(webhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(buildN8nForwardPayload(payload)),
       signal: controller.signal,
     });
 
     const data = await response.json().catch(() => ({})) as Record<string, unknown>;
-    const renderJobId = typeof data.render_job_id === 'string'
-      ? data.render_job_id.trim()
-      : (typeof data.job_id === 'string' ? data.job_id.trim() : '');
-    const publicMediaUrl = typeof data.public_media_url === 'string' ? data.public_media_url.trim() : '';
-    const thumbnailUrl = typeof data.thumbnail_url === 'string' ? data.thumbnail_url.trim() : '';
-    const renderStatus = typeof data.render_status === 'string'
-      ? data.render_status.trim()
-      : (typeof data.status === 'string' ? data.status.trim() : '');
+    const renderJobId = pickN8nString(data, 'render_job_id') || pickN8nString(data, 'job_id');
+    const publicMediaUrl = pickN8nString(data, 'public_media_url');
+    const thumbnailUrl = pickN8nString(data, 'thumbnail_url');
+    const renderStatus = pickN8nString(data, 'render_status') || pickN8nString(data, 'status');
     const rendererCalled = data.renderer_called === true;
     const creativeFields = {
-      creative_angle: typeof data.creative_angle === 'string' ? data.creative_angle.trim() : '',
-      voiceover_style: typeof data.voiceover_style === 'string' ? data.voiceover_style.trim() : '',
-      opening_pattern: typeof data.opening_pattern === 'string' ? data.opening_pattern.trim() : '',
-      scene_variation_seed: typeof data.scene_variation_seed === 'string' ? data.scene_variation_seed.trim() : '',
-      voiceover_full: typeof data.voiceover_full === 'string' ? data.voiceover_full.trim() : '',
+      creative_angle: pickN8nString(data, 'creative_angle'),
+      voiceover_style: pickN8nString(data, 'voiceover_style'),
+      opening_pattern: pickN8nString(data, 'opening_pattern'),
+      scene_variation_seed: pickN8nString(data, 'scene_variation_seed'),
+      voiceover_full: pickN8nString(data, 'voiceover_full'),
     };
 
     return {
@@ -350,6 +629,11 @@ export async function POST(request: NextRequest) {
     const n8nVoiceoverFull = ('voiceover_full' in n8n && typeof n8n.voiceover_full === 'string') ? n8n.voiceover_full : '';
     const n8nRendererCalled = 'renderer_called' in n8n && n8n.renderer_called === true;
     const n8nRendered = n8n.forwarded && n8nStatus === 200 && n8nPublicMediaUrl.length > 0;
+    const safeVoiceoverFull = resolveSafeVoiceoverFull({
+      candidate: n8nVoiceoverFull,
+      fallback: payload.voiceover_full || '',
+      sceneScript: payload.scene_script || '',
+    });
 
     if (!n8n.forwarded || n8nStatus !== 200 || !previewSafetyLocked) {
       return NextResponse.json(
@@ -408,7 +692,7 @@ export async function POST(request: NextRequest) {
         voiceover_style: n8nVoiceoverStyle || payload.voiceover_style,
         opening_pattern: n8nOpeningPattern || payload.opening_pattern,
         scene_variation_seed: n8nSceneVariationSeed || payload.scene_variation_seed,
-        voiceover_full: n8nVoiceoverFull || payload.voiceover_full,
+        voiceover_full: safeVoiceoverFull,
         status: n8nRendered ? 'rendered' : 'pending_owner_review',
         render_status: n8nRendered ? 'rendered' : (n8nRenderStatus || undefined),
         media_status: n8nRendered ? 'ready' : (n8nMediaStatus || undefined),
