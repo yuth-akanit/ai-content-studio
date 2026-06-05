@@ -97,6 +97,95 @@ function clean(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+const PAA_CONTACT_FOOTER = `👉 LINE OA: https://page.line.me/paaair
+🌐 เว็บไซต์: https://www.xn--72cal0bebyh9dqeeo7iebf4efe3cwsiai7nqago4elk.com/
+📞 โทร: 084-282-4465, 02-102-0513
+✉️ อีเมล: admin@paaair.com`;
+
+const SYNCFLOW_CONTACT_FOOTER = `SyncFlow by PAA Tech
+
+🌐 Website: https://syncflowth.com
+💬 LINE: https://lin.ee/P4C9LyP
+📞 Phone: 080-631-0542 / 065-445-9450
+✉️ Email: contact@syncflowth.com`;
+
+function resolveBrandContactFooter(input: {
+  brandContext: string;
+  targetPageKey: string;
+}): string {
+  const brand = clean(input.brandContext).toLowerCase();
+  const target = clean(input.targetPageKey).toLowerCase();
+  const combined = `${brand} ${target}`;
+
+  if (combined.includes('syncflow')) {
+    return SYNCFLOW_CONTACT_FOOTER;
+  }
+
+  if (
+    combined.includes('paa')
+    || combined.includes('paa_air')
+    || combined.includes('paaair')
+    || combined.includes('pa_cooling')
+    || combined.includes('pa cooling')
+    || combined.includes('cooling')
+  ) {
+    return PAA_CONTACT_FOOTER;
+  }
+
+  return PAA_CONTACT_FOOTER;
+}
+
+function splitCaptionBodyAndHashtags(caption: string): { body: string; hashtags: string } {
+  const lines = caption.replace(/\r\n/g, '\n').split('\n');
+  const hashtagStartIndex = lines.findIndex((line) => line.trim().startsWith('#'));
+
+  if (hashtagStartIndex === -1) {
+    return {
+      body: caption.trim(),
+      hashtags: '',
+    };
+  }
+
+  return {
+    body: lines.slice(0, hashtagStartIndex).join('\n').trim(),
+    hashtags: lines.slice(hashtagStartIndex).join('\n').trim(),
+  };
+}
+
+function captionAlreadyHasFooter(caption: string, footer: string): boolean {
+  const normalizedCaption = caption.toLowerCase();
+  const footerLines = footer.split('\n').map((line) => line.trim()).filter(Boolean);
+  const markerLines = footerLines.filter((line) => (
+    line.includes('http')
+    || line.includes('@')
+    || line.includes('โทร:')
+    || line.includes('Phone:')
+    || line.includes('LINE')
+  ));
+
+  return markerLines.every((line) => normalizedCaption.includes(line.toLowerCase()));
+}
+
+function insertBrandFooterBeforeHashtags(input: {
+  caption: string;
+  brandContext: string;
+  targetPageKey: string;
+}): string {
+  const caption = clean(input.caption);
+  const footer = resolveBrandContactFooter({
+    brandContext: input.brandContext,
+    targetPageKey: input.targetPageKey,
+  });
+
+  if (!caption) return footer;
+  if (captionAlreadyHasFooter(caption, footer)) return caption;
+
+  const { body, hashtags } = splitCaptionBodyAndHashtags(caption);
+  const bodyWithFooter = [body, footer].filter(Boolean).join('\n\n').trim();
+
+  return hashtags ? `${bodyWithFooter}\n\n${hashtags}` : bodyWithFooter;
+}
+
 function hashString(value: string): number {
   let hash = 0;
   for (let index = 0; index < value.length; index += 1) {
@@ -384,10 +473,16 @@ async function buildPayload(body: ProductVideoGenerateRequest): Promise<ProductV
   const selectedPage = await resolveProductVideoSelectedFacebookPage(selectedPageSelector);
 
   const brand = clean(body.brand_context) || 'paa_air';
+  const targetPageKey = clean(body.target_page_key) || (brand === 'syncflow' ? 'syncflow' : 'paa_air');
   const brief = clean(body.brief);
   const aiContent = generateDeterministicAIContent(brand, brief);
 
-  const marketingCaption = clean(body.marketing_caption || body.caption) || aiContent.marketing_caption;
+  const rawMarketingCaption = clean(body.marketing_caption || body.caption) || aiContent.marketing_caption;
+  const marketingCaption = insertBrandFooterBeforeHashtags({
+    caption: rawMarketingCaption,
+    brandContext: brand,
+    targetPageKey,
+  });
   const previewNote = clean(body.preview_note) || aiContent.preview_note;
   const publicImageUrl = clean(body.public_image_url);
   const assetId = clean(body.asset_id || body.uploaded_asset_id);
@@ -419,7 +514,7 @@ async function buildPayload(body: ProductVideoGenerateRequest): Promise<ProductV
       resolvedPagesInfo.push({
         page_id: pageInfo.selected_page_id,
         page_name: pageInfo.selected_page_name,
-        target_page_key: clean(body.target_page_key) || 'paa_air',
+        target_page_key: targetPageKey,
         facebook_page_id: pageInfo.facebook_page_id,
         status: 'pending_authorization',
         publish_plan_checksum: null,
@@ -434,7 +529,7 @@ async function buildPayload(body: ProductVideoGenerateRequest): Promise<ProductV
 
   return {
     brand_context: brand,
-    target_page_key: clean(body.target_page_key) || 'paa_air',
+    target_page_key: targetPageKey,
     selected_channel_id: selectedPage.selected_channel_id,
     selected_page_id: selectedPage.selected_page_id,
     selected_page_name: selectedPage.selected_page_name,
