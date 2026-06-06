@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Sidebar } from './sidebar';
 import { BottomNav } from './bottom-nav';
 import { Toaster } from 'sonner';
-import { Sparkles } from 'lucide-react';
+import { AlertTriangle, Sparkles } from 'lucide-react';
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -15,8 +15,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Global Dev Mode Banner */}
-        <div className="z-40 flex shrink-0 select-none items-center justify-center gap-1 bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 px-4 py-1 sm:py-1.5 text-center text-[9px] sm:text-xs font-bold uppercase tracking-[0.15em] sm:tracking-[0.22em] text-white shadow-sm">
-          <span>⚠️ DEV MODE &bull; PREVIEW ONLY &bull; NO PUBLIC POSTING</span>
+        <div className="z-40 flex shrink-0 select-none items-center justify-center gap-1.5 bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 px-4 py-1 sm:py-1.5 text-center text-[9px] sm:text-xs font-bold uppercase tracking-[0.15em] sm:tracking-[0.22em] text-white shadow-sm">
+          <AlertTriangle className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-white/90 animate-pulse shrink-0" />
+          <span>DEV MODE &bull; PREVIEW ONLY &bull; NO PUBLIC POSTING</span>
         </div>
 
         {/* Mobile Header */}
