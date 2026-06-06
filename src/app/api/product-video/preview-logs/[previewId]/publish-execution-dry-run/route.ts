@@ -14,10 +14,16 @@ interface PublishExecutionDryRunBody {
   target_page_key?: unknown;
   publish_plan_checksum?: unknown;
   idempotency_key?: unknown;
+  selected_page_ids?: unknown;
+  selected_channel_ids?: unknown;
 }
 
 function cleanText(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
+}
+
+function cleanTextArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.map(cleanText).filter(Boolean) : [];
 }
 
 export async function POST(
@@ -58,6 +64,9 @@ export async function POST(
       targetPageKey: cleanText(body.target_page_key),
       publishPlanChecksum: cleanText(body.publish_plan_checksum),
       idempotencyKey: cleanText(body.idempotency_key),
+      selectedPageIdsOrChannelIds: cleanTextArray(body.selected_channel_ids).length > 0
+        ? cleanTextArray(body.selected_channel_ids)
+        : cleanTextArray(body.selected_page_ids),
     });
 
     return NextResponse.json({
@@ -71,7 +80,9 @@ export async function POST(
       idempotent_replay: result.idempotent_replay,
       execution_plan: result.execution_plan,
       audit: result.audit,
-      publish_allowed: false,
+      page_results: result.page_results,
+      selected_page_count: result.selected_page_count,
+      publish_allowed: result.all_pages_publish_allowed,
       real_posting_enabled: false,
       facebook_post_performed: false,
       line_broadcast_performed: false,

@@ -32,6 +32,20 @@ type PreviewLogStatus =
 
 type PreviewDecision = 'approve' | 'reject' | 'request_changes';
 
+type PublishPageResult = {
+  page_name: string;
+  selected_channel_id?: string;
+  selected_page_id?: string;
+  facebook_page_id: string;
+  publish_allowed: boolean;
+  block_reason: string | null;
+  duplicate_found: boolean;
+  token_resolved: boolean;
+  facebook_post_performed: boolean;
+  facebook_post_id: string | null;
+  status?: string;
+};
+
 type PublishPlanPreview = {
   plan_id: string;
   publish_plan_status: 'publish_plan_ready';
@@ -42,6 +56,18 @@ type PublishPlanPreview = {
     page_key: string;
     platform: string;
   };
+  target_pages?: Array<{
+    page_id: string;
+    page_name: string;
+    page_key: string;
+    platform: string;
+    selected_channel_id: string;
+    facebook_page_id: string;
+    token_resolved: boolean;
+    block_reason: string | null;
+  }>;
+  selected_page_count?: number;
+  idempotency_key?: string;
   content: {
     caption: string;
     brand_context: string;
@@ -53,7 +79,7 @@ type PublishPlanPreview = {
     public_media_url: string | null;
     media_checksum: string | null;
   };
-  publish_allowed: false;
+  publish_allowed: boolean;
   facebook_post_performed: false;
   line_broadcast_performed: false;
   schedule_enabled: false;
@@ -69,7 +95,9 @@ type PublishAuthorization = {
   idempotency_key: string;
   target_page_key: string;
   publish_plan_checksum: string;
-  publish_allowed: false;
+  publish_allowed: boolean;
+  page_results?: PublishPageResult[];
+  selected_page_count?: number;
   facebook_post_performed: false;
   line_broadcast_performed: false;
   schedule_enabled: false;
@@ -86,7 +114,9 @@ type PublishExecutionDryRun = {
   idempotency_key: string;
   target_page_key: string;
   publish_plan_checksum: string;
-  publish_allowed: false;
+  publish_allowed: boolean;
+  page_results?: PublishPageResult[];
+  selected_page_count?: number;
   facebook_post_performed: false;
   line_broadcast_performed: false;
   schedule_enabled: false;
@@ -98,15 +128,17 @@ type PublishExecutionDryRun = {
 
 type ManualPublishExecution = {
   status: 'blocked' | 'published';
-  block_reason: 'real_posting_flag_off' | null;
+  block_reason: string | null;
   manual_execution: true;
   safe_to_audit: true;
   idempotency_key: string;
   target_page_key: string;
   publish_plan_checksum: string;
-  publish_allowed: false;
-  real_posting_enabled: false;
-  facebook_post_performed: false;
+  publish_allowed: boolean;
+  real_posting_enabled: boolean;
+  facebook_post_performed: boolean;
+  page_results?: PublishPageResult[];
+  selected_page_count?: number;
   line_broadcast_performed: false;
   schedule_enabled: false;
   renderer_called: false;
@@ -318,6 +350,27 @@ function getBrandPageMismatchMessage(item: PreviewLogItem): string | null {
 
 function getFacebookPageId(item: PreviewLogItem, plan?: PublishPlanPreview): string {
   return item.facebook_page_id || item.external_id || plan?.target_page.page_id || item.selected_page_id || '-';
+}
+
+
+function getPreviewSelectedPageEntries(item: PreviewLogItem): Array<{ page_id: string; page_name: string; facebook_page_id?: string }> {
+  if (!item.selected_pages) {
+    return [{ page_id: item.selected_channel_id || item.selected_page_id, page_name: item.selected_page_name, facebook_page_id: item.facebook_page_id || item.external_id }];
+  }
+  try {
+    const parsed = JSON.parse(item.selected_pages) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === 'object' && !Array.isArray(entry))
+      .map((entry) => ({
+        page_id: typeof entry.page_id === 'string' ? entry.page_id : '',
+        page_name: typeof entry.page_name === 'string' ? entry.page_name : '',
+        facebook_page_id: typeof entry.facebook_page_id === 'string' ? entry.facebook_page_id : undefined,
+      }))
+      .filter((entry) => entry.page_id || entry.facebook_page_id);
+  } catch {
+    return [];
+  }
 }
 
 function ContextField({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
@@ -794,7 +847,7 @@ export default function ProductVideoPage() {
     setResult(null);
 
     try {
-      const idempotencyKey = `manual-publish-auth-${previewId}-${plan.target_page.page_id}-${plan.publish_plan_checksum}`;
+      const idempotencyKey = plan.idempotency_key || `manual-publish-auth-${previewId}-${plan.target_page.page_id}-${plan.publish_plan_checksum}`;
       const response = await fetch(`/api/product-video/preview-logs/${encodeURIComponent(previewId)}/publish-authorization`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -895,6 +948,7 @@ export default function ProductVideoPage() {
           target_page_key: authorization.target_page_key,
           publish_plan_checksum: authorization.publish_plan_checksum,
           idempotency_key: authorization.idempotency_key,
+          selected_channel_ids: getPreviewSelectedPageEntries((previewLogs.find((log) => log.preview_id === previewId) || { preview_id: previewId, selected_page_id: '', selected_page_name: '' }) as PreviewLogItem).map((page) => page.page_id),
         }),
       });
       const data = await safeParseJson(response, 'running dry-run execution');
@@ -938,23 +992,23 @@ export default function ProductVideoPage() {
           target_page_key: authorization.target_page_key,
           publish_plan_checksum: authorization.publish_plan_checksum,
           idempotency_key: authorization.idempotency_key,
-          selected_channel_id: item.selected_channel_id || item.selected_page_id,
+          selected_channel_ids: getPreviewSelectedPageEntries(item).map((page) => page.page_id),
         }),
       });
       const data = await safeParseJson(response, 'executing manual publish');
       setResult(data);
 
-      if (!response.ok || !data.ok || !data.execution) {
+      if (!response.ok || !data.ok || !data.page_results) {
         throw new Error(data.error || data.message || 'Manual publish executor ไม่สำเร็จ');
       }
 
       setManualPublishExecutions((current) => ({
         ...current,
-        [previewId]: data.execution as ManualPublishExecution,
+        [previewId]: ({ ...(data.executions?.[0] || {}), status: data.status, block_reason: data.block_reason, publish_allowed: data.publish_allowed, real_posting_enabled: data.real_posting_enabled, facebook_post_performed: data.facebook_post_performed, page_results: data.page_results, selected_page_count: data.selected_page_count }) as ManualPublishExecution,
       }));
-      toast.success(data.status === 'blocked'
-        ? 'Publish to Facebook ถูก block เพราะ real publish flag ยังไม่เปิด และไม่มีการเรียก Facebook'
-        : 'Publish to Facebook สำเร็จ');
+      toast.success(data.facebook_post_performed
+        ? `Publish to Facebook สำเร็จบาง/ทุกเพจ (${data.page_results?.filter((page: PublishPageResult) => page.facebook_post_performed).length || 0}/${data.selected_page_count || 0})`
+        : `Manual publish ถูก block/พร้อมรายเพจ (${data.selected_page_count || 0} เพจ) และไม่มีการเรียก Facebook ถ้า flag ยังปิด`);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Manual publish executor ไม่สำเร็จ';
       toast.error(message);
@@ -1379,7 +1433,7 @@ export default function ProductVideoPage() {
                       <div className="text-sm font-semibold text-amber-950">Publish Gates for Current Preview Card</div>
                       <div className="text-[11px] text-amber-800">ทุก gate ด้านล่างผูกกับ preview_id นี้เท่านั้น: <span className="font-mono">{item.preview_id}</span></div>
                     </div>
-                    <Badge variant="secondary">selected page: {item.selected_page_name || '-'}</Badge>
+                    <Badge variant="secondary">selected pages: {getPreviewSelectedPageEntries(item).length || 1}</Badge>
                   </div>
 
                 {publishPlan ? (
@@ -1389,7 +1443,7 @@ export default function ProductVideoPage() {
                       <Badge variant="secondary">publish_plan_ready</Badge>
                     </div>
                     <div className="grid gap-2 text-xs sm:grid-cols-2">
-                      <div>target page: <span className="font-medium">{publishPlan.target_page.page_name}</span></div>
+                      <div>target pages: <span className="font-medium">{publishPlan.selected_page_count || publishPlan.target_pages?.length || 1}</span></div>
                       <div>platform: <span className="font-medium">{publishPlan.target_page.platform}</span></div>
                       <div>media: <span className="font-medium">{publishPlan.media.media_status}</span></div>
                       <div>media_type: <span className="font-medium">{publishPlan.media.media_type || '-'}</span></div>
@@ -1398,23 +1452,23 @@ export default function ProductVideoPage() {
                     </div>
 
                     {/* Per-Page Publish Queue Preview */}
-                    {item.selected_pages && (
+                    {(publishPlan.target_pages?.length || item.selected_pages) ? (
                       <div className="space-y-2 border-t border-blue-200/50 pt-2">
                         <div className="text-xs font-semibold text-blue-900">Per-Page Publish Queue Preview:</div>
                         <div className="grid gap-2 sm:grid-cols-2">
-                          {JSON.parse(item.selected_pages).map((p: any) => (
-                            <div key={p.page_id} className="rounded-lg border border-blue-200 bg-white p-2.5 text-xs flex flex-col gap-1 shadow-sm text-blue-950">
+                          {(publishPlan.target_pages || getPreviewSelectedPageEntries(item)).map((p: any) => (
+                            <div key={p.selected_channel_id || p.page_id} className="rounded-lg border border-blue-200 bg-white p-2.5 text-xs flex flex-col gap-1 shadow-sm text-blue-950">
                               <div className="font-semibold text-blue-900">{p.page_name}</div>
-                              <div className="text-gray-500 font-mono text-[10px]">ID: {p.page_id}</div>
+                              <div className="text-gray-500 font-mono text-[10px]">FB: {p.facebook_page_id || p.page_id}</div>
                               <div className="flex items-center gap-1.5 mt-1">
                                 <span className="h-2 w-2 rounded-full bg-yellow-500 animate-ping"></span>
-                                <span className="text-yellow-700 font-medium">pending_authorization</span>
+                                <span className="text-yellow-700 font-medium">{p.block_reason || 'pending_authorization'}</span>
                               </div>
                             </div>
                           ))}
                         </div>
                       </div>
-                    )}
+                    ) : null}
 
                     <p className="whitespace-pre-wrap rounded-lg bg-white/70 p-3 text-xs text-blue-950">
                       {publishPlan.content.caption}
@@ -1435,7 +1489,7 @@ export default function ProductVideoPage() {
                       disabled={authorizingPreviewId === item.preview_id}
                     >
                       {authorizingPreviewId === item.preview_id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                      Authorize publish manually
+                      Authorize publish manually ({publishPlan.selected_page_count || publishPlan.target_pages?.length || 1} เพจ)
                     </Button>
                   </div>
                 ) : null}
@@ -1474,7 +1528,7 @@ export default function ProductVideoPage() {
                       disabled={dryRunningExecutionPreviewId === item.preview_id}
                     >
                       {dryRunningExecutionPreviewId === item.preview_id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                      Run guarded dry-run executor
+                      Run guarded dry-run executor ({getPreviewSelectedPageEntries(item).length || 1} เพจ)
                     </Button>
                     <Button
                       size="sm"
@@ -1484,7 +1538,7 @@ export default function ProductVideoPage() {
                       title="Manual executor gate: real publish ยังถูก block จนกว่า flag/approval แยกจะเปิด"
                     >
                       {manualPublishingPreviewId === item.preview_id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                      Publish to Facebook
+                      Publish to {getPreviewSelectedPageEntries(item).length || 1} selected page(s)
                     </Button>
                   </div>
                 ) : null}
@@ -1503,6 +1557,19 @@ export default function ProductVideoPage() {
                       <div>publish_allowed: <span className="font-medium">false</span></div>
                       <div>facebook_post_performed: <span className="font-medium">false</span></div>
                     </div>
+                    {publishExecutionDryRun.page_results?.length ? (
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        {publishExecutionDryRun.page_results.map((page) => (
+                          <div key={page.facebook_page_id} className="rounded-lg border border-red-200 bg-white p-2 text-xs">
+                            <div className="font-semibold">{page.page_name}</div>
+                            <div className="font-mono text-[10px]">{page.facebook_page_id}</div>
+                            <div>publish_allowed: {String(page.publish_allowed)}</div>
+                            <div>block_reason: {page.block_reason || 'none'}</div>
+                            <div>token_resolved: {String(page.token_resolved)}</div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
                     <p className="text-xs">Dry-run เท่านั้น: ไม่เรียก Facebook, LINE, n8n, renderer, schedule, S3 หรือ mark posted</p>
                   </div>
                 ) : null}
@@ -1521,7 +1588,21 @@ export default function ProductVideoPage() {
                       <div>publish_allowed: <span className="font-medium">false</span></div>
                       <div>facebook_post_performed: <span className="font-medium">false</span></div>
                     </div>
-                    <p className="text-xs">ผลลัพธ์นี้ยืนยันว่า real publish ยังต้องเปิด flag/approve แยก และไม่มีการเรียก Facebook Graph</p>
+                    {manualPublishExecution.page_results?.length ? (
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        {manualPublishExecution.page_results.map((page) => (
+                          <div key={page.facebook_page_id} className="rounded-lg border border-red-200 bg-white p-2 text-xs">
+                            <div className="font-semibold">{page.page_name}</div>
+                            <div className="font-mono text-[10px]">{page.facebook_page_id}</div>
+                            <div>status: {page.status || '-'}</div>
+                            <div>facebook_post_performed: {String(page.facebook_post_performed)}</div>
+                            <div>facebook_post_id: {page.facebook_post_id || '-'}</div>
+                            <div>block_reason: {page.block_reason || 'none'}</div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                    <p className="text-xs">ผลลัพธ์นี้แยกตามเพจ: เพจที่สำเร็จจะไม่ถูก retry ซ้ำ, เพจที่ fail/block จะแสดงเหตุผล และ LINE/schedule ยัง false</p>
                   </div>
                 ) : null}
                 </div>

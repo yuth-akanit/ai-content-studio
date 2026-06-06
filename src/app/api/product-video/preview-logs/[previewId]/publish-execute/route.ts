@@ -4,7 +4,7 @@ import {
   findProductVideoPreviewLogById,
 } from '@/lib/product-video-preview-log';
 import {
-  executeProductVideoManualPublish,
+  executeProductVideoManualMultiPagePublish,
   getProductVideoManualPublishExecutionAuditPathForDiagnostics,
 } from '@/lib/product-video-publish-executor';
 
@@ -16,6 +16,8 @@ interface ManualPublishExecuteBody {
   idempotency_key?: unknown;
   selected_page_id?: unknown;
   selected_channel_id?: unknown;
+  selected_page_ids?: unknown;
+  selected_channel_ids?: unknown;
   manual_execute?: unknown;
   request_scoped_real_publish_approval?: unknown;
   access_token?: unknown;
@@ -24,6 +26,10 @@ interface ManualPublishExecuteBody {
 
 function cleanText(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
+}
+
+function cleanTextArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.map(cleanText).filter(Boolean) : [];
 }
 
 export async function POST(
@@ -66,50 +72,46 @@ export async function POST(
       );
     }
 
-    const result = await executeProductVideoManualPublish({
+    const selectedPageIds = cleanTextArray(body.selected_channel_ids).length > 0
+      ? cleanTextArray(body.selected_channel_ids)
+      : cleanTextArray(body.selected_page_ids).length > 0
+        ? cleanTextArray(body.selected_page_ids)
+        : [cleanText(body.selected_channel_id) || cleanText(body.selected_page_id)].filter(Boolean);
+
+    const result = await executeProductVideoManualMultiPagePublish({
       item,
       targetPageKey: cleanText(body.target_page_key),
       publishPlanChecksum: cleanText(body.publish_plan_checksum),
       idempotencyKey: cleanText(body.idempotency_key),
       manualExecute: body.manual_execute,
       requestScopedRealPublishApproval: body.request_scoped_real_publish_approval,
-      selectedPageIdOrChannelId: cleanText(body.selected_channel_id) || cleanText(body.selected_page_id),
+      selectedPageIdsOrChannelIds: selectedPageIds,
     });
 
-    if (result.execution.block_reason === 'invalid_marketing_caption_system_note_detected') {
-      return NextResponse.json(
-        {
-          ok: false,
-          status: 'blocked',
-          block_reason: 'invalid_marketing_caption_system_note_detected',
-          facebook_post_performed: false,
-        },
-        { status: 400 },
-      );
-    }
+    const firstExecution = result.executions[0] || null;
 
     return NextResponse.json({
       ok: true,
-      status: result.execution.status,
-      block_reason: result.execution.block_reason,
+      status: result.all_pages_published ? 'published' : 'partial_or_blocked',
+      block_reason: result.page_results.find((page) => page.block_reason)?.block_reason || null,
       local_only: true,
       manual_execution: true,
       safe_to_audit: true,
-      idempotent_replay: result.idempotent_replay,
-      execution_plan: result.execution_plan,
-      execution: result.execution,
-      publish_allowed: result.execution.publish_allowed,
-      real_posting_enabled: result.execution.real_posting_enabled,
-      request_scoped_real_publish_approval: result.execution.request_scoped_real_publish_approval,
-      facebook_post_performed: result.execution.facebook_post_performed,
-      facebook_post_id: result.execution.facebook_post_id,
-      facebook_graph_endpoint: result.execution.facebook_graph_endpoint,
-      line_broadcast_performed: result.execution.line_broadcast_performed,
-      schedule_enabled: result.execution.schedule_enabled,
-      renderer_called: result.execution.renderer_called,
-      phaya_called: result.execution.phaya_called,
-      s3_upload_performed: result.execution.s3_upload_performed,
-      mark_posted_performed: result.execution.mark_posted_performed,
+      executions: result.executions,
+      page_results: result.page_results,
+      selected_page_count: result.selected_page_count,
+      publish_allowed: result.all_pages_published,
+      real_posting_enabled: firstExecution?.real_posting_enabled || false,
+      request_scoped_real_publish_approval: firstExecution?.request_scoped_real_publish_approval || false,
+      facebook_post_performed: result.facebook_post_performed,
+      facebook_post_id: null,
+      facebook_graph_endpoint: null,
+      line_broadcast_performed: false,
+      schedule_enabled: false,
+      renderer_called: false,
+      phaya_called: false,
+      s3_upload_performed: false,
+      mark_posted_performed: result.facebook_post_performed,
       storage: {
         publish_execution_audit_path: getProductVideoManualPublishExecutionAuditPathForDiagnostics(),
       },

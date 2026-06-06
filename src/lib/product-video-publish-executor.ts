@@ -14,6 +14,7 @@ import {
 import {
   ProductVideoPublishPlanPreview,
   buildProductVideoPublishPlanPreview,
+  parseProductVideoSelectedPageSelectors,
 } from '@/lib/product-video-publish-plan';
 import {
   ProductVideoSelectedFacebookPage,
@@ -56,6 +57,8 @@ export interface ProductVideoPublishExecutionDryRunAudit extends ProductVideoPre
   authorization_status: 'publish_authorized_for_manual_execution';
   media_status: 'not_rendered' | 'ready';
   execution_plan: ProductVideoPublishExecutionPlan;
+  page_results?: ProductVideoPublishPageResult[];
+  selected_page_count?: number;
   audited_at: string;
 }
 
@@ -134,7 +137,23 @@ export interface ProductVideoManualPublishExecutionAudit {
   phaya_called: false;
   s3_upload_performed: false;
   mark_posted_performed: boolean;
+  page_results?: ProductVideoPublishPageResult[];
+  selected_page_count?: number;
   executed_at: string;
+}
+
+export interface ProductVideoPublishPageResult {
+  page_name: string;
+  selected_channel_id: string;
+  selected_page_id: string;
+  facebook_page_id: string;
+  publish_allowed: boolean;
+  block_reason: string | null;
+  duplicate_found: boolean;
+  token_resolved: boolean;
+  facebook_post_performed: boolean;
+  facebook_post_id: string | null;
+  status?: string;
 }
 
 const DEFAULT_PUBLISH_EXECUTION_DRY_RUN_AUDIT_PATH = '/app/runtime/product-video-publish-execution-dry-runs.jsonl';
@@ -428,6 +447,63 @@ function findMatchingAuthorization(
   )) || null;
 }
 
+
+function getAllowedSelectedPageSelectors(item: ProductVideoPreviewLogRecord): string[] {
+  return parseProductVideoSelectedPageSelectors(item);
+}
+
+function normalizeRequestedSelectedPageSelectors(
+  item: ProductVideoPreviewLogRecord,
+  requested?: string[],
+): string[] {
+  const allowed = getAllowedSelectedPageSelectors(item);
+  const cleanedRequested = (requested || []).map(cleanText).filter(Boolean);
+  const selectors = cleanedRequested.length > 0 ? cleanedRequested : allowed;
+  const unique = Array.from(new Set(selectors));
+  if (unique.length === 0) {
+    throw Object.assign(new Error('selected_facebook_page_required'), {
+      code: 'selected_facebook_page_required',
+      status: 400,
+    });
+  }
+  if (allowed.length > 0) {
+    const allowedSet = new Set(allowed);
+    for (const selector of unique) {
+      if (!allowedSet.has(selector)) {
+        throw Object.assign(new Error('selected_facebook_page_not_in_preview_selection'), {
+          code: 'selected_facebook_page_not_in_preview_selection',
+          status: 409,
+        });
+      }
+    }
+  }
+  return unique;
+}
+
+async function resolveSelectedPagesForPublish(
+  item: ProductVideoPreviewLogRecord,
+  requested?: string[],
+): Promise<ProductVideoSelectedFacebookPage[]> {
+  const selectors = normalizeRequestedSelectedPageSelectors(item, requested);
+  const pages: ProductVideoSelectedFacebookPage[] = [];
+  for (const selector of selectors) {
+    pages.push(await resolveProductVideoSelectedFacebookPage(selector));
+  }
+  return pages;
+}
+
+function findPublishedExecutionForPage(
+  executions: ProductVideoManualPublishExecutionAudit[],
+  previewId: string,
+  facebookPageId: string,
+): ProductVideoManualPublishExecutionAudit | undefined {
+  return executions.find((record) => (
+    record.preview_id === previewId
+    && record.status === 'published'
+    && (record.facebook_page_id || record.execution_plan?.would_publish_to?.facebook_page_id || record.execution_plan?.would_publish_to?.target_page_id) === facebookPageId
+  ));
+}
+
 function buildExecutionPlan(
   item: ProductVideoPreviewLogRecord,
   publishPlan: ProductVideoPublishPlanPreview,
@@ -474,7 +550,11 @@ export async function dryRunProductVideoPublishExecution(input: {
   targetPageKey: string;
   publishPlanChecksum: string;
   idempotencyKey: string;
+  selectedPageIdsOrChannelIds?: string[];
 }): Promise<{
+  page_results: ProductVideoPublishPageResult[];
+  selected_page_count: number;
+  all_pages_publish_allowed: boolean;
   execution_plan: ProductVideoPublishExecutionPlan;
   audit: ProductVideoPublishExecutionDryRunAudit;
   idempotent_replay: boolean;
@@ -517,6 +597,34 @@ export async function dryRunProductVideoPublishExecution(input: {
     });
   }
 
+  const selectedPages = await resolveSelectedPagesForPublish(input.item, input.selectedPageIdsOrChannelIds);
+  const manualExecutions = await listProductVideoManualPublishExecutions();
+  const pageResults: ProductVideoPublishPageResult[] = selectedPages.map((page) => {
+    const duplicate = Boolean(findPublishedExecutionForPage(manualExecutions, input.item.preview_id, page.facebook_page_id));
+    const tokenResolved = Boolean(page.page_access_token);
+    const block = publishPlan.media.media_status !== 'ready'
+      ? 'media_not_rendered'
+      : duplicate
+        ? 'preview_already_published'
+        : !tokenResolved
+          ? 'selected_facebook_page_access_token_missing'
+          : null;
+    return {
+      page_name: page.selected_page_name,
+      selected_channel_id: page.selected_channel_id,
+      selected_page_id: page.selected_page_id,
+      facebook_page_id: page.facebook_page_id,
+      publish_allowed: block === null,
+      block_reason: block,
+      duplicate_found: duplicate,
+      token_resolved: tokenResolved,
+      facebook_post_performed: false,
+      facebook_post_id: null,
+      status: block === null ? 'ready_dry_run' : 'blocked',
+    };
+  });
+  const allPagesPublishAllowed = pageResults.every((page) => page.publish_allowed);
+
   const executionPlan = buildExecutionPlan(input.item, publishPlan);
   const status: ProductVideoPublishExecutionDryRunStatus = publishPlan.media.media_status === 'ready'
     ? 'publish_execution_ready_dry_run'
@@ -538,6 +646,9 @@ export async function dryRunProductVideoPublishExecution(input: {
     return {
       execution_plan: existing.execution_plan,
       audit: existing,
+      page_results: existing.page_results || [],
+      selected_page_count: existing.selected_page_count || 1,
+      all_pages_publish_allowed: (existing.page_results || []).every((page) => page.publish_allowed),
       idempotent_replay: true,
     };
   }
@@ -565,6 +676,8 @@ export async function dryRunProductVideoPublishExecution(input: {
     authorization_status: authorization.status,
     media_status: publishPlan.media.media_status,
     execution_plan: executionPlan,
+    page_results: pageResults,
+    selected_page_count: pageResults.length,
     audited_at: new Date().toISOString(),
     ...PRODUCT_VIDEO_PREVIEW_SAFETY_FLAGS,
   };
@@ -576,6 +689,9 @@ export async function dryRunProductVideoPublishExecution(input: {
   return {
     execution_plan: executionPlan,
     audit,
+    page_results: pageResults,
+    selected_page_count: pageResults.length,
+    all_pages_publish_allowed: allPagesPublishAllowed,
     idempotent_replay: false,
   };
 }
@@ -641,14 +757,13 @@ export async function executeProductVideoManualPublish(input: {
     || input.item.external_id
     || publishPlan.target_page.page_id;
   const selectedPage = await resolveProductVideoSelectedFacebookPage(selectedPageSelector);
-  const expectedFacebookPageId = cleanText(input.item.facebook_page_id || input.item.external_id);
-  if (expectedFacebookPageId && selectedPage.facebook_page_id !== expectedFacebookPageId) {
-    throw Object.assign(new Error('selected_facebook_page_mismatch'), {
-      code: 'selected_facebook_page_mismatch',
+  const allowedSelectors = getAllowedSelectedPageSelectors(input.item);
+  if (allowedSelectors.length > 0 && !allowedSelectors.includes(selectedPageSelector)) {
+    throw Object.assign(new Error('selected_facebook_page_not_in_preview_selection'), {
+      code: 'selected_facebook_page_not_in_preview_selection',
       status: 409,
     });
   }
-
   const executions = await listProductVideoManualPublishExecutions();
   const alreadyPublished = executions.find((record) => (
     record.preview_id === input.item.preview_id
@@ -821,5 +936,79 @@ export async function executeProductVideoManualPublish(input: {
     execution,
     execution_plan: executionPlan,
     idempotent_replay: false,
+  };
+}
+
+
+export async function executeProductVideoManualMultiPagePublish(input: {
+  item: ProductVideoPreviewLogRecord;
+  targetPageKey: string;
+  publishPlanChecksum: string;
+  idempotencyKey: string;
+  manualExecute?: unknown;
+  requestScopedRealPublishApproval?: unknown;
+  selectedPageIdsOrChannelIds?: string[];
+}): Promise<{
+  executions: ProductVideoManualPublishExecutionAudit[];
+  page_results: ProductVideoPublishPageResult[];
+  selected_page_count: number;
+  facebook_post_performed: boolean;
+  all_pages_published: boolean;
+}> {
+  const selectedPages = await resolveSelectedPagesForPublish(input.item, input.selectedPageIdsOrChannelIds);
+  const executions: ProductVideoManualPublishExecutionAudit[] = [];
+  const pageResults: ProductVideoPublishPageResult[] = [];
+
+  for (const page of selectedPages) {
+    try {
+      const result = await executeProductVideoManualPublish({
+        item: input.item,
+        targetPageKey: input.targetPageKey,
+        publishPlanChecksum: input.publishPlanChecksum,
+        idempotencyKey: input.idempotencyKey,
+        manualExecute: input.manualExecute,
+        requestScopedRealPublishApproval: input.requestScopedRealPublishApproval,
+        selectedPageIdOrChannelId: page.selected_channel_id,
+      });
+      executions.push(result.execution);
+      pageResults.push({
+        page_name: page.selected_page_name,
+        selected_channel_id: page.selected_channel_id,
+        selected_page_id: page.selected_page_id,
+        facebook_page_id: page.facebook_page_id,
+        publish_allowed: result.execution.publish_allowed,
+        block_reason: result.execution.block_reason,
+        duplicate_found: result.execution.block_reason === 'preview_already_published',
+        token_resolved: Boolean(page.page_access_token),
+        facebook_post_performed: result.execution.facebook_post_performed,
+        facebook_post_id: result.execution.facebook_post_id,
+        status: result.execution.status,
+      });
+    } catch (error) {
+      const code = typeof (error as { code?: unknown }).code === 'string'
+        ? (error as { code: string }).code
+        : 'manual_publish_page_failed';
+      pageResults.push({
+        page_name: page.selected_page_name,
+        selected_channel_id: page.selected_channel_id,
+        selected_page_id: page.selected_page_id,
+        facebook_page_id: page.facebook_page_id,
+        publish_allowed: false,
+        block_reason: code,
+        duplicate_found: false,
+        token_resolved: Boolean(page.page_access_token),
+        facebook_post_performed: false,
+        facebook_post_id: null,
+        status: 'failed',
+      });
+    }
+  }
+
+  return {
+    executions,
+    page_results: pageResults,
+    selected_page_count: pageResults.length,
+    facebook_post_performed: pageResults.some((page) => page.facebook_post_performed),
+    all_pages_published: pageResults.length > 0 && pageResults.every((page) => page.facebook_post_performed),
   };
 }
