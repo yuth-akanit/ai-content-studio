@@ -6,14 +6,16 @@ interface PageHeaderProps {
 
 export function PageHeader({ title, description, actions }: PageHeaderProps) {
   return (
-    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">{title}</h1>
+    <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <div className="min-w-0">
+        <h1 className="text-2xl font-black tracking-tight text-slate-950 sm:text-3xl dark:text-white">
+          <span className="text-gradient">{title}</span>
+        </h1>
         {description && (
-          <p className="mt-1 text-sm text-gray-500">{description}</p>
+          <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-slate-500">{description}</p>
         )}
       </div>
-      {actions && <div className="flex items-center gap-2">{actions}</div>}
+      {actions && <div className="flex w-full items-center gap-2 sm:w-auto sm:justify-end">{actions}</div>}
     </div>
   );
 }

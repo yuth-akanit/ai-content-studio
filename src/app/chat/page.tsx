@@ -181,7 +181,7 @@ export default function ChatPage() {
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-120px)] max-w-5xl mx-auto">
+    <div className="flex flex-col h-[calc(100dvh-14rem)] lg:h-[calc(100dvh-9rem)] max-w-5xl mx-auto">
       <PageHeader 
         title="AI Chat Assistant" 
         description="ถาม-ตอบ และช่วยวางแผน Content แบบอัจฉริยะ"
@@ -199,7 +199,7 @@ export default function ChatPage() {
       />
 
       {/* Main Chat Area */}
-      <Card className="flex-1 flex flex-col mb-6 overflow-hidden border-none shadow-2xl bg-white/80 backdrop-blur-xl relative">
+      <Card className="flex-1 flex flex-col mb-2 lg:mb-6 overflow-hidden border-none shadow-2xl bg-white/80 backdrop-blur-xl relative">
         <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-400 via-indigo-500 to-purple-500"></div>
         
         {/* Messages Container */}
@@ -266,7 +266,7 @@ export default function ChatPage() {
         </div>
 
         {/* Input Area */}
-        <div className="p-4 border-t bg-gray-50/50 backdrop-blur-md">
+        <div className="p-3 lg:p-4 border-t bg-gray-50/50 backdrop-blur-md">
           <form 
             onSubmit={(e) => { e.preventDefault(); handleSend(); }}
             className="flex gap-2 max-w-4xl mx-auto items-center"

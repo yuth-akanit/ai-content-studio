@@ -289,6 +289,7 @@ function GeneratePageInner() {
   const [videoAnalysisUpdatedAt, setVideoAnalysisUpdatedAt] = useState<Date | null>(null);
   const [videoTranscriptUpdatedAt, setVideoTranscriptUpdatedAt] = useState<Date | null>(null);
   const [generationAnalysisUsedAt, setGenerationAnalysisUsedAt] = useState<Date | null>(null);
+  const [activeStep, setActiveStep] = useState(1);
 
   const normalizedTranscript = normalizeTranscript(videoTranscript);
   const hasTranscriptText = normalizedTranscript.length > 0;
@@ -714,7 +715,7 @@ function GeneratePageInner() {
 
   if (!profile?.id) {
     return (
-      <div>
+      <div className="pb-20">
         <PageHeader title="สร้างคอนเทนต์" />
         <EmptyState
           icon={Building2}
@@ -728,61 +729,62 @@ function GeneratePageInner() {
   }
 
   return (
-    <div>
+    <div className="pb-24">
       <PageHeader
         title="สร้างคอนเทนต์ด้วย AI"
         description="สร้างเนื้อหาการตลาดสำหรับแพลตฟอร์มต่าง ๆ โดยอิงจากข้อมูลธุรกิจของคุณ"
       />
 
       {isTikTokReviewContext && (
-        <Card className="mb-6 border-amber-200 bg-amber-50">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base text-amber-900">
-              TikTok video.upload preparation
+        <Card className="mb-6 border-amber-200 bg-amber-50 rounded-2xl overflow-hidden shadow-sm">
+          <CardHeader className="pb-3 bg-amber-100/50 border-b border-amber-200">
+            <CardTitle className="text-sm font-semibold text-amber-900 flex items-center gap-2">
+              <span className="flex h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+              TikTok Video Upload Preparation (Review Mode)
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4 text-sm text-amber-900">
-            <div className="grid gap-3 md:grid-cols-2">
-              <div className="rounded-lg border border-amber-200 bg-white/70 px-3 py-2">
-                <p className="font-medium">Selected account</p>
-                <p className="mt-1">[TIKTOK] TikTok Test Account</p>
+          <CardContent className="space-y-4 text-xs text-amber-900 pt-4">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-xl border border-amber-200 bg-white/70 px-3.5 py-2.5">
+                <p className="font-semibold text-amber-950">Selected account</p>
+                <p className="mt-1 font-mono text-amber-800">[TIKTOK] TikTok Test Account</p>
               </div>
-              <div className="rounded-lg border border-amber-200 bg-white/70 px-3 py-2">
-                <p className="font-medium">Post type</p>
-                <p className="mt-1">Short Video</p>
+              <div className="rounded-xl border border-amber-200 bg-white/70 px-3.5 py-2.5">
+                <p className="font-semibold text-amber-950">Post type</p>
+                <p className="mt-1 text-amber-800">Short Video</p>
               </div>
-              <div className="rounded-lg border border-amber-200 bg-white/70 px-3 py-2">
-                <p className="font-medium">Upload mode</p>
-                <p className="mt-1">TikTok Content Posting API / video.upload</p>
+              <div className="rounded-xl border border-amber-200 bg-white/70 px-3.5 py-2.5">
+                <p className="font-semibold text-amber-950">Upload mode</p>
+                <p className="mt-1 text-amber-800">TikTok Content Posting API / video.upload</p>
               </div>
-              <div className="rounded-lg border border-amber-200 bg-white/70 px-3 py-2">
-                <p className="font-medium">Privacy level</p>
-                <p className="mt-1">SELF_ONLY</p>
-              </div>
-            </div>
-
-            <div className="grid gap-3 md:grid-cols-2">
-              <div className="rounded-lg border border-amber-200 bg-white/70 px-3 py-2">
-                <p className="font-medium">Caption</p>
-                <p className="mt-1">{TIKTOK_REVIEW_CAPTION}</p>
-              </div>
-              <div className="rounded-lg border border-amber-200 bg-white/70 px-3 py-2">
-                <p className="font-medium">Video URL</p>
-                <p className="mt-1 break-all">{TIKTOK_REVIEW_SAMPLE_VIDEO_URL}</p>
+              <div className="rounded-xl border border-amber-200 bg-white/70 px-3.5 py-2.5">
+                <p className="font-semibold text-amber-950">Privacy level</p>
+                <p className="mt-1 text-amber-800 font-mono">SELF_ONLY</p>
               </div>
             </div>
 
-            <div className="rounded-lg border border-amber-200 bg-white/70 px-3 py-2">
-              <p className="font-medium">Upload preparation status</p>
-              <p className="mt-1">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-xl border border-amber-200 bg-white/70 px-3.5 py-2.5">
+                <p className="font-semibold text-amber-950">Caption</p>
+                <p className="mt-1 text-amber-800">{TIKTOK_REVIEW_CAPTION}</p>
+              </div>
+              <div className="rounded-xl border border-amber-200 bg-white/70 px-3.5 py-2.5">
+                <p className="font-semibold text-amber-950">Video URL</p>
+                <p className="mt-1 break-all font-mono text-amber-850">{TIKTOK_REVIEW_SAMPLE_VIDEO_URL}</p>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-amber-200 bg-white/70 px-3.5 py-2.5">
+              <p className="font-semibold text-amber-950">Upload preparation status</p>
+              <p className="mt-1 text-amber-850">
                 Review mode preview only. This helper demonstrates the official TikTok
                 video.upload preparation flow and does not submit a TikTok post.
               </p>
             </div>
 
-            <div className="rounded-lg border border-amber-300 bg-amber-100 px-3 py-2">
-              <p className="font-medium">Review mode notice</p>
-              <p className="mt-1">
+            <div className="rounded-xl border border-amber-300 bg-amber-100 px-3.5 py-2.5">
+              <p className="font-semibold text-amber-950">Review mode notice</p>
+              <p className="mt-1 text-amber-850">
                 Public direct posting is disabled. PUBLIC_TO_EVERYONE is blocked until
                 TikTok approval and explicit server configuration.
               </p>
@@ -791,699 +793,737 @@ function GeneratePageInner() {
         </Card>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Input Form */}
-        <div className="space-y-4">
-          <Card className="bg-white/80 backdrop-blur-lg border border-white/40 shadow-[0_8px_30px_rgb(0,0,0,0.04)] rounded-2xl overflow-hidden">
-            <CardHeader className="pb-3 bg-gradient-to-r from-blue-50/50 to-indigo-50/50 border-b border-white/50">
-              <CardTitle className="text-base text-blue-800 font-medium">การตั้งค่าเนื้อหา</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4 pt-5">
-              {/* Image Upload */}
-              <div className="space-y-4">
-                <div className="space-y-1">
+      {/* Stepper Progress Bar */}
+      <div className="mb-6 bg-white border border-gray-200 p-4 rounded-2xl shadow-sm max-w-2xl mx-auto">
+        <div className="flex items-center justify-between max-w-xl mx-auto px-4 relative">
+          {[
+            { step: 1, label: 'รูปแบบ' },
+            { step: 2, label: 'ไฟล์สื่อ' },
+            { step: 3, label: 'ข้อมูลบรีฟ' },
+            { step: 4, label: 'สร้างผลลัพธ์' }
+          ].map((s) => (
+            <div key={s.step} className="flex flex-col items-center relative z-10 flex-1">
+              <button
+                type="button"
+                onClick={() => {
+                  if (s.step < activeStep || s.step === activeStep || (s.step === 4 && result)) {
+                    setActiveStep(s.step);
+                  }
+                }}
+                disabled={s.step > activeStep && !(s.step === 4 && result)}
+                className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold transition-all border cursor-pointer ${
+                  activeStep === s.step
+                    ? "bg-blue-600 border-blue-600 text-white shadow-md shadow-blue-100 ring-4 ring-blue-50"
+                    : activeStep > s.step
+                      ? "bg-emerald-500 border-emerald-500 text-white"
+                      : "bg-white border-gray-200 text-gray-400 cursor-not-allowed"
+                }`}
+              >
+                {activeStep > s.step ? '✓' : s.step}
+              </button>
+              <span className={`text-[11px] mt-2 font-medium transition-colors hidden sm:block ${
+                activeStep === s.step ? "text-blue-600 font-semibold" : "text-gray-500"
+              }`}>
+                {s.label}
+              </span>
+            </div>
+          ))}
+          
+          {/* Progress Connector Line */}
+          <div className="absolute top-[18px] left-[12%] right-[12%] h-[2px] bg-gray-100 -z-10 rounded">
+            <div
+              className="h-full bg-blue-500 transition-all duration-300"
+              style={{ width: `${((activeStep - 1) / 3) * 100}%` }}
+            />
+          </div>
+        </div>
+        <div className="text-center mt-3 text-xs text-gray-500 sm:hidden">
+          {activeStep === 1 && "ขั้นตอนที่ 1: ตั้งค่ารูปแบบคอนเทนต์"}
+          {activeStep === 2 && "ขั้นตอนที่ 2: อัปโหลดรูปภาพหรือวิดีโอ (Assets)"}
+          {activeStep === 3 && "ขั้นตอนที่ 3: บรีฟและรายละเอียดโฆษณา"}
+          {activeStep === 4 && "ขั้นตอนที่ 4: สร้างผลลัพธ์ (Generate)"}
+        </div>
+      </div>
+
+      <div className="max-w-2xl mx-auto">
+        {/* Step 1: Type Selection */}
+        {activeStep === 1 && (
+          <div className="space-y-4">
+            <Card className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden">
+              <CardHeader className="pb-3 border-b border-gray-100">
+                <CardTitle className="text-base text-gray-900 font-semibold flex items-center gap-2">
+                  <span className="flex items-center justify-center w-5.5 h-5.5 rounded bg-blue-50 text-blue-600 text-xs font-bold">1</span>
+                  ตั้งค่ารูปแบบคอนเทนต์
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4 pt-5">
+                {/* Social Page Selection */}
+                <div className="space-y-1.5">
+                  <Label className="text-gray-700 font-medium">เลือกเพจ / แผนผังโซเชียล</Label>
+                  <select
+                    className="flex h-10 w-full rounded-md border border-gray-200 bg-white px-3 py-1 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    value={selectedPageId}
+                    onChange={(e) => {
+                      const pageId = e.target.value;
+                      setSelectedPageId(pageId);
+                      const page = socialPages.find(p => p.id === pageId);
+                      if (page) {
+                        const selectedPlatform = page.meta?.is_instagram
+                          ? 'instagram'
+                          : page.provider;
+                        updateInput('platform', selectedPlatform as Platform);
+                      }
+                    }}
+                  >
+                    <option value="">-- เลือกเพจที่ต้องการโพสต์ --</option>
+                    {socialPages.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        [{ (p.meta?.is_instagram ? 'INSTAGRAM' : p.provider).toUpperCase() }] {p.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Platform Selector */}
+                <div className="space-y-2">
+                  <Label className="text-gray-700 font-medium">แพลตฟอร์ม</Label>
+                  <div className="grid grid-cols-2 gap-3">
+                    {PLATFORMS.map((p) => {
+                      const active = input.platform === p;
+                      return (
+                        <button
+                          key={p}
+                          type="button"
+                          onClick={() => updateInput('platform', p)}
+                          className={`flex items-center gap-2.5 p-3 rounded-xl border text-left transition-all cursor-pointer h-12 ${
+                            active
+                              ? 'border-blue-600 bg-blue-50/50 text-blue-700 font-semibold shadow-sm'
+                              : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+                          }`}
+                        >
+                          {getPlatformIcon(p)}
+                          <span className="text-xs truncate">{THAI_PLATFORM_LABELS[p]}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Variant Selector */}
+                <div className="space-y-1.5">
+                  <Label className="text-gray-700 font-medium">รูปแบบโพสต์ (Variant)</Label>
+                  <select
+                    className="flex h-10 w-full rounded-md border border-gray-200 bg-white px-3 py-1 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    value={input.platform_variant || ''}
+                    onChange={(e) => updateInput('platform_variant', e.target.value)}
+                  >
+                    {(PLATFORM_VARIANTS[input.platform] || []).map((v) => (
+                      <option key={v} value={v}>{v.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Content Type */}
+                <div className="space-y-1.5">
+                  <Label className="text-gray-700 font-medium">ประเภทเนื้อหา</Label>
+                  <select
+                    className="flex h-10 w-full rounded-md border border-gray-200 bg-white px-3 py-1 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    value={input.content_type}
+                    onChange={(e) => updateInput('content_type', e.target.value as ContentType)}
+                  >
+                    {CONTENT_TYPES.map((t) => (
+                      <option key={t} value={t}>{THAI_CONTENT_TYPE_LABELS[t]}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Content Goal */}
+                <div className="space-y-1.5">
+                  <Label className="text-gray-700 font-medium">เป้าหมายของคอนเทนต์</Label>
+                  <select
+                    className="flex h-10 w-full rounded-md border border-gray-200 bg-white px-3 py-1 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    value={input.content_goal || ''}
+                    onChange={(e) => updateInput('content_goal', e.target.value)}
+                  >
+                    <option value="">เลือกเป้าหมาย...</option>
+                    {CONTENT_GOALS.map((g) => (
+                      <option key={g} value={g}>{THAI_CONTENT_GOAL_LABELS[g as ContentGoal]}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Tone & Length */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-gray-700 font-medium">น้ำเสียง/โทน (Tone)</Label>
+                    <select
+                      className="flex h-10 w-full rounded-md border border-gray-200 bg-white px-3 py-1 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                      value={input.tone}
+                      onChange={(e) => updateInput('tone', e.target.value as Tone)}
+                    >
+                      {TONES.map((t) => (
+                        <option key={t} value={t}>{THAI_TONE_LABELS[t]}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-gray-700 font-medium">ความยาวโพสต์</Label>
+                    <select
+                      className="flex h-10 w-full rounded-md border border-gray-200 bg-white px-3 py-1 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                      value={input.post_length}
+                      onChange={(e) => updateInput('post_length', e.target.value as PostLength)}
+                    >
+                      {POST_LENGTHS.map((l) => (
+                        <option key={l} value={l}>{THAI_LENGTH_LABELS[l]}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Language */}
+                <div className="space-y-1.5">
+                  <Label className="text-gray-700 font-medium">ภาษาที่ใช้</Label>
+                  <select
+                    className="flex h-10 w-full rounded-md border border-gray-200 bg-white px-3 py-1 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    value={input.language}
+                    onChange={(e) => updateInput('language', e.target.value)}
+                  >
+                    <option value="th">ภาษาไทย (Thai)</option>
+                    <option value="en">ภาษาอังกฤษ (English)</option>
+                  </select>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Navigation Buttons */}
+            <div className="flex justify-end gap-3 pt-4">
+              <Button onClick={() => setActiveStep(2)} className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white h-11 sm:h-9">
+                ถัดไป
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Step 2: Assets Upload */}
+        {activeStep === 2 && (
+          <div className="space-y-4">
+            <Card className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden">
+              <CardHeader className="pb-3 border-b border-gray-100">
+                <CardTitle className="text-base text-gray-900 font-semibold flex items-center gap-2">
+                  <span className="flex items-center justify-center w-5.5 h-5.5 rounded bg-blue-50 text-blue-600 text-xs font-bold">2</span>
+                  อัปโหลดรูปภาพหรือวิดีโอ (Assets)
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-5 pt-5">
+                {/* Image Upload */}
+                <div className="space-y-3">
                   <div className="flex justify-between items-center">
                     <Label className="text-gray-700 font-medium">{THAI_UI_LABELS.upload_image_title || 'อัพโหลดรูปภาพ (สูงสุด 2 รูป)'}</Label>
                     <span className="text-xs text-gray-400">{imageFiles.length}/2 รูป</span>
                   </div>
-                  <p className="text-xs leading-relaxed text-blue-700">
+                  <p className="text-xs leading-relaxed text-blue-750 bg-blue-50/50 p-2.5 rounded-lg border border-blue-100">
                     ใส่รูปงานจริงที่เห็นจุดสำคัญ เช่น คราบฝุ่น น้ำรั่ว ช่างกำลังทำงาน อะไหล่ หรือภาพก่อน/หลัง เพื่อให้ AI เขียนอิงจากรูปและไม่ซ้ำ template เดิม
                   </p>
-                </div>
-                
-                <div className="flex gap-4">
-                  {imagePreviews.map((preview, index) => (
-                    <div key={index} className="relative rounded-xl overflow-hidden border border-gray-200 w-32 h-32 flex-shrink-0 group shadow-sm">
-                      <img src={preview} alt={'Preview ' + (index + 1)} className="w-full h-full object-cover" />
-                      <Button 
-                        variant="destructive" 
-                        size="icon" 
-                        className="absolute top-1 right-1 h-6 w-6 rounded-full opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-md"
-                        onClick={() => removeImage(index)}
-                      >
-                        <X className="h-3 w-3" />
-                      </Button>
-                      {analyzingImage && (
-                        <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                          <div className="flex flex-col items-center text-white">
-                            <Loader2 className="h-6 w-6 animate-spin mb-1" />
-                            <span className="text-[10px] font-medium">วิเคราะห์...</span>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-
-                  {imageFiles.length < 2 && (
-                    <div 
-                      className={`border-2 border-dashed border-gray-200 rounded-xl flex-col items-center justify-center bg-gray-50/50 hover:bg-gray-50 hover:border-blue-400 transition-all cursor-pointer group flex-shrink-0 ${imageFiles.length === 0 ? 'w-full h-32 flex' : 'w-32 h-32 flex'}`}
-                      onClick={() => document.getElementById('image-upload')?.click()}
-                    >
-                      <div className="rounded-full bg-blue-50 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform p-3">
-                        <Upload className="h-5 w-5 text-blue-600" />
-                      </div>
-                      <span className="text-sm font-medium text-gray-600 text-center">เพิ่มรูปภาพ</span>
-                      <input 
-                        id="image-upload" 
-                        type="file" 
-                        accept="image/*" 
-                        multiple
-                        className="hidden"
-                        disabled={!!videoFile}
-                        onChange={handleImageChange} 
-                      />
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                <div className="flex justify-between items-center">
-                  <Label className="text-gray-700 font-medium">อัปโหลดวิดีโอสำหรับโพสต์จริง</Label>
-                  <span className="text-xs text-gray-400">{videoFile ? '1/1 วิดีโอ' : 'ยังไม่มีวิดีโอ'}</span>
-                </div>
-
-                {videoPreview ? (
-                  <div className="relative rounded-2xl overflow-hidden border border-gray-200 bg-black/90 shadow-sm">
-                    <video src={videoPreview} controls className="w-full max-h-64 bg-black" />
-                    <Button
-                      variant="destructive"
-                      size="icon"
-                      className="absolute top-2 right-2 h-8 w-8 rounded-full drop-shadow-md"
-                      onClick={removeVideo}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                    <div className="px-4 py-3 bg-white">
-                      <p className="text-sm font-medium text-gray-700">{videoFile?.name}</p>
-                      <p className="text-xs text-gray-400">รองรับโพสต์ Facebook Video และ Instagram Reel ใน flow นี้</p>
-                      <div className="mt-3 space-y-2">
-                        <div className="flex items-center justify-between text-[11px] text-gray-500">
-                          <span>{videoUploading ? 'กำลังเตรียมไฟล์วิดีโอ...' : 'ไฟล์พร้อมใช้งาน'}</span>
-                          <span>{videoUploadProgress}%</span>
-                        </div>
-                        <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
-                          <div
-                            className={`h-full transition-all ${videoUploadError ? 'bg-red-500' : 'bg-indigo-500'}`}
-                            style={{ width: `${videoUploadProgress}%` }}
-                          />
-                        </div>
-                        <div className="flex flex-wrap gap-2 text-[11px] text-gray-500">
-                          <span>ขนาด {videoFile ? formatBytes(videoFile.size) : '-'}</span>
-                          <span>MIME {videoFile?.type || '-'}</span>
-                          <span>นามสกุล .{videoFile ? getFileExtension(videoFile.name) : '-'}</span>
-                          <span>{extractingKeyframes ? 'กำลังดึง key frames' : 'พร้อม preview key frames'}</span>
-                          <span>{transcriptStatusText}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div
-                    className={`border-2 border-dashed rounded-xl flex flex-col items-center justify-center transition-all cursor-pointer p-6 ${
-                      imageFiles.length > 0
-                        ? 'border-gray-200 bg-gray-50/60 text-gray-400 cursor-not-allowed'
-                        : 'border-gray-200 bg-gray-50/50 hover:bg-gray-50 hover:border-indigo-400'
-                    }`}
-                    onClick={() => {
-                      if (!imageFiles.length) {
-                        document.getElementById('video-upload')?.click();
-                      }
-                    }}
-                  >
-                    <div className="rounded-full bg-indigo-50 flex items-center justify-center mb-2 p-3">
-                      <Video className="h-5 w-5 text-indigo-600" />
-                    </div>
-                    <span className="text-sm font-medium text-gray-600 text-center">
-                      {videoUploading ? 'กำลังอ่านไฟล์วิดีโอ...' : 'เพิ่มวิดีโอ 1 ไฟล์'}
-                    </span>
-                    <span className="text-xs text-gray-400 text-center mt-1">
-                      รองรับ {ALLOWED_VIDEO_EXTENSIONS.map((ext) => `.${ext}`).join(', ')} และขนาดไม่เกิน {formatBytes(MAX_VIDEO_SIZE_BYTES)}
-                    </span>
-                    <div className="mt-4 w-full max-w-sm space-y-2">
-                      <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
-                        <div
-                          className={`h-full transition-all ${videoUploadError ? 'bg-red-500' : 'bg-indigo-500'}`}
-                          style={{ width: `${videoUploadProgress}%` }}
-                        />
-                      </div>
-                      <div className="flex items-center justify-between text-[11px] text-gray-500">
-                        <span>{videoUploadError ? 'พบปัญหาก่อนอัปโหลด' : videoUploading ? 'กำลังเตรียม preview' : 'Preflight validation ก่อนส่งจริง'}</span>
-                        <span>{videoUploadProgress}%</span>
-                      </div>
-                    </div>
-                    <input
-                      id="video-upload"
-                      type="file"
-                      accept="video/*"
-                      className="hidden"
-                      disabled={imageFiles.length > 0}
-                      onChange={handleVideoChange}
-                    />
-                  </div>
-                )}
-
-                {videoUploadError && (
-                  <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                    {videoUploadError}
-                  </div>
-                )}
-
-                <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 px-4 py-3 space-y-2">
-                  <p className="text-xs font-semibold text-indigo-700 uppercase tracking-wide">Preflight Validation</p>
-                  <div className="text-xs text-indigo-900 space-y-1">
-                    <p>MIME ที่รองรับ: {ALLOWED_VIDEO_MIME_TYPES.join(', ')}</p>
-                    <p>Extension ที่รองรับ: {ALLOWED_VIDEO_EXTENSIONS.map((ext) => `.${ext}`).join(', ')}</p>
-                    <p>ขนาดสูงสุดใน UI ตอนนี้: {formatBytes(MAX_VIDEO_SIZE_BYTES)}</p>
-                  </div>
-                  <div className="text-[11px] text-indigo-800 leading-relaxed">
-                    Production note: ควรแยก bucket สำหรับวิดีโอด้วย `SUPABASE_CONTENT_VIDEO_BUCKET`, เปิด public read หรือ signed delivery ให้ Meta ดึงไฟล์ได้, และตั้ง bucket image เดิมผ่าน `SUPABASE_CONTENT_IMAGE_BUCKET` เพื่อไม่ปน media type ใน production
-                  </div>
-                </div>
-
-                {videoPreview && (
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-gray-700 font-medium">ตัวอย่าง Key Frames จากวิดีโอ</Label>
-                      <span className="text-xs text-gray-400">
-                        {extractingKeyframes ? 'กำลังเตรียม...' : `${videoKeyframes.length}/${VIDEO_KEYFRAME_TIMESTAMPS.length} เฟรม`}
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-3 gap-3">
-                      {videoKeyframes.map((frame, index) => (
-                        <div key={index} className="rounded-xl overflow-hidden border border-gray-200 bg-white shadow-sm">
-                          <img src={frame.imageUrl} alt={`Video keyframe ${index + 1}`} className="h-24 w-full object-cover" />
-                          <div className="px-2 py-1 text-[11px] text-gray-500 flex items-center justify-between gap-2">
-                            <span>Scene {index + 1}</span>
-                            <div className="flex items-center gap-2">
-                              <span className="text-gray-400">{frame.percentLabel}</span>
-                              <span className="font-medium text-gray-600">{frame.timestampLabel}</span>
+                  
+                  <div className="flex flex-wrap gap-3 pt-1">
+                    {imagePreviews.map((preview, index) => (
+                      <div key={index} className="relative rounded-xl overflow-hidden border border-gray-200 w-28 h-28 flex-shrink-0 group shadow-sm">
+                        <img src={preview} alt={'Preview ' + (index + 1)} className="w-full h-full object-cover" />
+                        <Button 
+                          type="button"
+                          variant="destructive" 
+                          size="icon" 
+                          className="absolute top-1 right-1 h-6 w-6 rounded-full opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity drop-shadow-md z-10"
+                          onClick={() => removeImage(index)}
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                        {analyzingImage && (
+                          <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                            <div className="flex flex-col items-center text-white">
+                              <Loader2 className="h-5 w-5 animate-spin mb-1" />
+                              <span className="text-[9px] font-medium">วิเคราะห์...</span>
                             </div>
                           </div>
-                        </div>
-                      ))}
-                      {extractingKeyframes && videoKeyframes.length === 0 && (
-                        <>
-                          {VIDEO_KEYFRAME_TIMESTAMPS.map((_, index) => (
-                            <div key={index} className="rounded-xl border border-dashed border-gray-200 bg-gray-50 h-32 flex items-center justify-center text-xs text-gray-400">
-                              เตรียมเฟรม {index + 1}
-                            </div>
-                          ))}
-                        </>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between gap-3">
-                    <Label className="text-gray-700 font-medium">บทพูดหรือโน้ตจากวิดีโอ</Label>
-                    <div className="flex items-center gap-2">
-                      {videoTranscriptUpdatedAt && (
-                        <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-600">
-                          transcript updated {formatUpdatedAtLabel(videoTranscriptUpdatedAt)}
-                        </span>
-                      )}
-                      <span className="text-xs text-gray-400">
-                        {transcribingVideo
-                          ? 'กำลังถอดเสียงอัตโนมัติ...'
-                          : hasUsableTranscript
-                            ? 'ระบบถอดเสียงแล้ว แก้ไขต่อได้'
-                            : hasTranscriptText
-                              ? 'ข้อความสั้นเกินใช้ ระบบจะพึ่ง key frames เป็นหลัก'
-                              : 'ใส่เพิ่มเองได้ถ้าต้องการ'}
-                      </span>
-                    </div>
-                  </div>
-                  <Textarea
-                    value={videoTranscript}
-                    onChange={(e) => {
-                      const nextValue = e.target.value;
-                      const usable = isUsableTranscript(nextValue);
-                      setVideoTranscript(nextValue);
-                      if (usable) {
-                        setVideoTranscriptError('');
-                        setUseTranscriptForGeneration(true);
-                      } else if (normalizeTranscript(nextValue).length > 0) {
-                        setVideoTranscriptError('ข้อความใน transcript ยังสั้นเกินใช้ ระบบจะใช้ key frames จากวิดีโอเป็นหลัก');
-                        setUseTranscriptForGeneration(false);
-                      } else {
-                        setVideoTranscriptError('');
-                        setUseTranscriptForGeneration(false);
-                      }
-                    }}
-                    placeholder="ระบบจะพยายามถอดเสียงอัตโนมัติให้ ถ้าต้องการเติมบริบท เช่น ช่างกำลังล้างคอยล์เย็น, มีคราบสกปรก, ก่อน-หลังล้างต่างกันอย่างไร สามารถแก้ไขหรือเติมเองได้"
-                    rows={4}
-                    className="resize-none"
-                  />
-                  <div className="flex flex-wrap items-center justify-end gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={handleRefreshTranscript}
-                      disabled={!videoFile || transcribingVideo}
-                    >
-                      <RefreshCw className={`h-3 w-3 mr-1 ${transcribingVideo ? 'animate-spin' : ''}`} />
-                      วิเคราะห์ transcript ใหม่
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={handleRefreshKeyframes}
-                      disabled={!videoPreview || extractingKeyframes || analyzingVideo}
-                    >
-                      <RefreshCw className={`h-3 w-3 mr-1 ${(extractingKeyframes || analyzingVideo) ? 'animate-spin' : ''}`} />
-                      วิเคราะห์ key frames ใหม่
-                    </Button>
-                  </div>
-                  <div className="flex items-start justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-3">
-                    <div className="space-y-1">
-                      <p className="text-sm font-medium text-slate-700">ใช้ transcript นี้ในการเขียน</p>
-                      <p className="text-xs text-slate-500 leading-relaxed">
-                        {hasUsableTranscript
-                          ? 'เปิดไว้เพื่อให้ AI ใช้เสียง/คำพูดจากคลิปร่วมกับ key frames'
-                          : 'ตอนนี้ transcript ยังไม่พร้อมใช้งาน ระบบจะสร้างคอนเทนต์จาก key frames เป็นหลัก'}
-                      </p>
-                    </div>
-                    <Switch
-                      checked={shouldUseTranscriptForGeneration}
-                      disabled={!hasUsableTranscript}
-                      onCheckedChange={(checked) => setUseTranscriptForGeneration(checked)}
-                      aria-label="Use transcript for generation"
-                    />
-                  </div>
-                  {videoTranscriptError && (
-                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-                      {videoTranscriptError}
-                    </div>
-                  )}
-                  <p className="text-xs text-gray-500 leading-relaxed">
-                    ถ้าไม่มี transcript ระบบจะยังใช้ภาพ key frames จากวิดีโอในการสรุปบริบทให้ก่อนสร้างคอนเทนต์
-                  </p>
-                </div>
-
-                {videoPreview && (
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between gap-3">
-                      <Label className="text-gray-700 font-medium">Video Analysis Summary</Label>
-                      <div className="flex items-center gap-2">
-                        {videoAnalysisUpdatedAt && (
-                          <span className="inline-flex items-center rounded-full border border-blue-200 bg-white/90 px-2 py-0.5 text-[11px] font-medium text-blue-700">
-                            analysis updated {formatUpdatedAtLabel(videoAnalysisUpdatedAt)}
-                          </span>
                         )}
-                        <span className="text-xs text-gray-400">
-                          {analyzingVideo
-                            ? 'กำลังสรุปจาก key frames...'
-                            : videoAnalysisSummary
-                              ? 'พร้อมใช้ใน generation'
-                              : 'จะสรุปอัตโนมัติเมื่อกด generate'}
-                        </span>
                       </div>
-                    </div>
-                    <div className="rounded-xl border border-blue-100 bg-blue-50/60 px-4 py-3">
-                      {analyzingVideo ? (
-                        <div className="flex items-center gap-2 text-sm text-blue-800">
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                          กำลังวิเคราะห์สิ่งที่เกิดขึ้นในคลิปจาก key frames...
+                    ))}
+
+                    {imageFiles.length < 2 && (
+                      <div 
+                        className={`border-2 border-dashed border-gray-200 rounded-xl flex flex-col items-center justify-center bg-gray-50 hover:bg-gray-100 hover:border-blue-400 transition-all cursor-pointer group flex-shrink-0 flex ${imageFiles.length === 0 ? 'w-full h-28' : 'w-28 h-28'}`}
+                        onClick={() => document.getElementById('image-upload')?.click()}
+                      >
+                        <div className="rounded-full bg-blue-50 flex items-center justify-center mb-1 group-hover:scale-105 transition-transform p-2.5">
+                          <Upload className="h-4.5 w-4.5 text-blue-600" />
                         </div>
-                      ) : videoAnalysisSummary ? (
-                        <p className="text-sm leading-relaxed text-blue-950 whitespace-pre-wrap">
-                          {videoAnalysisSummary}
-                        </p>
-                      ) : (
-                        <p className="text-sm leading-relaxed text-blue-800">
-                          ระบบจะสรุปว่าคลิปกำลังทำอะไร, มีเครื่องมือหรือปัญหาอะไร, และมุมการตลาดที่ตรงกับภาพจริงก่อนสร้างคอนเทนต์
-                        </p>
-                      )}
-                    </div>
-                    {videoAnalysisError && (
-                      <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-                        {videoAnalysisError}
+                        <span className="text-xs font-semibold text-gray-650 text-center">เพิ่มรูปภาพ</span>
+                        <input 
+                          id="image-upload" 
+                          type="file" 
+                          accept="image/*" 
+                          multiple
+                          className="hidden"
+                          disabled={!!videoFile}
+                          onChange={handleImageChange} 
+                        />
                       </div>
                     )}
                   </div>
-                )}
-              </div>
-              {/* Social Page Selection (High Priority) */}
-              <div>
-                <Label className="text-indigo-600 font-semibold">เลือกเพจ / แผนผังโซเชียล</Label>
-                <select
-                  className="flex h-10 w-full rounded-md border border-indigo-200 bg-indigo-50/30 px-3 py-1 text-sm focus:ring-2 focus:ring-indigo-500"
-                  value={selectedPageId}
-                  onChange={(e) => {
-                    const pageId = e.target.value;
-                    setSelectedPageId(pageId);
-                    const page = socialPages.find(p => p.id === pageId);
-                    if (page) {
-                      const selectedPlatform = page.meta?.is_instagram
-                        ? 'instagram'
-                        : page.provider;
-                      updateInput('platform', selectedPlatform as Platform);
-                    }
-                  }}
-                >
-                  <option value="">-- เลือกเพจที่ต้องการโพสต์ --</option>
-                  {socialPages.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      [{(p.meta?.is_instagram ? 'INSTAGRAM' : p.provider).toUpperCase()}] {p.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Platform Selector in Card Grid Style */}
-              <div className="space-y-2">
-                <Label>แพลตฟอร์ม</Label>
-                <div className="grid grid-cols-2 gap-3">
-                  {PLATFORMS.map((p) => {
-                    const active = input.platform === p;
-                    return (
-                      <button
-                        key={p}
-                        type="button"
-                        onClick={() => updateInput('platform', p)}
-                        className={`flex items-center gap-2.5 p-3 rounded-xl border text-left transition-all cursor-pointer h-12 ${
-                          active
-                            ? 'border-blue-600 bg-blue-50/50 text-blue-700 font-medium shadow-sm'
-                            : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
-                        }`}
-                      >
-                        {getPlatformIcon(p)}
-                        <span className="text-xs truncate">{THAI_PLATFORM_LABELS[p]}</span>
-                      </button>
-                    );
-                  })}
                 </div>
-              </div>
 
-              {/* Variant Selector */}
-              <div>
-                <Label>รูปแบบโพสต์ (Variant)</Label>
-                <select
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
-                  value={input.platform_variant || ''}
-                  onChange={(e) => updateInput('platform_variant', e.target.value)}
-                >
-                  {(PLATFORM_VARIANTS[input.platform] || []).map((v) => (
-                    <option key={v} value={v}>{v.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Content Type */}
-              <div>
-                <Label>ประเภทเนื้อหา</Label>
-                <select
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
-                  value={input.content_type}
-                  onChange={(e) => updateInput('content_type', e.target.value as ContentType)}
-                >
-                  {CONTENT_TYPES.map((t) => (
-                    <option key={t} value={t}>{THAI_CONTENT_TYPE_LABELS[t]}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Content Goal */}
-              <div>
-                <Label>เป้าหมายของคอนเทนต์</Label>
-                <select
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
-                  value={input.content_goal || ''}
-                  onChange={(e) => updateInput('content_goal', e.target.value)}
-                >
-                  <option value="">เลือกเป้าหมาย...</option>
-                  {CONTENT_GOALS.map((g) => (
-                    <option key={g} value={g}>{THAI_CONTENT_GOAL_LABELS[g as ContentGoal]}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Tone & Length */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label>น้ำเสียง/โทน (Tone)</Label>
-                  <select
-                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
-                    value={input.tone}
-                    onChange={(e) => updateInput('tone', e.target.value as Tone)}
-                  >
-                    {TONES.map((t) => (
-                      <option key={t} value={t}>{THAI_TONE_LABELS[t]}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <Label>ความยาวโพสต์</Label>
-                  <select
-                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
-                    value={input.post_length}
-                    onChange={(e) => updateInput('post_length', e.target.value as PostLength)}
-                  >
-                    {POST_LENGTHS.map((l) => (
-                      <option key={l} value={l}>{THAI_LENGTH_LABELS[l]}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {/* Language */}
-              <div>
-                <Label>ภาษาที่ใช้</Label>
-                <select
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
-                  value={input.language}
-                  onChange={(e) => updateInput('language', e.target.value)}
-                >
-                  <option value="th">ภาษาไทย (Thai)</option>
-                  <option value="en">ภาษาอังกฤษ (English)</option>
-                </select>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">{THAI_UI_LABELS.content_details}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-1">
-                <Label>{THAI_UI_LABELS.service_type}</Label>
-                <Input
-                  value={input.service_type || ''}
-                  onChange={(e) => updateInput('service_type', e.target.value)}
-                  placeholder="เช่น ล้างแอร์, ซ่อมตู้เย็น"
-                />
-                <p className="text-xs text-gray-500">ระบุบริการให้ชัด เช่น ล้างแอร์บ้าน, ซ่อมตู้แช่ร้านอาหาร, ติดตั้งแอร์ใหม่</p>
-              </div>
-              <div className="space-y-1">
-                <Label>{THAI_UI_LABELS.topic}</Label>
-                <Input
-                  value={input.topic || ''}
-                  onChange={(e) => updateInput('topic', e.target.value)}
-                  placeholder="เช่น เคล็ดลับการดูแลตู้แช่ในช่วงหน้าร้อน"
-                />
-                <p className="text-xs text-gray-500">เขียนหัวข้อให้ผูกกับรูป เช่น ล้างคอยล์ที่มีฝุ่นสะสมหนัก ไม่ใช่แค่ “ล้างแอร์”</p>
-              </div>
-              <div className="space-y-1">
-                <Label>{THAI_UI_LABELS.pain_point}</Label>
-                <Input
-                  value={input.pain_point || ''}
-                  onChange={(e) => updateInput('pain_point', e.target.value)}
-                  placeholder="เช่น ตู้เย็นไม่เย็น, ค่าไฟแพง"
-                />
-                <p className="text-xs text-gray-500">ใส่อาการที่ลูกค้าเจอจริง เช่น ลมเบา มีกลิ่นอับ น้ำหยด เย็นไม่ถึง หรือของสดเสียเร็ว</p>
-              </div>
-              <div>
-                <Label>{THAI_UI_LABELS.location}</Label>
-                <Input
-                  value={input.location || ''}
-                  onChange={(e) => updateInput('location', e.target.value)}
-                  placeholder="เช่น กรุงเทพฯ, สมุทรปราการ, ย่านสยาม"
-                />
-              </div>
-              <div>
-                <Label>{THAI_UI_LABELS.promotion_offer}</Label>
-                <Input
-                  value={input.promotion_offer || ''}
-                  onChange={(e) => updateInput('promotion_offer', e.target.value)}
-                  placeholder="เช่น ส่วนลด 20% สำหรับลูกค้าใหม่, ตรวจเช็คฟรี"
-                />
-              </div>
-              <div>
-                <Label>{THAI_UI_LABELS.target_audience}</Label>
-                <Input
-                  value={input.target_audience || ''}
-                  onChange={(e) => updateInput('target_audience', e.target.value)}
-                  placeholder="เช่น เจ้าของร้านอาหาร, พ่อบ้านแม่บ้าน"
-                />
-              </div>
-              <div>
-                <Label>{THAI_UI_LABELS.cta_style}</Label>
-                <select
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
-                  value={input.cta_style || ''}
-                  onChange={(e) => updateInput('cta_style', e.target.value)}
-                >
-                  <option value="">{THAI_UI_LABELS.auto}</option>
-                  {Object.entries(defaultCTAPresets).map(([key, preset]) => (
-                    <option key={key} value={key}>{preset.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-1">
-                <Label>{THAI_UI_LABELS.keyword}</Label>
-                <Input
-                  value={input.keyword || ''}
-                  onChange={(e) => updateInput('keyword', e.target.value)}
-                  placeholder="เช่น ล้างแอร์ กรุงเทพ"
-                />
-                <p className="text-xs text-gray-500">ใส่คีย์เวิร์ดท้องถิ่นหรืออาการ เช่น ล้างแอร์ บางนา, แอร์น้ำหยด, ตู้แช่ไม่เย็น</p>
-              </div>
-              <div className="space-y-1">
-                <Label>{THAI_UI_LABELS.custom_notes}</Label>
-                <Textarea
-                  value={input.custom_notes || ''}
-                  onChange={(e) => updateInput('custom_notes', e.target.value)}
-                  placeholder="เช่น ให้เขียนจากสิ่งที่เห็นในรูปเป็นหลัก พูดถึงคราบฝุ่นที่คอยล์ การถอดล้าง และผลลัพธ์หลังล้าง ห้ามเขียนกว้าง ๆ แบบโพสต์ล้างแอร์ทั่วไป"
-                  rows={4}
-                />
-                <p className="text-xs leading-relaxed text-blue-700">ช่องนี้ช่วยลดคอนเทนต์ซ้ำที่สุด: ระบุสิ่งที่เห็นในรูป, งานที่ช่างทำ, อาการเสีย, ผลลัพธ์ก่อน/หลัง และคำที่ไม่อยากให้ใช้ซ้ำ</p>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Campaign Assignment */}
-          {campaigns.length > 0 && (
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">{THAI_UI_LABELS.assign_campaign}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <select
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
-                  value={selectedCampaign}
-                  onChange={(e) => setSelectedCampaign(e.target.value)}
-                >
-                  <option value="">{THAI_UI_LABELS.no_campaign}</option>
-                  {campaigns.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Generate Button */}
-          <Button
-            className="w-full h-12 text-base bg-blue-600 hover:bg-blue-700"
-            onClick={handleGenerate}
-            disabled={generating || extractingKeyframes || transcribingVideo}
-          >
-            {generating || extractingKeyframes || transcribingVideo ? (
-              <>
-                <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-                {generating
-                  ? 'กำลังสร้างคอนเทนต์...'
-                  : extractingKeyframes
-                    ? 'กำลังเตรียม key frames...'
-                    : 'กำลังถอดเสียงอัตโนมัติ...'}
-              </>
-            ) : (
-              <>
-                <Sparkles className="h-5 w-5 mr-2" />
-                สร้างคอนเทนต์เลย
-              </>
-            )}
-          </Button>
-        </div>
-
-        {/* Output */}
-        <div>
-          {generating && (
-            <Card className="bg-white/80 backdrop-blur-lg border border-white/40 shadow-xl rounded-2xl overflow-hidden animate-pulse">
-              <CardContent className="p-6 space-y-6">
-                <div className="flex items-center gap-2 mb-4">
-                  <Skeleton className="h-6 w-24 rounded-full" />
-                  <Skeleton className="h-6 w-32 rounded-full" />
-                </div>
-                <div className="space-y-3">
-                  <Skeleton className="h-8 w-3/4" />
-                  <Skeleton className="h-4 w-full" />
-                  <Skeleton className="h-4 w-full" />
-                  <Skeleton className="h-4 w-2/3" />
-                </div>
-                <div className="pt-6 space-y-2">
-                  <Skeleton className="h-4 w-20" />
-                  <Skeleton className="h-24 w-full rounded-xl" />
-                </div>
-                <div className="pt-4">
-                  <Skeleton className="h-10 w-full rounded-button" />
-                </div>
-                <div className="text-center pt-4">
-                  <p className="text-xs text-blue-600 animate-bounce font-medium">AI กำลังร่างคอนเทนต์และจัดรูปแบบตามหลัก SEO ให้คุณ...</p>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {result && !generating && (
-            <div className="space-y-4">
-              <div className="flex flex-wrap items-center gap-2 justify-between">
-                <div className="flex items-center gap-2">
-                  {generationVideoMode === 'keyframes_only' && (
-                    <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-800">
-                      ใช้ข้อมูลวิดีโอ: key frames only
-                    </span>
-                  )}
-                  {generationVideoMode === 'keyframes_plus_transcript' && (
-                    <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-800">
-                      ใช้ข้อมูลวิดีโอ: key frames + transcript
-                    </span>
-                  )}
-                  {generationAnalysisUsedAt && (
-                    <span className="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-medium text-blue-800">
-                      ล่าสุดใช้ analysis เวลา {formatUpdatedAtLabel(generationAnalysisUsedAt)}
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-center gap-2 justify-end">
-                <Button variant="outline" size="sm" onClick={handleGenerate}>
-                  <RefreshCw className="h-3 w-3 mr-1" /> สร้างใหม่
-                </Button>
-                <Button size="sm" onClick={handleSave}>
-                  <Save className="h-3 w-3 mr-1" /> บันทึก
-                </Button>
-                </div>
-              </div>
-              <OutputDisplay
-                output={result.output}
-                platform={input.platform}
-                contentId={result.content?.id}
-                imageUrls={imagePreviews}
-                videoUrl={videoPreview || undefined}
-              />
-            </div>
-          )}
-
-          {!result && !generating && (
-            <Card className="border-dashed border-2 bg-gradient-to-br from-blue-50/30 to-purple-50/30 border-blue-100 backdrop-blur-sm rounded-2xl shadow-inner">
-              <CardContent className="py-20">
-                <div className="text-center text-gray-400">
-                  <div className="relative inline-flex items-center justify-center h-20 w-20 rounded-full bg-blue-100/50 mb-6 group-hover:scale-105 transition-transform shadow-sm">
-                    <Sparkles className="h-10 w-10 text-blue-500 opacity-80" />
-                    <div className="absolute inset-0 rounded-full border border-blue-200/50 animate-ping opacity-20"></div>
+                {/* Video Upload Section */}
+                <div className="space-y-3 pt-2 border-t border-gray-100">
+                  <div className="flex justify-between items-center">
+                    <Label className="text-gray-700 font-medium">อัปโหลดวิดีโอสำหรับโพสต์จริง</Label>
+                    <span className="text-xs text-gray-400">{videoFile ? '1/1 วิดีโอ' : 'ยังไม่มีวิดีโอ'}</span>
                   </div>
-                  <p className="text-lg font-semibold text-gray-700">ระบุรายละเอียดและคลิก &quot;สร้างคอนเทนต์เลย&quot;</p>
-                  <p className="text-sm mt-2 text-gray-500">AI จะประมวลผลตามหลัก SEO/AEO และสร้างคอนเทนต์เฉพาะธุรกิจคุณ</p>
+
+                  {videoPreview ? (
+                    <div className="relative rounded-2xl overflow-hidden border border-gray-205 bg-black shadow-sm">
+                      <video src={videoPreview} controls className="w-full max-h-56 bg-black" />
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="icon"
+                        className="absolute top-2 right-2 h-7 w-7 rounded-full drop-shadow-md z-10"
+                        onClick={removeVideo}
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </Button>
+                      <div className="px-3 py-3 bg-white space-y-2">
+                        <p className="text-xs font-semibold text-gray-700 truncate">{videoFile?.name}</p>
+                        <p className="text-[11px] text-gray-400">ระบบจะวิเคราะห์เนื้อหาวิดีโอผ่าน Keyframes อัตโนมัติ</p>
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between text-[10px] text-gray-500">
+                            <span>{videoUploading ? 'กำลังเตรียมไฟล์วิดีโอ...' : 'ไฟล์พร้อมใช้งาน'}</span>
+                            <span>{videoUploadProgress}%</span>
+                          </div>
+                          <div className="h-1.5 rounded-full bg-gray-150 overflow-hidden">
+                            <div
+                              className={`h-full transition-all ${videoUploadError ? 'bg-red-500' : 'bg-blue-600'}`}
+                              style={{ width: `${videoUploadProgress}%` }}
+                            />
+                          </div>
+                          <div className="flex flex-wrap gap-x-2 gap-y-1 text-[10px] text-gray-450 font-mono">
+                            <span>ขนาด {videoFile ? formatBytes(videoFile.size) : '-'}</span>
+                            <span>Extension: .{videoFile ? getFileExtension(videoFile.name) : '-'}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div
+                      className={`border-2 border-dashed border-gray-200 rounded-xl flex flex-col items-center justify-center bg-gray-50 transition-all cursor-pointer p-5 ${
+                        imageFiles.length > 0 ? 'opacity-50 cursor-not-allowed bg-gray-100' : 'hover:bg-gray-100 hover:border-blue-400'
+                      }`}
+                      onClick={() => {
+                        if (!imageFiles.length) {
+                          document.getElementById('video-upload')?.click();
+                        }
+                      }}
+                    >
+                      <div className="rounded-full bg-indigo-50 flex items-center justify-center mb-1.5 p-2.5">
+                        <Video className="h-4.5 w-4.5 text-indigo-600" />
+                      </div>
+                      <span className="text-xs font-semibold text-gray-650 text-center">
+                        {videoUploading ? 'กำลังประมวลผลวิดีโอ...' : 'อัปโหลดวิดีโอ (1 ไฟล์)'}
+                      </span>
+                      <span className="text-[10px] text-gray-450 text-center mt-0.5">
+                        รองรับ {ALLOWED_VIDEO_EXTENSIONS.map((ext) => `.${ext}`).join(', ')} (สูงสุด {formatBytes(MAX_VIDEO_SIZE_BYTES)})
+                      </span>
+                      <input
+                        id="video-upload"
+                        type="file"
+                        accept="video/*"
+                        className="hidden"
+                        disabled={imageFiles.length > 0}
+                        onChange={handleVideoChange}
+                      />
+                    </div>
+                  )}
+
+                  {videoUploadError && (
+                    <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                      {videoUploadError}
+                    </div>
+                  )}
+
+                  {/* Preflight details and keyframes preview if video exists */}
+                  {videoPreview && (
+                    <div className="space-y-4 pt-2">
+                      {/* Keyframes list */}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-gray-700 font-medium text-xs">ตัวอย่าง Key Frames ที่สกัดได้</Label>
+                          <span className="text-[10px] text-gray-450">
+                            {extractingKeyframes ? 'กำลังเตรียม...' : `${videoKeyframes.length}/${VIDEO_KEYFRAME_TIMESTAMPS.length} เฟรม`}
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2">
+                          {videoKeyframes.map((frame, index) => (
+                            <div key={index} className="rounded-lg overflow-hidden border border-gray-200 bg-white">
+                              <img src={frame.imageUrl} alt={`Video keyframe ${index + 1}`} className="h-16 w-full object-cover" />
+                              <div className="px-1.5 py-0.5 text-[9px] text-gray-500 flex items-center justify-between">
+                                <span>Scene {index + 1}</span>
+                                <span>{frame.timestampLabel}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Transcript Editor */}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-gray-700 font-medium text-xs">คำถอดเสียง / บทพูดในคลิป</Label>
+                          <span className="text-[10px] text-gray-400">
+                            {transcribingVideo ? 'กำลังถอดเสียง...' : 'สกัดจากเสียงวิดีโอ'}
+                          </span>
+                        </div>
+                        <Textarea
+                          value={videoTranscript}
+                          onChange={(e) => {
+                            const nextValue = e.target.value;
+                            const usable = isUsableTranscript(nextValue);
+                            setVideoTranscript(nextValue);
+                            if (usable) {
+                              setVideoTranscriptError('');
+                              setUseTranscriptForGeneration(true);
+                            } else if (normalizeTranscript(nextValue).length > 0) {
+                              setVideoTranscriptError('คำถอดเสียงสั้นเกินไป ระบบจะพึ่งพา Keyframes เป็นหลัก');
+                              setUseTranscriptForGeneration(false);
+                            } else {
+                              setVideoTranscriptError('');
+                              setUseTranscriptForGeneration(false);
+                            }
+                          }}
+                          placeholder="เติมบทพูดหรือบริบทเพิ่มเติมจากวิดีโอเพื่อปรับแต่งเนื้อหา..."
+                          rows={3}
+                          className="text-xs resize-none"
+                        />
+                        <div className="flex items-center justify-end gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={handleRefreshTranscript}
+                            disabled={!videoFile || transcribingVideo}
+                            className="h-7 text-[10px] px-2"
+                          >
+                            <RefreshCw className={`h-2.5 w-2.5 mr-1 ${transcribingVideo ? 'animate-spin' : ''}`} />
+                            ถอดเสียงใหม่
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={handleRefreshKeyframes}
+                            disabled={!videoPreview || extractingKeyframes || analyzingVideo}
+                            className="h-7 text-[10px] px-2"
+                          >
+                            <RefreshCw className={`h-2.5 w-2.5 mr-1 ${(extractingKeyframes || analyzingVideo) ? 'animate-spin' : ''}`} />
+                            วิเคราะห์ภาพใหม่
+                          </Button>
+                        </div>
+                        {videoTranscriptError && (
+                          <div className="rounded-xl border border-amber-250 bg-amber-50 px-3 py-1.5 text-[11px] text-amber-800">
+                            {videoTranscriptError}
+                          </div>
+                        )}
+                        <div className="flex items-start justify-between gap-3 rounded-xl border border-gray-150 bg-gray-50/50 p-2.5">
+                          <div className="space-y-0.5">
+                            <p className="text-xs font-semibold text-gray-700">เปิดใช้งานบทถอดเสียง</p>
+                            <p className="text-[10px] text-gray-500">ใช้บทพูดนี้เป็นคีย์ในการเขียนเนื้อหาการตลาด</p>
+                          </div>
+                          <Switch
+                            checked={shouldUseTranscriptForGeneration}
+                            disabled={!hasUsableTranscript}
+                            onCheckedChange={(checked) => setUseTranscriptForGeneration(checked)}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Analysis Summary */}
+                      <div className="space-y-1.5">
+                        <Label className="text-gray-700 font-medium text-xs">ผลสรุปวิเคราะห์วิดีโอ (AI Summary)</Label>
+                        <div className="rounded-xl border border-blue-100 bg-blue-50/30 p-3 text-xs text-blue-900 leading-relaxed max-h-36 overflow-y-auto">
+                          {analyzingVideo ? (
+                            <div className="flex items-center gap-2">
+                              <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-600" />
+                              กำลังสรุปข้อมูลภาพวิดีโอ...
+                            </div>
+                          ) : videoAnalysisSummary ? (
+                            <p className="whitespace-pre-wrap">{videoAnalysisSummary}</p>
+                          ) : (
+                            <p className="text-gray-400">ระบบจะทำการวิเคราะห์ความหมายโดยรวมของภาพในวิดีโอเพื่อช่วย AI ร่างเนื้อหา</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
-          )}
-        </div>
+
+            {/* Navigation Buttons */}
+            <div className="flex justify-between gap-3 pt-4">
+              <Button variant="outline" onClick={() => setActiveStep(1)} className="flex-1 sm:flex-none h-11 sm:h-9">
+                ย้อนกลับ
+              </Button>
+              <Button onClick={() => setActiveStep(3)} className="flex-1 sm:flex-none bg-blue-600 hover:bg-blue-700 text-white h-11 sm:h-9">
+                ถัดไป
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Step 3: Brief Details */}
+        {activeStep === 3 && (
+          <div className="space-y-4">
+            <Card className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden">
+              <CardHeader className="pb-3 border-b border-gray-100">
+                <CardTitle className="text-base text-gray-900 font-semibold flex items-center gap-2">
+                  <span className="flex items-center justify-center w-5.5 h-5.5 rounded bg-blue-50 text-blue-600 text-xs font-bold">3</span>
+                  ข้อมูลบรีฟ & รายละเอียดคอนเทนต์
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4 pt-5">
+                <div className="space-y-1.5">
+                  <Label className="text-gray-700 font-medium">{THAI_UI_LABELS.service_type}</Label>
+                  <Input
+                    value={input.service_type || ''}
+                    onChange={(e) => updateInput('service_type', e.target.value)}
+                    placeholder="เช่น ล้างแอร์บ้าน, ติดตั้งเครื่องกรองน้ำ"
+                    className="h-10"
+                  />
+                  <p className="text-[10px] text-gray-400">ระบุชื่อผลิตภัณฑ์หรือบริการให้เฉพาะเจาะจง</p>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-gray-700 font-medium">{THAI_UI_LABELS.topic}</Label>
+                  <Input
+                    value={input.topic || ''}
+                    onChange={(e) => updateInput('topic', e.target.value)}
+                    placeholder="เช่น ล้างแอร์แก้ไขแอร์น้ำหยดช่วงหน้าร้อน"
+                    className="h-10"
+                  />
+                  <p className="text-[10px] text-gray-400">ประเด็นหลักของแคมเปญโพสต์</p>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-gray-700 font-medium">{THAI_UI_LABELS.pain_point}</Label>
+                  <Input
+                    value={input.pain_point || ''}
+                    onChange={(e) => updateInput('pain_point', e.target.value)}
+                    placeholder="เช่น แอร์มีน้ำรั่วซึม, ค่าไฟขึ้นสูงแอร์ไม่เย็น"
+                    className="h-10"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-gray-700 font-medium">{THAI_UI_LABELS.location}</Label>
+                    <Input
+                      value={input.location || ''}
+                      onChange={(e) => updateInput('location', e.target.value)}
+                      placeholder="เช่น กรุงเทพฯ และปริมณฑล"
+                      className="h-10"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-gray-700 font-medium">{THAI_UI_LABELS.promotion_offer}</Label>
+                    <Input
+                      value={input.promotion_offer || ''}
+                      onChange={(e) => updateInput('promotion_offer', e.target.value)}
+                      placeholder="เช่น ล้าง 3 เครื่องลดทันที 10%"
+                      className="h-10"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-gray-700 font-medium">{THAI_UI_LABELS.target_audience}</Label>
+                    <Input
+                      value={input.target_audience || ''}
+                      onChange={(e) => updateInput('target_audience', e.target.value)}
+                      placeholder="เช่น เจ้าของทาวน์โฮม, พ่อบ้านแม่บ้าน"
+                      className="h-10"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-gray-700 font-medium">{THAI_UI_LABELS.cta_style}</Label>
+                    <select
+                      className="flex h-10 w-full rounded-md border border-gray-200 bg-white px-3 py-1 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                      value={input.cta_style || ''}
+                      onChange={(e) => updateInput('cta_style', e.target.value)}
+                    >
+                      <option value="">{THAI_UI_LABELS.auto}</option>
+                      {Object.entries(defaultCTAPresets).map(([key, preset]) => (
+                        <option key={key} value={key}>{preset.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-gray-700 font-medium">{THAI_UI_LABELS.keyword}</Label>
+                  <Input
+                    value={input.keyword || ''}
+                    onChange={(e) => updateInput('keyword', e.target.value)}
+                    placeholder="เช่น ช่างแอร์ด่วน, ล้างแอร์หน้าร้อน"
+                    className="h-10"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-gray-700 font-medium">{THAI_UI_LABELS.custom_notes}</Label>
+                  <Textarea
+                    value={input.custom_notes || ''}
+                    onChange={(e) => updateInput('custom_notes', e.target.value)}
+                    placeholder="เช่น ให้เขียนจากสิ่งที่เห็นในรูปเป็นหลัก พูดถึงคราบฝุ่นที่คอยล์ การถอดล้าง และผลลัพธ์หลังล้าง ห้ามเขียนกว้าง ๆ แบบโพสต์ล้างแอร์ทั่วไป"
+                    rows={4}
+                  />
+                  <p className="text-xs leading-relaxed text-blue-750">ช่องนี้ช่วยลดคอนเทนต์ซ้ำที่สุด: ระบุสิ่งที่เห็นในรูป, งานที่ช่างทำ, อาการเสีย, ผลลัพธ์ก่อน/หลัง และคำที่ไม่อยากให้ใช้ซ้ำ</p>
+                </div>
+
+                {/* Campaign Assignment */}
+                {campaigns.length > 0 && (
+                  <div className="space-y-1.5 pt-3 border-t border-gray-100">
+                    <Label className="text-gray-700 font-medium">{THAI_UI_LABELS.assign_campaign || 'ระบุแคมเปญ'}</Label>
+                    <select
+                      className="flex h-10 w-full rounded-md border border-gray-200 bg-white px-3 py-1 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                      value={selectedCampaign}
+                      onChange={(e) => setSelectedCampaign(e.target.value)}
+                    >
+                      <option value="">{THAI_UI_LABELS.no_campaign || 'ไม่ระบุแคมเปญ'}</option>
+                      {campaigns.map((c) => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Navigation Buttons */}
+            <div className="flex justify-between gap-3 pt-4">
+              <Button variant="outline" onClick={() => setActiveStep(2)} className="flex-1 sm:flex-none h-11 sm:h-9">
+                ย้อนกลับ
+              </Button>
+              <Button onClick={() => setActiveStep(4)} className="flex-1 sm:flex-none bg-blue-600 hover:bg-blue-700 text-white h-11 sm:h-9">
+                ดำเนินการต่อ
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Step 4: Generation & Output display */}
+        {activeStep === 4 && (
+          <div className="space-y-6">
+            {/* Generate Trigger Button if no result yet */}
+            {!result && !generating && (
+              <Card className="bg-white border border-gray-200 shadow-sm rounded-2xl p-6 text-center">
+                <CardContent className="pt-6 flex flex-col items-center">
+                  <div className="w-16 h-16 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mb-4">
+                    <Sparkles className="w-8 h-8 animate-pulse" />
+                  </div>
+                  <h3 className="text-base font-semibold text-gray-900 mb-1">ข้อมูลพร้อมใช้งานแล้ว</h3>
+                  <p className="text-xs text-gray-500 mb-6 max-w-sm">
+                    กดปุ่มด้านล่างเพื่อเริ่มกระบวนการร่างคอนเทนต์ด้วย AI ของเราตามหลัก SEO/AEO
+                  </p>
+                  <Button
+                    onClick={handleGenerate}
+                    disabled={generating || extractingKeyframes || transcribingVideo}
+                    className="w-full h-12 text-base bg-blue-600 hover:bg-blue-700 flex items-center justify-center gap-2 text-white"
+                  >
+                    <Sparkles className="h-5 w-5" />
+                    สร้างคอนเทนต์เลย
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Loader / Generating State */}
+            {generating && (
+              <Card className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden animate-pulse">
+                <CardContent className="p-6 space-y-6">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Skeleton className="h-6 w-24 rounded-full" />
+                    <Skeleton className="h-6 w-32 rounded-full" />
+                  </div>
+                  <div className="space-y-3">
+                    <Skeleton className="h-8 w-3/4" />
+                    <Skeleton className="h-4 w-full" />
+                    <Skeleton className="h-4 w-full" />
+                    <Skeleton className="h-4 w-2/3" />
+                  </div>
+                  <div className="pt-6 space-y-2">
+                    <Skeleton className="h-4 w-20" />
+                    <Skeleton className="h-24 w-full rounded-xl" />
+                  </div>
+                  <div className="text-center pt-4">
+                    <p className="text-xs text-blue-600 animate-bounce font-medium">AI กำลังร่างคอนเทนต์และจัดรูปแบบตามหลัก SEO ให้คุณ...</p>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Generated Results */}
+            {result && !generating && (
+              <div className="space-y-4">
+                <div className="flex flex-wrap items-center gap-2 justify-between">
+                  <div className="flex items-center gap-2">
+                    {generationVideoMode === 'keyframes_only' && (
+                      <span className="inline-flex items-center rounded-full border border-amber-250 bg-amber-50 px-2.5 py-0.5 text-[11px] font-medium text-amber-800">
+                        ใช้ข้อมูลวิดีโอ: key frames only
+                      </span>
+                    )}
+                    {generationVideoMode === 'keyframes_plus_transcript' && (
+                      <span className="inline-flex items-center rounded-full border border-emerald-250 bg-emerald-50 px-2.5 py-0.5 text-[11px] font-medium text-emerald-850">
+                        ใช้ข้อมูลวิดีโอ: key frames + transcript
+                      </span>
+                    )}
+                    {generationAnalysisUsedAt && (
+                      <span className="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-[11px] font-medium text-blue-800">
+                        ล่าสุดใช้ analysis เวลา {formatUpdatedAtLabel(generationAnalysisUsedAt)}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 justify-end">
+                    <Button variant="outline" size="sm" onClick={handleGenerate} className="h-8 text-xs">
+                      <RefreshCw className="h-3 w-3 mr-1" /> สร้างใหม่
+                    </Button>
+                    <Button size="sm" onClick={handleSave} className="h-8 text-xs bg-blue-600 hover:bg-blue-700 text-white">
+                      <Save className="h-3 w-3 mr-1" /> บันทึก
+                    </Button>
+                  </div>
+                </div>
+
+                <OutputDisplay
+                  output={result.output}
+                  platform={input.platform}
+                  contentId={result.content?.id}
+                  imageUrls={imagePreviews}
+                  videoUrl={videoPreview || undefined}
+                />
+              </div>
+            )}
+
+            {/* Navigation Buttons */}
+            <div className="flex justify-start gap-3 pt-4">
+              <Button variant="outline" onClick={() => setActiveStep(3)} className="w-full sm:w-auto h-11 sm:h-9">
+                ย้อนกลับไปยังบรีฟ
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Spacer to prevent overlapping with bottom bars */}
+        <div className="h-32 md:h-12" />
+
+
       </div>
     </div>
   );

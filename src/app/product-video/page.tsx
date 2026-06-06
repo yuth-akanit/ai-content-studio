@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { LoadingSpinner } from '@/components/shared/loading-spinner';
-import { Clapperboard, Loader2, RefreshCw, ShieldCheck } from 'lucide-react';
+import { Clapperboard, Loader2, RefreshCw, ShieldCheck, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface SocialPage {
@@ -1183,32 +1183,39 @@ export default function ProductVideoPage() {
         </Card>
 
         <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Safety Guard</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3 text-sm text-gray-600">
-            <div className="rounded-lg bg-green-50 p-3 text-green-800">preview_only=true</div>
-            <div className="rounded-lg bg-blue-50 p-3 text-blue-800">publish_allowed=false</div>
-            <div className="rounded-lg bg-blue-50 p-3 text-blue-800">real_posting_enabled=false</div>
-            <div className="rounded-lg bg-blue-50 p-3 text-blue-800">line_broadcast_enabled=false</div>
-            <div className="rounded-lg bg-blue-50 p-3 text-blue-800">schedule_enabled=false</div>
-            <div className="rounded-lg bg-blue-50 p-3 text-blue-800">renderer_called=false · phaya_called=false · s3_upload_performed=false</div>
-            <div className="rounded-lg border border-gray-200 p-3">
-              Decision ใน Owner Review Queue เป็น local approval เท่านั้น ไม่ใช่ permission ให้โพสต์จริง
-            </div>
-            <div className="rounded-lg border border-gray-200 p-3">
-              Publish Plan Preview แสดง target page / caption / media plan เท่านั้น และยังคง publish_allowed=false
-            </div>
-            <div className="rounded-lg border border-gray-200 p-3">
-              Publish Authorization เป็น local audit เท่านั้น ใช้ยืนยัน manual execution gate แต่ยังคง real_posting_enabled=false
-            </div>
-            <div className="rounded-lg border border-gray-200 p-3">
-              Publish Executor Dry-run ตรวจ authorization + checksum + idempotency แล้วผ่าน media gate ได้เมื่อ media_status=ready จาก mock metadata
-            </div>
-            <div className="rounded-lg border border-gray-200 p-3">
-              Manual Publish Executor มีปุ่ม Publish to Facebook แต่จะ return blocked ถ้า flag/approval สำหรับ real publish ยังไม่เปิด
-            </div>
-          </CardContent>
+          <details className="group/safety" open={false}>
+            <summary className="flex items-center justify-between p-6 cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <ShieldCheck className="h-5 w-5 text-indigo-600" />
+                Safety Guard (กฎความปลอดภัย)
+              </CardTitle>
+              <span className="text-xs text-indigo-650 font-semibold group-open/safety:hidden">แสดง ▾</span>
+              <span className="text-xs text-indigo-650 font-semibold hidden group-open/safety:inline">ซ่อน ▴</span>
+            </summary>
+            <CardContent className="space-y-3 text-sm text-gray-600 pt-0 pb-6">
+              <div className="rounded-lg bg-green-50 p-3 text-green-800">preview_only=true</div>
+              <div className="rounded-lg bg-blue-50 p-3 text-blue-800">publish_allowed=false</div>
+              <div className="rounded-lg bg-blue-50 p-3 text-blue-800">real_posting_enabled=false</div>
+              <div className="rounded-lg bg-blue-50 p-3 text-blue-800">line_broadcast_enabled=false</div>
+              <div className="rounded-lg bg-blue-50 p-3 text-blue-800">schedule_enabled=false</div>
+              <div className="rounded-lg bg-blue-50 p-3 text-blue-800">renderer_called=false &bull; phaya_called=false &bull; s3_upload_performed=false</div>
+              <div className="rounded-lg border border-gray-200 p-3">
+                Decision ใน Owner Review Queue เป็น local approval เท่านั้น ไม่ใช่ permission ให้โพสต์จริง
+              </div>
+              <div className="rounded-lg border border-gray-200 p-3">
+                Publish Plan Preview แสดง target page / caption / media plan เท่านั้น และยังคง publish_allowed=false
+              </div>
+              <div className="rounded-lg border border-gray-200 p-3">
+                Publish Authorization เป็น local audit เท่านั้น ใช้ยืนยัน manual execution gate แต่ยังคง real_posting_enabled=false
+              </div>
+              <div className="rounded-lg border border-gray-200 p-3">
+                Publish Executor Dry-run ตรวจ authorization + checksum + idempotency แล้วผ่าน media gate ได้เมื่อ media_status=ready จาก mock metadata
+              </div>
+              <div className="rounded-lg border border-gray-200 p-3">
+                Manual Publish Executor มีปุ่ม Publish to Facebook แต่จะ return blocked ถ้า flag/approval สำหรับ real publish ยังไม่เปิด
+              </div>
+            </CardContent>
+          </details>
         </Card>
       </div>
 
@@ -1259,12 +1266,16 @@ export default function ProductVideoPage() {
                 </div>
 
                 {/* AI Generated Content Panel */}
-                <div className="rounded-lg border border-gray-100 bg-gray-50/50 p-3.5 space-y-2.5">
-                  <div className="text-xs font-semibold text-gray-700 flex items-center gap-1.5">
-                    <ShieldCheck className="h-3.5 w-3.5 text-green-600" />
-                    AI Generated Copy & Brief Context
-                  </div>
-                  <div className="grid gap-2 text-xs sm:grid-cols-2">
+                <details className="group/details rounded-lg border border-gray-100 bg-gray-50/50 p-3.5 space-y-2.5">
+                  <summary className="text-xs font-semibold text-gray-700 flex items-center justify-between gap-1.5 cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden">
+                    <span className="flex items-center gap-1.5">
+                      <ShieldCheck className="h-3.5 w-3.5 text-green-600 shrink-0" />
+                      AI Generated Copy & Brief Context
+                    </span>
+                    <span className="text-[10px] text-indigo-650 font-semibold group-open/details:hidden">แสดงรายละเอียด ▾</span>
+                    <span className="text-[10px] text-indigo-650 font-semibold hidden group-open/details:inline">ซ่อนรายละเอียด ▴</span>
+                  </summary>
+                  <div className="grid gap-2 text-xs sm:grid-cols-2 pt-3 border-t border-gray-150 mt-2">
                     <div>บรีฟลูกค้า: <span className="font-medium text-gray-800">{item.brief || '-'}</span></div>
                     <div>Asset ID: <span className="font-mono text-gray-600">{item.asset_id || item.uploaded_asset_id || '-'}</span></div>
                     <div className="sm:col-span-2">Public image: <span className="font-mono text-[10px] text-gray-600 break-all">{item.public_image_url || '-'}</span></div>
@@ -1284,7 +1295,7 @@ export default function ProductVideoPage() {
                     <div className="sm:col-span-2">ข้อความซ้อนวิดีโอ (Overlays): <span className="font-medium text-gray-800">{item.overlay_texts || '-'}</span></div>
                     <div className="sm:col-span-2">แฮชแท็ก: <span className="font-medium text-gray-800 font-mono text-[10px]">{item.hashtags || '-'}</span></div>
                   </div>
-                </div>
+                </details>
 
                 <div className="grid gap-2 text-xs text-gray-600 sm:grid-cols-2">
                   <div>brand_context: <span className="font-medium text-gray-900">{item.brand_context}</span></div>
@@ -1613,13 +1624,25 @@ export default function ProductVideoPage() {
         </CardContent>
       </Card>
 
+      {/* Spacer to prevent overlapping with bottom bars */}
+      <div className="h-32 md:h-12" />
+
       {result && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">ผลลัพธ์จาก Server Wrapper</CardTitle>
+        <Card className="max-w-3xl mx-auto rounded-2xl overflow-hidden border border-gray-200 shadow-sm bg-white relative">
+          <CardHeader className="bg-gray-50 border-b border-gray-100 py-3 flex flex-row items-center justify-between">
+            <CardTitle className="text-xs font-semibold text-gray-700 uppercase tracking-wider">ผลลัพธ์จาก Server Wrapper</CardTitle>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              onClick={() => setResult(null)}
+              className="text-gray-500 hover:text-gray-700 hover:bg-gray-100"
+              aria-label="close results"
+            >
+              <XCircle className="h-4 w-4" />
+            </Button>
           </CardHeader>
-          <CardContent>
-            <pre className="max-h-96 overflow-auto rounded-lg bg-gray-950 p-4 text-xs text-gray-100">
+          <CardContent className="pt-4">
+            <pre className="max-h-72 overflow-auto rounded-xl bg-gray-950 p-4 text-[10px] font-mono text-gray-200 leading-normal">
               {JSON.stringify(result, null, 2)}
             </pre>
           </CardContent>

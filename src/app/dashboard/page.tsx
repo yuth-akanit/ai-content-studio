@@ -220,6 +220,8 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'logs' | 'scheduled'>('logs');
+  const [showTikTokStatus, setShowTikTokStatus] = useState(true);
 
   useEffect(() => {
     loadDashboard();
@@ -325,7 +327,18 @@ export default function DashboardPage() {
   const platformEntries = Object.entries(data.stats.byPlatform).sort((a, b) => b[1] - a[1]);
 
   return (
-    <div>
+    <div className="space-y-6">
+      {/* Dev Mode Notification Info Badges */}
+      <div className="flex flex-wrap gap-2 items-center">
+        <Badge variant="outline" className="bg-amber-50 text-amber-800 border-amber-200 gap-1 text-[10px] font-semibold py-1">
+          <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+          DEV MODE &bull; PREVIEW ONLY
+        </Badge>
+        <Badge variant="outline" className="bg-red-50 text-red-800 border-red-200 gap-1 text-[10px] font-semibold py-1">
+          PUBLIC DIRECT POSTING DISABLED
+        </Badge>
+      </div>
+
       <PageHeader
         title={THAI_UI_LABELS.dashboard}
         description={THAI_UI_LABELS.dashboard_overview}
@@ -339,65 +352,96 @@ export default function DashboardPage() {
         }
       />
 
-      <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-        <p className="font-semibold">TikTok is pending Developer Review</p>
-        <p className="mt-1">
-          Login Kit and Content Posting API are submitted for review. OAuth may fail
-          until TikTok approves the app/client_key.
-          Current scopes: user.info.basic, video.upload. Public direct posting is disabled.
-        </p>
+      {/* Prominent Primary CTA */}
+      <div className="rounded-3xl cta-gradient p-6 sm:p-7 text-white shadow-xl shadow-indigo-100/10 flex flex-col sm:flex-row items-center justify-between gap-5 hover-lift transition-all duration-300">
+        <div className="space-y-1.5 text-center sm:text-left">
+          <h2 className="text-base sm:text-lg font-extrabold flex items-center justify-center sm:justify-start gap-1.5 tracking-tight">
+            <Sparkles className="h-4.5 w-4.5 text-yellow-200 animate-pulse pulsing-ring rounded-full" />
+            สร้างคอนเทนต์การตลาดด่วน
+          </h2>
+          <p className="text-xs text-blue-50/90 max-w-md leading-relaxed">
+            ให้ AI ร่างแคปชั่นการตลาด เขียนบทพูด หรือวิดีโอสั้น โดยเชื่อมโยงกับรูปถ่ายสินค้าจริงและคำถอดเสียงของคุณโดยอัตโนมัติ
+          </p>
+        </div>
+        <Link href="/generate" className="w-full sm:w-auto shrink-0">
+          <Button className="w-full sm:w-auto bg-white hover:bg-white/95 text-indigo-750 font-bold h-11 px-7 rounded-xl shadow-md transition-all active:scale-[0.97] hover-lift">
+            เริ่มใช้งาน AI Creator
+          </Button>
+        </Link>
       </div>
 
+      {showTikTokStatus && (
+        <div className="relative rounded-2xl border border-amber-200 bg-amber-50/70 p-4 pr-10 text-xs sm:text-sm text-amber-900 shadow-sm backdrop-blur-md">
+          <button
+            onClick={() => setShowTikTokStatus(false)}
+            className="absolute top-3 right-3 text-amber-600 hover:text-amber-900 active:scale-95 transition-all p-1 rounded-lg hover:bg-amber-100/50"
+            aria-label="dismiss alert"
+          >
+            <XCircle className="h-4 w-4" />
+          </button>
+          <p className="font-bold flex items-center gap-1.5 text-amber-950">
+            <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse"></span>
+            TikTok Developer Review Status
+          </p>
+          <p className="mt-1 text-xs text-amber-800 leading-relaxed pr-2">
+            Login Kit and Content Posting API are submitted for review. OAuth may fail until approved by TikTok. Scopes requested: user.info.basic, video.upload. All posts default to SELF_ONLY preview.
+          </p>
+        </div>
+      )}
+
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
-        <Card className="border-none shadow-sm bg-blue-50/50">
-          <CardContent className="p-4 sm:p-6">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-              <div className="w-10 h-10 bg-white rounded-xl shadow-sm flex items-center justify-center">
-                <FileText className="h-5 w-5 text-blue-600" />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <Card className="border border-blue-100/40 bg-white/80 shadow-[0_8px_30px_rgb(0,0,0,0.015)] hover-lift backdrop-blur-md">
+          <CardContent className="p-3.5 sm:p-4.5">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 bg-blue-50 rounded-xl flex items-center justify-center shrink-0 border border-blue-100/30">
+                <FileText className="h-4.5 w-4.5 text-blue-600" />
               </div>
-              <div className="mt-1 sm:mt-0">
-                <p className="text-xl sm:text-2xl font-bold text-gray-900 leading-tight">{data.stats.total}</p>
-                <p className="text-[10px] sm:text-xs font-medium text-gray-500 uppercase tracking-wider">{THAI_UI_LABELS.total_contents}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="border-none shadow-sm bg-green-50/50">
-          <CardContent className="p-4 sm:p-6">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-              <div className="w-10 h-10 bg-white rounded-xl shadow-sm flex items-center justify-center">
-                <TrendingUp className="h-5 w-5 text-green-600" />
-              </div>
-              <div className="mt-1 sm:mt-0">
-                <p className="text-xl sm:text-2xl font-bold text-gray-900 leading-tight">{data.stats.recentCount}</p>
-                <p className="text-[10px] sm:text-xs font-medium text-gray-500 uppercase tracking-wider">{THAI_UI_LABELS.last_7_days}</p>
+              <div className="min-w-0">
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider truncate">{THAI_UI_LABELS.total_contents}</p>
+                <p className="text-xl sm:text-2xl font-extrabold text-blue-900 leading-none mt-1">{data.stats.total}</p>
               </div>
             </div>
           </CardContent>
         </Card>
-        <Card className="border-none shadow-sm bg-purple-50/50">
-          <CardContent className="p-4 sm:p-6">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-              <div className="w-10 h-10 bg-white rounded-xl shadow-sm flex items-center justify-center">
-                <FolderKanban className="h-5 w-5 text-purple-600" />
+
+        <Card className="border border-emerald-100/40 bg-white/80 shadow-[0_8px_30px_rgb(0,0,0,0.015)] hover-lift backdrop-blur-md">
+          <CardContent className="p-3.5 sm:p-4.5">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 bg-emerald-50 rounded-xl flex items-center justify-center shrink-0 border border-emerald-100/30">
+                <TrendingUp className="h-4.5 w-4.5 text-emerald-600" />
               </div>
-              <div className="mt-1 sm:mt-0">
-                <p className="text-xl sm:text-2xl font-bold text-gray-900 leading-tight">{data.campaigns.length}</p>
-                <p className="text-[10px] sm:text-xs font-medium text-gray-500 uppercase tracking-wider">{THAI_UI_LABELS.campaign_workspace}</p>
+              <div className="min-w-0">
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider truncate">{THAI_UI_LABELS.last_7_days}</p>
+                <p className="text-xl sm:text-2xl font-extrabold text-emerald-900 leading-none mt-1">{data.stats.recentCount}</p>
               </div>
             </div>
           </CardContent>
         </Card>
-        <Card className="border-none shadow-sm bg-orange-50/50">
-          <CardContent className="p-4 sm:p-6">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-              <div className="w-10 h-10 bg-white rounded-xl shadow-sm flex items-center justify-center">
-                <Sparkles className="h-5 w-5 text-orange-600" />
+
+        <Card className="border border-purple-100/40 bg-white/80 shadow-[0_8px_30px_rgb(0,0,0,0.015)] hover-lift backdrop-blur-md">
+          <CardContent className="p-3.5 sm:p-4.5">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 bg-purple-50 rounded-xl flex items-center justify-center shrink-0 border border-purple-100/30">
+                <FolderKanban className="h-4.5 w-4.5 text-purple-600" />
               </div>
-              <div className="mt-1 sm:mt-0">
-                <p className="text-xl sm:text-2xl font-bold text-gray-900 leading-tight">{Object.keys(data.stats.byPlatform).length}</p>
-                <p className="text-[10px] sm:text-xs font-medium text-gray-500 uppercase tracking-wider">{THAI_UI_LABELS.platforms_used}</p>
+              <div className="min-w-0">
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider truncate">{THAI_UI_LABELS.campaign_workspace}</p>
+                <p className="text-xl sm:text-2xl font-extrabold text-purple-900 leading-none mt-1">{data.campaigns.length}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border border-amber-100/40 bg-white/80 shadow-[0_8px_30px_rgb(0,0,0,0.015)] hover-lift backdrop-blur-md">
+          <CardContent className="p-3.5 sm:p-4.5">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 bg-amber-50 rounded-xl flex items-center justify-center shrink-0 border border-amber-100/30">
+                <Sparkles className="h-4.5 w-4.5 text-amber-600" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider truncate">{THAI_UI_LABELS.platforms_used}</p>
+                <p className="text-xl sm:text-2xl font-extrabold text-amber-900 leading-none mt-1">{Object.keys(data.stats.byPlatform).length}</p>
               </div>
             </div>
           </CardContent>
@@ -464,206 +508,223 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mt-6">
-        {/* Recent Post Logs */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-base text-blue-700 flex items-center gap-2">
-              <History className="h-4 w-4" />
+      <Card className="mt-6">
+        <CardHeader className="pb-3 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <Clock className="h-4.5 w-4.5 text-blue-600 shrink-0" />
+            <CardTitle className="text-base text-gray-900">การจัดการโพสต์และประวัติ</CardTitle>
+          </div>
+          <div className="flex gap-1.5 self-start sm:self-auto">
+            <Button
+              size="sm"
+              variant={activeTab === 'logs' ? 'default' : 'outline'}
+              onClick={() => setActiveTab('logs')}
+              className={cn("h-8.5 rounded-lg text-xs font-semibold px-3.5 transition-all shadow-none", activeTab === 'logs' && "bg-blue-600 text-white hover:bg-blue-700")}
+            >
               ประวัติการโพสต์ล่าสุด
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {data.recent_post_logs.length === 0 ? (
-              <p className="text-sm text-gray-500 text-center py-8">
-                ยังไม่มีประวัติการโพสต์
-              </p>
-            ) : (
-              <div className="space-y-3">
-                {data.recent_post_logs.map((log) => {
-                  const postUrl = getPostLogUrl(log);
+            </Button>
+            <Button
+              size="sm"
+              variant={activeTab === 'scheduled' ? 'default' : 'outline'}
+              onClick={() => setActiveTab('scheduled')}
+              className={cn("h-8.5 rounded-lg text-xs font-semibold px-3.5 transition-all shadow-none flex items-center gap-1.5", activeTab === 'scheduled' && "bg-blue-600 text-white hover:bg-blue-700")}
+            >
+              คิวโพสต์ล่วงหน้า
+              {data.recent_scheduled_posts.filter(p => p.status === 'pending' || p.status === 'processing').length > 0 && (
+                <span className="h-2 w-2 rounded-full bg-orange-500 animate-pulse"></span>
+              )}
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="pt-5 space-y-4">
+          {actionError && (
+            <p className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs text-red-700">
+              {actionError}
+            </p>
+          )}
 
-                  return (
-                    <div key={log.id} className="rounded-lg border border-gray-100 bg-gray-50 p-3">
-                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                        <div className="min-w-0 space-y-2">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <ProviderBadge provider={log.platform || log.provider} />
-                            <Badge variant="outline" className={cn('h-6', statusBadgeClass(log.status))}>
-                              {postLogStatusLabel(log.status)}
-                            </Badge>
-                            {log.page_name && (
-                              <span className="text-xs font-medium text-gray-500 truncate">
-                                {log.page_name}
-                              </span>
-                            )}
-                          </div>
-                          <div className="min-w-0">
-                            <p className="text-sm font-semibold text-gray-900 truncate">
-                              {log.content_title}
-                            </p>
-                            {log.content_preview && (
-                              <p className="text-xs text-gray-500 line-clamp-2">
-                                {log.content_preview}
+          {activeTab === 'logs' ? (
+            <div>
+              {data.recent_post_logs.length === 0 ? (
+                <p className="text-sm text-gray-500 text-center py-8">
+                  ยังไม่มีประวัติการโพสต์
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {data.recent_post_logs.map((log) => {
+                    const postUrl = getPostLogUrl(log);
+
+                    return (
+                      <div key={log.id} className="rounded-lg border border-gray-100 bg-gray-50 p-3">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="min-w-0 space-y-2">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <ProviderBadge provider={log.platform || log.provider} />
+                              <Badge variant="outline" className={cn('h-6', statusBadgeClass(log.status))}>
+                                {postLogStatusLabel(log.status)}
+                              </Badge>
+                              {log.page_name && (
+                                <span className="text-xs font-medium text-gray-500 truncate">
+                                  {log.page_name}
+                                </span>
+                              )}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-sm font-semibold text-gray-900 truncate">
+                                {log.content_title}
+                              </p>
+                              {log.content_preview && (
+                                <p className="text-xs text-gray-500 line-clamp-2">
+                                  {log.content_preview}
+                                </p>
+                              )}
+                            </div>
+                            {log.error_message && (
+                              <p className="text-xs text-red-600 line-clamp-2">
+                                {log.error_message}
                               </p>
                             )}
                           </div>
-                          {log.error_message && (
-                            <p className="text-xs text-red-600 line-clamp-2">
-                              {log.error_message}
-                            </p>
-                          )}
-                        </div>
-                        <div className="flex shrink-0 items-center gap-2 sm:flex-col sm:items-end">
-                          <span className="text-xs text-gray-500 whitespace-nowrap">
-                            {formatDateTime(log.posted_at || log.created_at)}
-                          </span>
-                          {postUrl && (
-                            <a href={postUrl} target="_blank" rel="noreferrer">
-                              <Button size="sm" variant="outline" className="h-8">
-                                <ExternalLink className="h-3.5 w-3.5 mr-1" />
-                                {getPostLogLinkLabel(log)}
-                              </Button>
-                            </a>
-                          )}
+                          <div className="flex shrink-0 items-center gap-2 sm:flex-col sm:items-end">
+                            <span className="text-xs text-gray-500 whitespace-nowrap">
+                              {formatDateTime(log.posted_at || log.created_at)}
+                            </span>
+                            {postUrl && (
+                              <a href={postUrl} target="_blank" rel="noreferrer">
+                                <Button size="sm" variant="outline" className="h-8">
+                                  <ExternalLink className="h-3.5 w-3.5 mr-1" />
+                                  {getPostLogLinkLabel(log)}
+                                </Button>
+                              </a>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Scheduled Queue */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-base text-blue-700 flex items-center gap-2">
-              <Clock className="h-4 w-4" />
-              คิวโพสต์ล่วงหน้า
-            </CardTitle>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-8"
-              disabled={actionLoading !== null}
-              onClick={resetStaleScheduledPosts}
-            >
-              <RefreshCw className={cn('h-3.5 w-3.5 mr-1', actionLoading === 'reset-stale' && 'animate-spin')} />
-              รีเซ็ตคิวค้าง
-            </Button>
-          </CardHeader>
-          <CardContent>
-            {actionError && (
-              <p className="mb-3 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs text-red-700">
-                {actionError}
-              </p>
-            )}
-
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-4">
-              {(Object.keys(EMPTY_SCHEDULED_SUMMARY) as Array<keyof ScheduledPostSummary>).map((status) => (
-                <div key={status} className="rounded-lg border border-gray-100 bg-gray-50 p-2 text-center">
-                  <p className="text-lg font-bold text-gray-900 leading-tight">
-                    {data.scheduled_post_summary[status] || 0}
-                  </p>
-                  <p className="text-[11px] text-gray-500">
-                    {SCHEDULED_STATUS_LABELS[status]}
-                  </p>
+                    );
+                  })}
                 </div>
-              ))}
+              )}
             </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="flex justify-between items-center pb-2 border-b border-gray-100/50">
+                <span className="text-xs text-gray-500">จัดการคิวและล้างโพสต์ค้าง</span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8"
+                  disabled={actionLoading !== null}
+                  onClick={resetStaleScheduledPosts}
+                >
+                  <RefreshCw className={cn('h-3.5 w-3.5 mr-1', actionLoading === 'reset-stale' && 'animate-spin')} />
+                  รีเซ็ตคิวค้าง
+                </Button>
+              </div>
 
-            {data.recent_scheduled_posts.length === 0 ? (
-              <p className="text-sm text-gray-500 text-center py-8">
-                ยังไม่มีคิวโพสต์ล่วงหน้า
-              </p>
-            ) : (
-              <div className="space-y-3">
-                {data.recent_scheduled_posts.map((item) => (
-                  <div key={item.id} className="rounded-lg border border-gray-100 bg-gray-50 p-3">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                      <div className="min-w-0 space-y-2">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <ProviderBadge provider={item.platform} />
-                          <Badge variant="outline" className={cn('h-6', statusBadgeClass(item.status))}>
-                            {scheduledStatusLabel(item.status)}
-                          </Badge>
-                          <span className="text-xs font-medium text-gray-500">
-                            Retry {item.retry_count}/{item.max_retries}
-                          </span>
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-sm font-semibold text-gray-900 truncate">
-                            {item.content_title}
-                          </p>
-                          <p className="text-xs text-gray-500">
-                            {item.page_name || item.social_page_id}
-                          </p>
-                          {item.content_preview && (
-                            <p className="text-xs text-gray-500 line-clamp-2">
-                              {item.content_preview}
-                            </p>
-                          )}
-                        </div>
-                        {item.error_message && (
-                          <p className="text-xs text-red-600 line-clamp-2">
-                            {item.error_message}
-                          </p>
-                        )}
-                      </div>
-                      <div className="shrink-0 text-xs text-gray-500 sm:text-right">
-                        <p>{formatDateTime(item.scheduled_at)}</p>
-                        {item.locked_by && (
-                          <p className="mt-1">Worker: {item.locked_by}</p>
-                        )}
-                        <div className="mt-2 flex flex-wrap justify-start gap-2 sm:justify-end">
-                          {item.status === 'processing' && (
-                            <>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="h-8"
-                                disabled={actionLoading !== null}
-                                onClick={() => resetProcessingPost(item.id)}
-                              >
-                                <RefreshCw className={cn('h-3.5 w-3.5 mr-1', actionLoading === `reset-${item.id}` && 'animate-spin')} />
-                                รีเซ็ต
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="h-8 border-red-200 text-red-700 hover:bg-red-50"
-                                disabled={actionLoading !== null}
-                                onClick={() => markProcessingPostFailed(item.id)}
-                              >
-                                <XCircle className="h-3.5 w-3.5 mr-1" />
-                                Mark failed
-                              </Button>
-                            </>
-                          )}
-                          {(item.status === 'pending' || item.status === 'failed') && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-8 border-gray-200 text-gray-700 hover:bg-gray-100"
-                              disabled={actionLoading !== null}
-                              onClick={() => cancelScheduledPost(item.id)}
-                            >
-                              <XCircle className="h-3.5 w-3.5 mr-1" />
-                              ยกเลิก
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
+              <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+                {(Object.keys(EMPTY_SCHEDULED_SUMMARY) as Array<keyof ScheduledPostSummary>).map((status) => (
+                  <div key={status} className="rounded-lg border border-gray-100 bg-gray-50 p-2 text-center">
+                    <p className="text-lg font-bold text-gray-900 leading-tight">
+                      {data.scheduled_post_summary[status] || 0}
+                    </p>
+                    <p className="text-[11px] text-gray-500">
+                      {SCHEDULED_STATUS_LABELS[status]}
+                    </p>
                   </div>
                 ))}
               </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+
+              {data.recent_scheduled_posts.length === 0 ? (
+                <p className="text-sm text-gray-500 text-center py-8">
+                  ยังไม่มีคิวโพสต์ล่วงหน้า
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {data.recent_scheduled_posts.map((item) => (
+                    <div key={item.id} className="rounded-lg border border-gray-100 bg-gray-50 p-3">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="min-w-0 space-y-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <ProviderBadge provider={item.platform} />
+                            <Badge variant="outline" className={cn('h-6', statusBadgeClass(item.status))}>
+                              {scheduledStatusLabel(item.status)}
+                            </Badge>
+                            <span className="text-xs font-medium text-gray-500">
+                              Retry {item.retry_count}/{item.max_retries}
+                            </span>
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-gray-900 truncate">
+                              {item.content_title}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              {item.page_name || item.social_page_id}
+                            </p>
+                            {item.content_preview && (
+                              <p className="text-xs text-gray-500 line-clamp-2">
+                                {item.content_preview}
+                              </p>
+                            )}
+                          </div>
+                          {item.error_message && (
+                            <p className="text-xs text-red-600 line-clamp-2">
+                              {item.error_message}
+                            </p>
+                          )}
+                        </div>
+                        <div className="shrink-0 text-xs text-gray-500 sm:text-right">
+                          <p>{formatDateTime(item.scheduled_at)}</p>
+                          {item.locked_by && (
+                            <p className="mt-1">Worker: {item.locked_by}</p>
+                          )}
+                          <div className="mt-2 flex flex-wrap justify-start gap-2 sm:justify-end">
+                            {item.status === 'processing' && (
+                              <>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-8"
+                                  disabled={actionLoading !== null}
+                                  onClick={() => resetProcessingPost(item.id)}
+                                >
+                                  <RefreshCw className={cn('h-3.5 w-3.5 mr-1', actionLoading === `reset-${item.id}` && 'animate-spin')} />
+                                  รีเซ็ต
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-8 border-red-200 text-red-700 hover:bg-red-50"
+                                  disabled={actionLoading !== null}
+                                  onClick={() => markProcessingPostFailed(item.id)}
+                                >
+                                  <XCircle className="h-3.5 w-3.5 mr-1" />
+                                  Mark failed
+                                </Button>
+                              </>
+                            )}
+                            {(item.status === 'pending' || item.status === 'failed') && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-8 border-gray-200 text-gray-700 hover:bg-gray-100"
+                                disabled={actionLoading !== null}
+                                onClick={() => cancelScheduledPost(item.id)}
+                              >
+                                <XCircle className="h-3.5 w-3.5 mr-1" />
+                                ยกเลิก
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Quick Actions */}
       <Card className="mt-6">

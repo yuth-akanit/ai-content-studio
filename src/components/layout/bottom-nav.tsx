@@ -23,8 +23,8 @@ export function BottomNav({ onMenuToggle }: { onMenuToggle: () => void }) {
   const pathname = usePathname();
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-t border-gray-100 lg:hidden pb-safe">
-      <div className="grid grid-cols-4 h-16 max-w-lg mx-auto">
+    <nav className="fixed inset-x-3 bottom-3 z-50 rounded-[1.65rem] border border-white/70 bg-white/88 shadow-[0_18px_45px_-22px_rgba(15,23,42,0.65)] backdrop-blur-2xl lg:hidden safe-bottom">
+      <div className="grid h-[4.35rem] max-w-lg grid-cols-5 mx-auto px-1.5">
         {navItems.map((item) => {
           const isActive = pathname.startsWith(item.href);
           return (
@@ -32,14 +32,16 @@ export function BottomNav({ onMenuToggle }: { onMenuToggle: () => void }) {
               key={item.href}
               href={item.href}
               className={cn(
-                'relative flex flex-col items-center justify-center gap-1 transition-colors',
-                isActive ? 'text-blue-600' : 'text-gray-500'
+                'relative mx-0.5 flex min-h-14 flex-col items-center justify-center gap-1 rounded-2xl px-1 transition-all active:scale-95',
+                isActive
+                  ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/25'
+                  : 'text-slate-500 hover:bg-slate-100/70 hover:text-slate-900'
               )}
             >
-              <item.icon className={cn('h-5 w-5', isActive ? 'fill-blue-600/5' : '')} />
-              <span className="text-[10px] font-medium">{item.label}</span>
+              <item.icon className={cn('h-5 w-5', isActive ? 'text-white' : '')} />
+              <span className="text-[10px] font-bold leading-none">{item.label}</span>
               {isActive && (
-                <div className="absolute bottom-1 w-1 h-1 bg-blue-600 rounded-full" />
+                <div className="absolute -top-0.5 h-1 w-6 rounded-full bg-white/80" />
               )}
             </Link>
           );
@@ -48,7 +50,7 @@ export function BottomNav({ onMenuToggle }: { onMenuToggle: () => void }) {
         {/* Menu Toggle for other items */}
         <button
           onClick={onMenuToggle}
-          className="flex flex-col items-center justify-center gap-1 text-gray-500 active:text-blue-600 transition-colors"
+          className="mx-0.5 flex min-h-14 flex-col items-center justify-center gap-1 rounded-2xl px-1 text-slate-500 transition-all hover:bg-slate-100/70 hover:text-slate-900 active:scale-95"
         >
           <Menu className="h-5 w-5" />
           <span className="text-[10px] font-medium">เมนู</span>

@@ -37,7 +37,7 @@ export function Sidebar({ open, onOpenChange }: { open: boolean, onOpenChange: (
       {/* Overlay */}
       {open && (
         <div
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+          className="fixed inset-0 z-40 bg-slate-950/45 backdrop-blur-sm lg:hidden"
           onClick={() => onOpenChange(false)}
         />
       )}
@@ -45,26 +45,26 @@ export function Sidebar({ open, onOpenChange }: { open: boolean, onOpenChange: (
       {/* Sidebar */}
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-40 w-64 bg-white border-r border-gray-200 transform transition-transform duration-200 lg:translate-x-0 lg:static lg:z-auto',
+          'fixed inset-y-0 left-0 z-40 w-[19rem] max-w-[86vw] rounded-r-[2rem] border-r border-white/70 bg-white/90 shadow-[28px_0_60px_-35px_rgba(15,23,42,0.6)] backdrop-blur-2xl transform transition-transform duration-300 lg:translate-x-0 lg:static lg:z-auto lg:w-72 lg:max-w-none lg:rounded-none lg:border-slate-200/70 lg:bg-white/72',
           open ? 'translate-x-0' : '-translate-x-full',
         )}
       >
         <div className="flex flex-col h-full">
           {/* Logo */}
-          <div className="px-6 py-5 border-b border-gray-100">
+          <div className="px-5 py-5 border-b border-slate-200/70">
             <Link href="/dashboard" className="flex items-center gap-2">
               <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
                 <Sparkles className="h-4 w-4 text-white" />
               </div>
               <div>
-                <h1 className="text-sm font-bold text-gray-900">AI Content Studio</h1>
-                <p className="text-[10px] text-gray-500">Service Business</p>
+                <h1 className="text-sm font-extrabold tracking-tight text-slate-950">AI Content Studio</h1>
+                <p className="text-[10px] font-medium text-slate-500">Service Business</p>
               </div>
             </Link>
           </div>
 
           {/* Nav items */}
-          <nav className="flex-1 px-3 py-4 space-y-1">
+          <nav className="flex-1 px-3 py-4 space-y-1.5 overflow-y-auto">
             {navItems.map((item) => {
               const isActive = pathname.startsWith(item.href);
               return (
@@ -73,13 +73,13 @@ export function Sidebar({ open, onOpenChange }: { open: boolean, onOpenChange: (
                   href={item.href}
                   onClick={() => onOpenChange(false)}
                   className={cn(
-                    'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
+                    'flex min-h-12 items-center gap-3 rounded-2xl px-3.5 py-3 text-sm font-bold transition-all active:scale-[0.98]',
                     isActive
-                      ? 'bg-blue-50 text-blue-700'
-                      : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900',
+                      ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/25'
+                      : 'text-slate-600 hover:bg-white/75 hover:text-slate-950',
                   )}
                 >
-                  <item.icon className={cn('h-4 w-4', isActive ? 'text-blue-600' : 'text-gray-400')} />
+                  <item.icon className={cn('h-4.5 w-4.5', isActive ? 'text-white' : 'text-slate-400')} />
                   {item.label}
                 </Link>
               );
@@ -87,10 +87,12 @@ export function Sidebar({ open, onOpenChange }: { open: boolean, onOpenChange: (
           </nav>
 
           {/* Footer */}
-          <div className="px-4 py-3 border-t border-gray-100">
-            <p className="text-[10px] text-gray-400 text-center">
-              AI Content Studio v1.0
-            </p>
+          <div className="border-t border-slate-200/70 px-4 py-4">
+            <div className="rounded-2xl bg-slate-950/5 px-3 py-2.5 text-center">
+              <p className="text-[10px] font-semibold text-slate-500">
+                AI Content Studio v1.0
+              </p>
+            </div>
           </div>
         </div>
       </aside>
