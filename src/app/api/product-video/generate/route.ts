@@ -6,6 +6,10 @@ import {
 } from '@/lib/product-video-facebook-page';
 import { validateMarketingCaption } from '@/lib/product-video-caption-validator';
 import { generateDeterministicAIContent } from '@/lib/product-video-ai-generator';
+import {
+  PRODUCT_VIDEO_TTS_VOICE_SETTINGS,
+  normalizeProductVideoTtsScript,
+} from '@/lib/product-video-tts-script';
 
 export const dynamic = 'force-dynamic';
 
@@ -72,6 +76,8 @@ interface ProductVideoPayload {
   opening_pattern?: string;
   scene_variation_seed?: string;
   voiceover_full?: string;
+  tts_script?: string;
+  tts_voice_settings?: typeof PRODUCT_VIDEO_TTS_VOICE_SETTINGS;
   voiceover_prompt_requirements?: string;
 }
 
@@ -331,7 +337,7 @@ function buildVariationMetadata(input: {
   assetId: string;
   publicImageUrl: string;
   aiContent: ReturnType<typeof generateDeterministicAIContent>;
-}): Pick<ProductVideoPayload, 'creative_angle' | 'voiceover_style' | 'opening_pattern' | 'scene_variation_seed' | 'voiceover_full' | 'voiceover_prompt_requirements'> {
+}): Pick<ProductVideoPayload, 'creative_angle' | 'voiceover_style' | 'opening_pattern' | 'scene_variation_seed' | 'voiceover_full' | 'tts_script' | 'tts_voice_settings' | 'voiceover_prompt_requirements'> {
   const uniqueSource = `${Date.now()}|${Math.random()}|${crypto.randomUUID?.() || ''}`;
   const seedSource = [
     input.brand,
@@ -406,6 +412,14 @@ function buildVariationMetadata(input: {
     opening_pattern: openingPattern,
     scene_variation_seed: sceneVariationSeed,
     voiceover_full: voiceoverFull,
+    tts_script: normalizeProductVideoTtsScript({
+      voiceoverFull,
+      sceneScript: input.aiContent.scene_script,
+      caption: input.aiContent.marketing_caption,
+      brandContext: input.brand,
+      brief: input.brief,
+    }),
+    tts_voice_settings: PRODUCT_VIDEO_TTS_VOICE_SETTINGS,
     voiceover_prompt_requirements: buildVoiceoverPromptRequirements({
       brand: input.brand,
       creativeAngle,
@@ -722,12 +736,21 @@ export async function POST(request: NextRequest) {
     const n8nOpeningPattern = ('opening_pattern' in n8n && typeof n8n.opening_pattern === 'string') ? n8n.opening_pattern : '';
     const n8nSceneVariationSeed = ('scene_variation_seed' in n8n && typeof n8n.scene_variation_seed === 'string') ? n8n.scene_variation_seed : '';
     const n8nVoiceoverFull = ('voiceover_full' in n8n && typeof n8n.voiceover_full === 'string') ? n8n.voiceover_full : '';
+    const n8nTtsScript = ('tts_script' in n8n && typeof n8n.tts_script === 'string') ? n8n.tts_script : '';
     const n8nRendererCalled = 'renderer_called' in n8n && n8n.renderer_called === true;
     const n8nRendered = n8n.forwarded && n8nStatus === 200 && n8nPublicMediaUrl.length > 0;
     const safeVoiceoverFull = resolveSafeVoiceoverFull({
       candidate: n8nVoiceoverFull,
       fallback: payload.voiceover_full || '',
       sceneScript: payload.scene_script || '',
+    });
+    const safeTtsScript = normalizeProductVideoTtsScript({
+      candidate: n8nTtsScript,
+      voiceoverFull: safeVoiceoverFull,
+      sceneScript: payload.scene_script,
+      caption: payload.marketing_caption,
+      brandContext: payload.brand_context,
+      brief: payload.brief,
     });
 
     if (!n8n.forwarded || n8nStatus !== 200 || !previewSafetyLocked) {
@@ -788,6 +811,7 @@ export async function POST(request: NextRequest) {
         opening_pattern: n8nOpeningPattern || payload.opening_pattern,
         scene_variation_seed: n8nSceneVariationSeed || payload.scene_variation_seed,
         voiceover_full: safeVoiceoverFull,
+        tts_script: safeTtsScript,
         status: n8nRendered ? 'rendered' : 'pending_owner_review',
         render_status: n8nRendered ? 'rendered' : (n8nRenderStatus || undefined),
         media_status: n8nRendered ? 'ready' : (n8nMediaStatus || undefined),

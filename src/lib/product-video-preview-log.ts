@@ -62,6 +62,7 @@ export interface ProductVideoPreviewLogInput {
   opening_pattern?: string;
   scene_variation_seed?: string;
   voiceover_full?: string;
+  tts_script?: string;
   render_job_id?: string;
   render_status?: string;
   public_media_url?: string;
@@ -170,6 +171,7 @@ function normalizePreviewLogRecord(value: unknown): ProductVideoPreviewLogRecord
   const openingPattern = cleanText(value.opening_pattern) || pickPreviewVariationText(value, 'opening_pattern');
   const sceneVariationSeed = cleanText(value.scene_variation_seed) || pickPreviewVariationText(value, 'scene_variation_seed');
   const voiceoverFull = cleanText(value.voiceover_full) || pickPreviewVariationText(value, 'voiceover_full');
+  const ttsScript = cleanText(value.tts_script) || pickPreviewVariationText(value, 'tts_script');
 
   return {
     ...(value as unknown as ProductVideoPreviewLogRecord),
@@ -179,6 +181,7 @@ function normalizePreviewLogRecord(value: unknown): ProductVideoPreviewLogRecord
     opening_pattern: openingPattern || undefined,
     scene_variation_seed: sceneVariationSeed || undefined,
     voiceover_full: voiceoverFull || undefined,
+    tts_script: ttsScript || undefined,
     publish_allowed: false,
     facebook_post_performed: false,
     line_broadcast_performed: false,
@@ -325,6 +328,7 @@ export async function appendProductVideoPreviewLog(
     opening_pattern: input.opening_pattern,
     scene_variation_seed: input.scene_variation_seed,
     voiceover_full: input.voiceover_full,
+    tts_script: input.tts_script,
     render_job_id: input.render_job_id,
     render_status: input.render_status,
     public_media_url: input.public_media_url,

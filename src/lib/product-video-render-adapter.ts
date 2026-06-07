@@ -1,3 +1,5 @@
+import { ProductVideoTtsVoiceSettings } from '@/lib/product-video-tts-script';
+
 export interface RenderRequestPayload {
   preview_id: string;
   brand_context: string;
@@ -9,6 +11,8 @@ export interface RenderRequestPayload {
   marketing_caption: string;
   scene_script: string;
   overlay_texts: string;
+  tts_script: string;
+  tts_voice_settings?: ProductVideoTtsVoiceSettings;
   selected_pages: unknown[];
   target_page_key: string;
   selected_page_id: string;
@@ -32,6 +36,7 @@ export interface RenderAdapterResult {
   opening_pattern?: string;
   scene_variation_seed?: string;
   voiceover_full?: string;
+  tts_script?: string;
 }
 
 const RENDER_TIMEOUT_MS = 240_000;

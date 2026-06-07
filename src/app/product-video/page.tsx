@@ -195,6 +195,7 @@ interface PreviewLogItem {
   opening_pattern?: string;
   scene_variation_seed?: string;
   voiceover_full?: string;
+  tts_script?: string;
   render_job_id?: string;
   render_status?: string;
   public_media_url?: string;

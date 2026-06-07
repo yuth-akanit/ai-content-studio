@@ -7,6 +7,10 @@ import {
 import { findLatestProductVideoMediaMetadata, appendProductVideoMockMediaMetadata } from '@/lib/product-video-media-metadata';
 import { forwardRenderRequestToExternal, validatePublicImageUrl, validatePublicMediaUrl } from '@/lib/product-video-render-adapter';
 import { isRenderQualityAllowed, normalizeQualityScore } from '@/lib/product-video-quality-score';
+import {
+  PRODUCT_VIDEO_TTS_VOICE_SETTINGS,
+  normalizeProductVideoTtsScript,
+} from '@/lib/product-video-tts-script';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,6 +34,7 @@ interface RenderRequestBody {
   opening_pattern?: unknown;
   scene_variation_seed?: unknown;
   voiceover_full?: unknown;
+  tts_script?: unknown;
 }
 
 function cleanText(value: unknown): string {
@@ -135,6 +140,14 @@ export async function POST(request: NextRequest) {
     const openingPattern = cleanText(body.opening_pattern) || item.opening_pattern || '';
     const sceneVariationSeed = cleanText(body.scene_variation_seed) || item.scene_variation_seed || '';
     const voiceoverFull = cleanText(body.voiceover_full) || item.voiceover_full || '';
+    const ttsScript = normalizeProductVideoTtsScript({
+      candidate: cleanText(body.tts_script) || item.tts_script,
+      voiceoverFull,
+      sceneScript,
+      caption: marketingCaption,
+      brandContext: item.brand_context,
+      brief,
+    });
 
     if (!assetId || !publicImageUrl || imageUrls.length === 0 || isFallbackAppIconUrl(publicImageUrl) || !isUploadedProductVideoAssetUrl(publicImageUrl)) {
       return NextResponse.json(
@@ -187,6 +200,8 @@ export async function POST(request: NextRequest) {
       marketing_caption: marketingCaption,
       scene_script: sceneScript,
       overlay_texts: overlayTexts,
+      tts_script: ttsScript,
+      tts_voice_settings: PRODUCT_VIDEO_TTS_VOICE_SETTINGS,
       selected_pages: selectedPagesList,
       target_page_key: targetPageKey,
       selected_page_id: selectedPageId,
@@ -274,6 +289,14 @@ export async function POST(request: NextRequest) {
           opening_pattern: forwardResult.opening_pattern || openingPattern || item.opening_pattern,
           scene_variation_seed: forwardResult.scene_variation_seed || sceneVariationSeed || item.scene_variation_seed,
           voiceover_full: forwardResult.voiceover_full || voiceoverFull || item.voiceover_full,
+          tts_script: normalizeProductVideoTtsScript({
+            candidate: forwardResult.tts_script || ttsScript,
+            voiceoverFull: forwardResult.voiceover_full || voiceoverFull || item.voiceover_full,
+            sceneScript,
+            caption: marketingCaption,
+            brandContext: item.brand_context,
+            brief,
+          }),
           selected_pages: JSON.stringify(selectedPagesList),
         });
 
@@ -312,6 +335,14 @@ export async function POST(request: NextRequest) {
           opening_pattern: forwardResult.opening_pattern || openingPattern || item.opening_pattern,
           scene_variation_seed: forwardResult.scene_variation_seed || sceneVariationSeed || item.scene_variation_seed,
           voiceover_full: forwardResult.voiceover_full || voiceoverFull || item.voiceover_full,
+          tts_script: normalizeProductVideoTtsScript({
+            candidate: forwardResult.tts_script || ttsScript,
+            voiceoverFull: forwardResult.voiceover_full || voiceoverFull || item.voiceover_full,
+            sceneScript,
+            caption: marketingCaption,
+            brandContext: item.brand_context,
+            brief,
+          }),
           selected_pages: JSON.stringify(selectedPagesList),
         });
 
@@ -351,6 +382,7 @@ export async function POST(request: NextRequest) {
       opening_pattern: openingPattern || item.opening_pattern,
       scene_variation_seed: sceneVariationSeed || item.scene_variation_seed,
       voiceover_full: voiceoverFull || item.voiceover_full,
+      tts_script: ttsScript,
       selected_pages: JSON.stringify(selectedPagesList),
       public_media_url: metadata?.public_media_url || item.public_media_url,
       media_checksum: metadata?.media_checksum || item.media_checksum,
