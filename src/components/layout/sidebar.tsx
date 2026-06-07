@@ -12,6 +12,7 @@ import {
   Settings,
   MessageSquare,
   Clapperboard,
+  RadioTower,
   Video,
 } from 'lucide-react';
 import { THAI_UI_LABELS } from '@/lib/constants/thai-labels';
@@ -25,6 +26,7 @@ const navItems = [
   { href: '/campaigns', label: THAI_UI_LABELS.campaign_workspace, icon: FolderKanban },
   { href: '/campaigns/short-form', label: 'Short-form', icon: Clapperboard },
   { href: '/product-video', label: 'Product Video', icon: Video },
+  { href: '/short-video-distribution', label: 'Short Video Preview', icon: RadioTower },
   { href: '/settings', label: THAI_UI_LABELS.settings, icon: Settings },
 ];
 
