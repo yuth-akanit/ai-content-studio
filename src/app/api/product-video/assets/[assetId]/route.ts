@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { PRODUCT_VIDEO_PREVIEW_SAFETY_FLAGS } from '@/lib/product-video-preview-log';
 import {
   findProductVideoUploadedAsset,
-  getImageContentTypeForFilename,
+  getMediaContentTypeForFilename,
   isSafeProductVideoAssetId,
 } from '@/lib/product-video-assets';
 
@@ -42,11 +42,11 @@ export async function GET(_request: NextRequest, context: AssetRouteContext) {
     );
   }
 
-  const contentType = metadata.mime_type.startsWith('image/')
+  const contentType = metadata.mime_type.startsWith('image/') || metadata.mime_type.startsWith('video/')
     ? metadata.mime_type
-    : getImageContentTypeForFilename(metadata.saved_filename, 'image/png');
+    : getMediaContentTypeForFilename(metadata.saved_filename, 'application/octet-stream');
 
-  if (!contentType.startsWith('image/')) {
+  if (!contentType.startsWith('image/') && !contentType.startsWith('video/')) {
     return NextResponse.json(
       {
         ok: false,

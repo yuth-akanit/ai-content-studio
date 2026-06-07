@@ -13,7 +13,10 @@ export interface ProductVideoUploadedAssetMetadata {
   size_bytes: number;
   local_asset_path: string;
   public_image_url: string;
+  public_media_url: string;
   image_urls: string[];
+  media_urls: string[];
+  media_type: 'image' | 'video';
   uploaded_at: string;
 }
 
@@ -25,6 +28,12 @@ const IMAGE_EXTENSION_CONTENT_TYPES: Record<string, string> = {
   '.webp': 'image/webp',
   '.gif': 'image/gif',
   '.avif': 'image/avif',
+};
+const VIDEO_EXTENSION_CONTENT_TYPES: Record<string, string> = {
+  '.mp4': 'video/mp4',
+  '.mov': 'video/quicktime',
+  '.m4v': 'video/x-m4v',
+  '.webm': 'video/webm',
 };
 
 export function cleanProductVideoFilename(name: string): string {
@@ -43,8 +52,17 @@ export function getImageContentTypeForFilename(filename: string, fallback = 'app
   return IMAGE_EXTENSION_CONTENT_TYPES[ext] || fallback;
 }
 
+export function getMediaContentTypeForFilename(filename: string, fallback = 'application/octet-stream'): string {
+  const ext = path.extname(filename).toLowerCase();
+  return IMAGE_EXTENSION_CONTENT_TYPES[ext] || VIDEO_EXTENSION_CONTENT_TYPES[ext] || fallback;
+}
+
 export function isSupportedProductVideoImageFilename(filename: string): boolean {
   return getImageContentTypeForFilename(filename) !== 'application/octet-stream';
+}
+
+export function isSupportedProductVideoMediaFilename(filename: string): boolean {
+  return getMediaContentTypeForFilename(filename) !== 'application/octet-stream';
 }
 
 export function buildProductVideoPublicAssetUrl(request: Request, assetId: string): string {
@@ -63,7 +81,8 @@ export function createProductVideoUploadedAssetMetadata(input: {
   const ext = path.extname(originalFilename).toLowerCase() || '.png';
   const assetId = randomUUID();
   const savedFilename = `${assetId}${ext}`;
-  const publicImageUrl = buildProductVideoPublicAssetUrl(input.request, assetId);
+  const publicMediaUrl = buildProductVideoPublicAssetUrl(input.request, assetId);
+  const mediaType: 'image' | 'video' = input.mimeType.startsWith('video/') ? 'video' : 'image';
 
   return {
     asset_id: assetId,
@@ -72,8 +91,11 @@ export function createProductVideoUploadedAssetMetadata(input: {
     mime_type: input.mimeType,
     size_bytes: input.sizeBytes,
     local_asset_path: getProductVideoUploadPathForFilename(savedFilename),
-    public_image_url: publicImageUrl,
-    image_urls: [publicImageUrl],
+    public_image_url: publicMediaUrl,
+    public_media_url: publicMediaUrl,
+    image_urls: mediaType === 'image' ? [publicMediaUrl] : [],
+    media_urls: [publicMediaUrl],
+    media_type: mediaType,
     uploaded_at: new Date().toISOString(),
   };
 }
@@ -104,8 +126,18 @@ function parseMetadataLine(line: string): ProductVideoUploadedAssetMetadata | nu
     if (typeof parsed.mime_type !== 'string') return null;
     if (!isSafeProductVideoAssetId(parsed.asset_id)) return null;
     if (!isSafeProductVideoAssetId(parsed.saved_filename)) return null;
-    if (!isSupportedProductVideoImageFilename(parsed.saved_filename)) return null;
-    return parsed as ProductVideoUploadedAssetMetadata;
+    if (!isSupportedProductVideoMediaFilename(parsed.saved_filename)) return null;
+    const publicMediaUrl = typeof parsed.public_media_url === 'string'
+      ? parsed.public_media_url
+      : parsed.public_image_url;
+    const mediaType: 'image' | 'video' = parsed.mime_type.startsWith('video/') ? 'video' : 'image';
+    return {
+      ...parsed,
+      public_media_url: publicMediaUrl,
+      media_urls: Array.isArray(parsed.media_urls) ? parsed.media_urls : [publicMediaUrl].filter(Boolean),
+      media_type: parsed.media_type === 'video' || parsed.media_type === 'image' ? parsed.media_type : mediaType,
+      image_urls: Array.isArray(parsed.image_urls) ? parsed.image_urls : (mediaType === 'image' ? [publicMediaUrl].filter(Boolean) : []),
+    } as ProductVideoUploadedAssetMetadata;
   } catch {
     return null;
   }
@@ -144,8 +176,8 @@ export async function findProductVideoUploadedAsset(assetIdOrFilename: string): 
   return {
     ...match,
     local_asset_path: resolvedPath,
-    mime_type: match.mime_type.startsWith('image/')
+    mime_type: match.mime_type.startsWith('image/') || match.mime_type.startsWith('video/')
       ? match.mime_type
-      : getImageContentTypeForFilename(match.saved_filename, 'image/png'),
+      : getMediaContentTypeForFilename(match.saved_filename, 'application/octet-stream'),
   };
 }

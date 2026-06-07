@@ -29,6 +29,27 @@ type SourcesResponse = {
   production_actions_performed: false;
 };
 
+type UploadKind = 'raw_video' | 'before_image' | 'after_image';
+
+type MediaComposerUploadResponse = {
+  ok: boolean;
+  status?: 'upload_success';
+  error?: string;
+  upload_kind?: UploadKind;
+  asset_id?: string;
+  filename?: string;
+  mime_type?: string;
+  size_bytes?: number;
+  public_media_url?: string;
+  source_badge?: MediaComposerSourceBadge;
+  source_option?: MediaComposerSourceOption;
+  all_publish_flags_false?: true;
+  external_api_calls_performed?: false;
+  production_actions_performed?: false;
+};
+
+type InputMode = 'existing' | 'upload';
+
 type InputState = {
   source_type: MediaComposerSourceType;
   before_image_url: string;
@@ -96,8 +117,12 @@ function buildRequestBody(state: InputState) {
 }
 export default function MediaComposerPage() {
   const [state, setState] = useState<InputState>(defaultState);
+  const [inputMode, setInputMode] = useState<InputMode>('existing');
   const [loading, setLoading] = useState(false);
   const [loadingSources, setLoadingSources] = useState(true);
+  const [uploadingKind, setUploadingKind] = useState<UploadKind | null>(null);
+  const [uploadSummary, setUploadSummary] = useState<Partial<Record<UploadKind, MediaComposerUploadResponse>>>({});
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [sourceOptions, setSourceOptions] = useState<MediaComposerSourceOption[]>([]);
   const [selectedSourceId, setSelectedSourceId] = useState('sample-image-pair');
   const [fallbackUsed, setFallbackUsed] = useState(true);
@@ -169,6 +194,63 @@ export default function MediaComposerPage() {
     });
   }
 
+  async function uploadDirectFile(kind: UploadKind, file: File | null) {
+    if (!file) return;
+    setUploadError(null);
+    setUploadingKind(kind);
+    try {
+      const formData = new FormData();
+      formData.set('upload_kind', kind);
+      formData.set('file', file);
+      const response = await fetch('/api/media-composer/assets/upload', {
+        method: 'POST',
+        body: formData,
+      });
+      const data = (await response.json()) as MediaComposerUploadResponse;
+      if (!response.ok || !data.ok || !data.public_media_url) {
+        throw new Error(data.error || 'media_composer_upload_failed');
+      }
+
+      const nextSummary = { ...uploadSummary, [kind]: data };
+      setUploadSummary(nextSummary);
+      setInputMode('upload');
+      const sourceId = data.source_option?.id || `uploaded-asset-${data.asset_id || kind}`;
+      setSelectedSourceId(sourceId);
+
+      if (kind === 'raw_video') {
+        setState((current) => ({
+          ...current,
+          source_type: 'raw_video',
+          raw_video_url: data.public_media_url || '',
+          source_id: sourceId,
+          source_badge: 'uploaded_asset',
+        }));
+        return;
+      }
+
+      const beforeUrl = kind === 'before_image'
+        ? data.public_media_url
+        : nextSummary.before_image?.public_media_url || state.before_image_url;
+      const afterUrl = kind === 'after_image'
+        ? data.public_media_url
+        : nextSummary.after_image?.public_media_url || state.after_image_url;
+      const beforeId = kind === 'before_image' ? data.asset_id : nextSummary.before_image?.asset_id;
+      const afterId = kind === 'after_image' ? data.asset_id : nextSummary.after_image?.asset_id;
+      setState((current) => ({
+        ...current,
+        source_type: 'image_pair',
+        before_image_url: beforeUrl || current.before_image_url,
+        after_image_url: afterUrl || current.after_image_url,
+        source_id: `uploaded-asset-image-pair-${beforeId || 'before'}-${afterId || 'after'}`,
+        source_badge: 'uploaded_asset',
+      }));
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : 'media_composer_upload_failed');
+    } finally {
+      setUploadingKind(null);
+    }
+  }
+
   async function renderPreview() {
     setLoading(true);
     setResult(null);
@@ -220,6 +302,26 @@ export default function MediaComposerPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-5">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => setInputMode('existing')}
+                className={`min-h-14 rounded-2xl border p-4 text-left text-sm font-black transition ${inputMode === 'existing' ? 'border-indigo-500 bg-indigo-50 text-indigo-950 ring-2 ring-indigo-100' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'}`}
+              >
+                เลือกจาก media ในระบบ
+                <span className="mt-1 block text-xs font-semibold">sample / minio_safe_url / product_video_preview_log</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setInputMode('upload')}
+                className={`min-h-14 rounded-2xl border p-4 text-left text-sm font-black transition ${inputMode === 'upload' ? 'border-emerald-500 bg-emerald-50 text-emerald-950 ring-2 ring-emerald-100' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'}`}
+              >
+                อัปโหลดใหม่โดยตรง
+                <span className="mt-1 block text-xs font-semibold">source_badge=uploaded_asset สำหรับ mobile owner/admin</span>
+              </button>
+            </div>
+
+            {inputMode === 'existing' && (
             <div className="rounded-2xl border border-indigo-100 bg-indigo-50/70 p-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
@@ -261,26 +363,32 @@ export default function MediaComposerPage() {
                   {selectedSourceOption?.source_url_summary ? (
                     <p className="mt-1 break-words text-xs text-indigo-800">source_url_summary: {selectedSourceOption.source_url_summary}</p>
                   ) : null}
-                  <p className="mt-2 text-xs font-bold text-amber-700">อัปโหลดไฟล์ใหม่ในหน้านี้ยังไม่เปิดใช้งาน</p>
+                  <p className="mt-2 text-xs font-bold text-amber-700">หากต้องการอัปโหลดไฟล์ใหม่ ให้เลือกโหมด “อัปโหลดใหม่โดยตรง”</p>
                 </div>
               </div>
             </div>
+            )}
 
-            <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-700">
-              <div className="flex items-center gap-2 font-black text-slate-950">
-                <Upload className="h-4 w-4 text-slate-500" />
-                Direct Upload — coming next
+            {inputMode === 'upload' && (
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50/80 p-4 text-sm text-emerald-950">
+              <div className="flex items-center gap-2 font-black">
+                <Upload className="h-4 w-4 text-emerald-700" />
+                Direct Upload — อัปโหลดจากหน้านี้โดยตรง
               </div>
-              <p className="mt-1 leading-6">อัปโหลดไฟล์ใหม่ในหน้านี้ยังไม่เปิดใช้งาน จึงไม่แสดงว่าไฟล์ถูกอัปโหลดจากหน้านี้ถ้ายังมาจาก preview log / minio / uploaded asset เดิม</p>
-              <div className="mt-3 grid gap-2 sm:grid-cols-3">
-                {['Upload Raw Video', 'Upload Before Image', 'Upload After Image'].map((label) => (
-                  <button key={label} type="button" disabled className="min-h-11 rounded-2xl border border-slate-200 bg-white px-3 text-left text-xs font-black text-slate-400">
-                    {label}
-                    <span className="block font-semibold">coming next</span>
-                  </button>
+              <p className="mt-1 leading-6">อัปโหลดใหม่โดยตรงสำหรับเจ้าของ/แอดมินบนมือถือ ระบบจะเก็บใน safe uploaded asset storage และตั้ง source_badge=uploaded_asset โดยไม่โพสต์จริง</p>
+              <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                <UploadButton label="Upload Raw Video" accept="video/*" uploading={uploadingKind === 'raw_video'} onFile={(file) => uploadDirectFile('raw_video', file)} />
+                <UploadButton label="Upload Before Image" accept="image/*" uploading={uploadingKind === 'before_image'} onFile={(file) => uploadDirectFile('before_image', file)} />
+                <UploadButton label="Upload After Image" accept="image/*" uploading={uploadingKind === 'after_image'} onFile={(file) => uploadDirectFile('after_image', file)} />
+              </div>
+              {uploadError ? <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-red-800">Upload error: {uploadError}</div> : null}
+              <div className="mt-3 grid gap-2">
+                {(['raw_video', 'before_image', 'after_image'] as UploadKind[]).map((kind) => (
+                  <UploadSummaryLine key={kind} kind={kind} item={uploadSummary[kind]} />
                 ))}
               </div>
             </div>
+            )}
 
             <div className="grid gap-3 sm:grid-cols-2">
               <button
@@ -389,6 +497,44 @@ function Field({ label, value, onChange }: { label: string; value: string; onCha
         onChange={(event) => onChange(event.target.value)}
         className="min-h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm outline-none ring-indigo-500/20 transition focus:border-indigo-500 focus:ring-4"
       />
+    </div>
+  );
+}
+
+function UploadButton({ label, accept, uploading, onFile }: { label: string; accept: string; uploading: boolean; onFile: (file: File | null) => void }) {
+  const id = label.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  return (
+    <label htmlFor={id} className="min-h-16 cursor-pointer rounded-2xl border border-emerald-200 bg-white px-4 py-3 text-left text-xs font-black text-emerald-950 shadow-sm transition hover:bg-emerald-50">
+      <span className="block">{uploading ? 'กำลังอัปโหลด...' : label}</span>
+      <span className="mt-1 block font-semibold text-emerald-700">แตะเพื่อเลือกไฟล์จากเครื่อง</span>
+      <input
+        id={id}
+        type="file"
+        accept={accept}
+        disabled={uploading}
+        className="sr-only"
+        onChange={(event) => onFile(event.target.files?.[0] || null)}
+      />
+    </label>
+  );
+}
+
+function UploadSummaryLine({ kind, item }: { kind: UploadKind; item?: MediaComposerUploadResponse }) {
+  const label: Record<UploadKind, string> = {
+    raw_video: 'Raw Video',
+    before_image: 'Before Image',
+    after_image: 'After Image',
+  };
+  return (
+    <div className="rounded-xl bg-white px-3 py-2 text-xs ring-1 ring-emerald-100">
+      <div className="font-black text-emerald-950">{label[kind]}</div>
+      {item?.ok ? (
+        <div className="mt-1 break-words text-emerald-800">
+          upload_success · source_badge=uploaded_asset · {item.filename} · {item.public_media_url}
+        </div>
+      ) : (
+        <div className="mt-1 text-slate-500">ยังไม่ได้อัปโหลด</div>
+      )}
     </div>
   );
 }

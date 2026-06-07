@@ -15,6 +15,7 @@ const files = {
   manualPublishPanel: path.join(root, 'src/components/short-video-distribution/manual-publish-package-panel.tsx'),
   mediaComposerLib: path.join(root, 'src/lib/media-composer.ts'),
   mediaComposerPage: path.join(root, 'src/app/media-composer/page.tsx'),
+  mediaComposerUploadRoute: path.join(root, 'src/app/api/media-composer/assets/upload/route.ts'),
 };
 
 function read(file) {
@@ -34,6 +35,7 @@ const manualPublishRoute = read(files.manualPublishRoute);
 const manualPublishPanel = read(files.manualPublishPanel);
 const mediaComposerLib = read(files.mediaComposerLib);
 const mediaComposerPage = read(files.mediaComposerPage);
+const mediaComposerUploadRoute = read(files.mediaComposerUploadRoute);
 const combinedNewModule = `${page}\n${planner}\n${fixture}`;
 const ownerDecisionModule = `${ownerDecisionLib}\n${ownerDecisionRoute}\n${ownerDecisionPanel}`;
 const manualPublishModule = `${manualPublishLib}\n${manualPublishRoute}\n${manualPublishPanel}`;
@@ -244,10 +246,13 @@ const mediaComposerRequiredSnippets = [
   'raw_video_passthrough_preview',
   "master_video_url: isRawVideoPassthrough ? input.raw_video_url : SAMPLE_MASTER_VIDEO_URL",
   'ไฟล์นี้มาจาก media ที่เคยอัปโหลด/สร้างไว้ในระบบ',
-  'อัปโหลดไฟล์ใหม่ในหน้านี้ยังไม่เปิดใช้งาน',
+  'เลือกจาก media ในระบบ',
+  'อัปโหลดใหม่โดยตรง',
   'Upload Raw Video',
   'Upload Before Image',
   'Upload After Image',
+  'upload_success',
+  'source_badge=uploaded_asset',
   'sample',
   'minio_safe_url',
   'product_video_preview_log',
@@ -255,7 +260,24 @@ const mediaComposerRequiredSnippets = [
 ];
 
 for (const snippet of mediaComposerRequiredSnippets) {
-  if (!mediaComposerLib.includes(snippet) && !mediaComposerPage.includes(snippet)) throw new Error(`Missing media composer snippet: ${snippet}`);
+  if (!mediaComposerLib.includes(snippet) && !mediaComposerPage.includes(snippet) && !mediaComposerUploadRoute.includes(snippet)) throw new Error(`Missing media composer snippet: ${snippet}`);
+}
+
+const mediaComposerUploadRequiredSnippets = [
+  'media_composer_direct_upload_v1',
+  'upload_kind',
+  'raw_video',
+  'before_image',
+  'after_image',
+  'public_media_url',
+  'source_badge: \'uploaded_asset\'',
+  'all_publish_flags_false: true',
+  'external_api_calls_performed: false',
+  'production_actions_performed: false',
+];
+
+for (const snippet of mediaComposerUploadRequiredSnippets) {
+  if (!mediaComposerUploadRoute.includes(snippet)) throw new Error(`Missing media composer upload snippet: ${snippet}`);
 }
 
 console.log(JSON.stringify({
