@@ -6,6 +6,8 @@ import Link from 'next/link';
 import { buildShortVideoPreviewQueue, type PlatformMetadata, type ShortVideoPlatformVariant } from '@/lib/short-video-distribution/planner';
 import { sampleApprovedMasterVerticalVideo } from '@/lib/short-video-distribution/sample-fixture';
 import { sampleMediaComposerMasterVideoRecord } from '@/lib/media-composer';
+import { loadShortVideoOwnerDecisionState, type ShortVideoOwnerReviewDecisionState } from '@/lib/short-video-distribution/owner-review-decisions';
+import { OwnerReviewDecisionPanel } from '@/components/short-video-distribution/owner-review-decision-panel';
 
 type ShortVideoDistributionSearchParams = Promise<Record<string, string | string[] | undefined>>;
 
@@ -167,7 +169,13 @@ function SafetyFlagDetails({ variant }: { variant: ShortVideoPlatformVariant }) 
   );
 }
 
-function PlatformCard({ variant }: { variant: ShortVideoPlatformVariant }) {
+function PlatformCard({
+  variant,
+  ownerDecisionState,
+}: {
+  variant: ShortVideoPlatformVariant;
+  ownerDecisionState?: ShortVideoOwnerReviewDecisionState | null;
+}) {
   const postText = mainPostText(variant.metadata);
   const metadataList = metadataEntries(variant.metadata);
   const decisionClass = decisionStyleMap[variant.creative_quality_gate.decision] || 'border-slate-200 bg-slate-50 text-slate-700';
@@ -271,6 +279,14 @@ function PlatformCard({ variant }: { variant: ShortVideoPlatformVariant }) {
           </div>
         </div>
 
+        <OwnerReviewDecisionPanel
+          variantId={variant.variant_id}
+          masterVideoId={variant.master_video_id}
+          platform={variant.platform}
+          platformLabel={variant.platform_label}
+          initialState={ownerDecisionState || null}
+        />
+
         <SafetyFlagDetails variant={variant} />
       </CardContent>
     </Card>
@@ -302,6 +318,7 @@ export default async function ShortVideoDistributionPage({ searchParams }: { sea
       : `ใช้ metadata จริงจาก Media Composer render: ${sourceMetadata.source_badge} / ${sourceMetadata.source_id}`,
   };
   const preview = buildShortVideoPreviewQueue(masterVideoForPreview);
+  const ownerDecisionStateByVariant = await loadShortVideoOwnerDecisionState();
   const readyLabel = `${preview.summary.ready_count} พร้อม / ${preview.summary.needs_improvement_count} ควรปรับ / ${preview.summary.blocked_count} ยังไม่ควรโพสต์`;
   const sourceBadgeTone = sourceMetadata.fallback_used
     ? 'border-amber-200 bg-amber-50 text-amber-800'
@@ -397,7 +414,11 @@ export default async function ShortVideoDistributionPage({ searchParams }: { sea
 
       <section className="grid gap-4 xl:grid-cols-2" aria-label="ข้อความตัวอย่างแยกตามแพลตฟอร์ม">
         {preview.preview_queue.map((variant) => (
-          <PlatformCard key={variant.variant_id} variant={variant} />
+          <PlatformCard
+            key={variant.variant_id}
+            variant={variant}
+            ownerDecisionState={ownerDecisionStateByVariant[variant.variant_id] || null}
+          />
         ))}
       </section>
     </div>
