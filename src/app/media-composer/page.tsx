@@ -17,6 +17,7 @@ type ComposerResponse = {
   error?: string;
   errors?: string[];
   master_video?: MediaComposerMasterVideoRecord;
+  short_video_distribution_preview_url?: string;
   production_actions_performed: false;
 };
 
@@ -321,7 +322,7 @@ export default function MediaComposerPage() {
                     ))}
                   </div>
                 </div>
-                <Link href="/short-video-distribution" className="inline-flex min-h-11 items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 font-black text-slate-900 hover:bg-slate-50">
+                <Link href={result.short_video_distribution_preview_url || '/short-video-distribution'} className="inline-flex min-h-11 items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 font-black text-slate-900 hover:bg-slate-50">
                   เปิด Short Video Distribution Preview <ArrowRight className="ml-2 h-4 w-4" />
                 </Link>
               </div>

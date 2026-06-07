@@ -46,6 +46,17 @@ export async function POST(request: NextRequest) {
     }
 
     const masterVideo = buildMediaComposerMasterVideoRecord(body);
+    const distributionPreviewParams = new URLSearchParams({
+      master_video_id: masterVideo.id,
+      master_video_url: masterVideo.master_video_url,
+      source_type: masterVideo.source_type,
+      source_badge: masterVideo.source_badge,
+      source_id: masterVideo.source_id || '',
+      tts_script: masterVideo.tts_script,
+      fallback_used: String(masterVideo.source_badge === 'sample'),
+      ready_for_distribution_preview: String(masterVideo.ready_for_distribution_preview),
+    });
+
     return NextResponse.json({
       ok: true,
       module: 'media_composer_v1',
@@ -59,8 +70,9 @@ export async function POST(request: NextRequest) {
         source_id: masterVideo.source_id,
         tts_script: masterVideo.tts_script,
         ready_for_distribution_preview: masterVideo.ready_for_distribution_preview,
+        fallback_used: masterVideo.source_badge === 'sample',
       },
-      short_video_distribution_preview_url: `/short-video-distribution?master_video_id=${encodeURIComponent(masterVideo.id)}&source_badge=${encodeURIComponent(masterVideo.source_badge)}&source_id=${encodeURIComponent(masterVideo.source_id || '')}`,
+      short_video_distribution_preview_url: `/short-video-distribution?${distributionPreviewParams.toString()}`,
       publish_flags: masterVideo.publish_flags,
       production_actions_performed: false,
     });

@@ -7,6 +7,19 @@ import { buildShortVideoPreviewQueue, type PlatformMetadata, type ShortVideoPlat
 import { sampleApprovedMasterVerticalVideo } from '@/lib/short-video-distribution/sample-fixture';
 import { sampleMediaComposerMasterVideoRecord } from '@/lib/media-composer';
 
+type ShortVideoDistributionSearchParams = Promise<Record<string, string | string[] | undefined>>;
+
+type PreviewSourceMetadata = {
+  master_video_id: string;
+  master_video_url: string;
+  source_type: string;
+  source_badge: string;
+  source_id: string;
+  tts_script: string;
+  fallback_used: boolean;
+  source_label: 'real_media_composer_preview_metadata' | 'static_sample_fixture_fallback';
+};
+
 const metadataLabelMap: Record<string, string> = {
   title: 'หัวข้อ',
   description: 'คำอธิบาย',
@@ -55,6 +68,48 @@ function friendlyValue(value: unknown): string {
   if (Array.isArray(value)) return value.join(', ');
   const text = String(value);
   return systemValueLabelMap[text] || text;
+}
+
+function firstParam(params: Record<string, string | string[] | undefined>, key: string): string {
+  const value = params[key];
+  const text = Array.isArray(value) ? value[0] : value;
+  return String(text || '').trim();
+}
+
+function isHttpOrLocalVideoReference(value: string): boolean {
+  return /^https?:\/\//.test(value) || value.startsWith('/');
+}
+
+function boolFromParam(value: string, fallback: boolean): boolean {
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  return fallback;
+}
+
+function buildPreviewSourceMetadata(params: Record<string, string | string[] | undefined>): PreviewSourceMetadata {
+  const requestedMasterVideoUrl = firstParam(params, 'master_video_url');
+  const masterVideoUrl = isHttpOrLocalVideoReference(requestedMasterVideoUrl)
+    ? requestedMasterVideoUrl
+    : sampleApprovedMasterVerticalVideo.video_url;
+  const sourceBadge = firstParam(params, 'source_badge') || sampleMediaComposerMasterVideoRecord.source_badge;
+  const hasRealPreviewMetadata = Boolean(
+    firstParam(params, 'master_video_id')
+      || firstParam(params, 'source_id')
+      || requestedMasterVideoUrl
+      || firstParam(params, 'tts_script'),
+  ) && sourceBadge !== 'sample';
+  const fallbackUsed = boolFromParam(firstParam(params, 'fallback_used'), !hasRealPreviewMetadata);
+
+  return {
+    master_video_id: firstParam(params, 'master_video_id') || sampleApprovedMasterVerticalVideo.id,
+    master_video_url: masterVideoUrl,
+    source_type: firstParam(params, 'source_type') || sampleMediaComposerMasterVideoRecord.source_type,
+    source_badge: sourceBadge,
+    source_id: firstParam(params, 'source_id') || 'sample-image-pair',
+    tts_script: firstParam(params, 'tts_script') || sampleMediaComposerMasterVideoRecord.tts_script,
+    fallback_used: fallbackUsed,
+    source_label: fallbackUsed ? 'static_sample_fixture_fallback' : 'real_media_composer_preview_metadata',
+  };
 }
 
 function metadataEntries(metadata: PlatformMetadata): Array<{ label: string; value: string; key: string }> {
@@ -235,9 +290,22 @@ function VideoIcon() {
   return <Eye className="h-5 w-5 text-indigo-600" />;
 }
 
-export default function ShortVideoDistributionPage() {
-  const preview = buildShortVideoPreviewQueue(sampleApprovedMasterVerticalVideo);
+export default async function ShortVideoDistributionPage({ searchParams }: { searchParams: ShortVideoDistributionSearchParams }) {
+  const sourceMetadata = buildPreviewSourceMetadata(await searchParams);
+  const masterVideoForPreview = {
+    ...sampleApprovedMasterVerticalVideo,
+    id: sourceMetadata.master_video_id,
+    video_url: sourceMetadata.master_video_url,
+    visual_notes: `${sampleApprovedMasterVerticalVideo.visual_notes || ''} Media Composer source_badge=${sourceMetadata.source_badge}; source_id=${sourceMetadata.source_id}; source_type=${sourceMetadata.source_type}.`,
+    creative_angle: sourceMetadata.fallback_used
+      ? sampleApprovedMasterVerticalVideo.creative_angle
+      : `ใช้ metadata จริงจาก Media Composer render: ${sourceMetadata.source_badge} / ${sourceMetadata.source_id}`,
+  };
+  const preview = buildShortVideoPreviewQueue(masterVideoForPreview);
   const readyLabel = `${preview.summary.ready_count} พร้อม / ${preview.summary.needs_improvement_count} ควรปรับ / ${preview.summary.blocked_count} ยังไม่ควรโพสต์`;
+  const sourceBadgeTone = sourceMetadata.fallback_used
+    ? 'border-amber-200 bg-amber-50 text-amber-800'
+    : 'border-emerald-200 bg-emerald-50 text-emerald-800';
 
   return (
     <div className="space-y-6">
@@ -283,6 +351,24 @@ export default function ShortVideoDistributionPage() {
             <SummaryTile label="เกณฑ์ผ่าน" value={`${preview.quality_gate_threshold}+ คะแนน`} />
           </div>
 
+          <div className="grid gap-3 rounded-2xl border border-slate-200 bg-white/80 p-4 text-sm leading-6 text-slate-700 md:grid-cols-2">
+            <div>
+              <div className="mb-2 font-black text-slate-950">Media Composer metadata handoff</div>
+              <p><span className="font-semibold">source_label:</span> {sourceMetadata.source_label}</p>
+              <p><span className="font-semibold">fallback_used:</span> {String(sourceMetadata.fallback_used)}</p>
+              <p><span className="font-semibold">source_badge:</span> <Badge variant="outline" className={sourceBadgeTone}>{sourceMetadata.source_badge}</Badge></p>
+              <p><span className="font-semibold">source_id:</span> {sourceMetadata.source_id}</p>
+            </div>
+            <div>
+              <div className="mb-2 font-black text-slate-950">Preview video reference</div>
+              <p className="break-words"><span className="font-semibold">master_video_url:</span> {sourceMetadata.master_video_url}</p>
+              <p><span className="font-semibold">source_type:</span> {sourceMetadata.source_type}</p>
+              <p><span className="font-semibold">ready_for_distribution_preview:</span> true</p>
+              <p><span className="font-semibold">creative_quality_gate_v1:</span> true</p>
+              <p className="line-clamp-2"><span className="font-semibold">tts_script:</span> {sourceMetadata.tts_script}</p>
+            </div>
+          </div>
+
           <div className="rounded-2xl border border-slate-200 bg-white/80 p-4 text-sm leading-6 text-slate-700">
             <div className="mb-2 flex items-center gap-2 font-bold text-slate-950">
               <Eye className="h-4 w-4 text-indigo-600" />
@@ -290,13 +376,15 @@ export default function ShortVideoDistributionPage() {
             </div>
             <div className="grid gap-4 md:grid-cols-[160px_1fr]">
               <video className="aspect-[9/16] w-full rounded-2xl bg-slate-950 shadow-sm" controls preload="metadata" playsInline>
-                <source src={sampleApprovedMasterVerticalVideo.video_url} type="video/mp4" />
+                <source src={masterVideoForPreview.video_url} type="video/mp4" />
                 Browser ไม่รองรับวิดีโอ MP4
               </video>
               <div className="space-y-2">
                 <p><span className="font-semibold">รหัสคลิป:</span> {preview.master_video_id}</p>
-                <p><span className="font-semibold">รูปแบบ:</span> วิดีโอแนวตั้ง MP4, {sampleApprovedMasterVerticalVideo.aspect_ratio}, {sampleApprovedMasterVerticalVideo.duration_seconds} วินาที</p>
-                <p><span className="font-semibold">source_type:</span> {sampleMediaComposerMasterVideoRecord.source_type}</p>
+                <p><span className="font-semibold">รูปแบบ:</span> วิดีโอแนวตั้ง MP4, {masterVideoForPreview.aspect_ratio}, {masterVideoForPreview.duration_seconds} วินาที</p>
+                <p><span className="font-semibold">source_type:</span> {sourceMetadata.source_type}</p>
+                <p><span className="font-semibold">source_badge:</span> {sourceMetadata.source_badge}</p>
+                <p><span className="font-semibold">source_id:</span> {sourceMetadata.source_id}</p>
                 <p><span className="font-semibold">ready_for_distribution_preview:</span> {String(sampleMediaComposerMasterVideoRecord.ready_for_distribution_preview)}</p>
                 <Link href="/media-composer" className="inline-flex min-h-10 items-center rounded-2xl border border-indigo-200 bg-indigo-50 px-4 font-black text-indigo-700 hover:bg-indigo-100">
                   เปิด Media Composer
