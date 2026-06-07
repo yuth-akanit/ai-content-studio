@@ -10,6 +10,9 @@ const files = {
   ownerDecisionLib: path.join(root, 'src/lib/short-video-distribution/owner-review-decisions.ts'),
   ownerDecisionRoute: path.join(root, 'src/app/api/short-video-distribution/preview-decisions/[variantId]/route.ts'),
   ownerDecisionPanel: path.join(root, 'src/components/short-video-distribution/owner-review-decision-panel.tsx'),
+  manualPublishLib: path.join(root, 'src/lib/short-video-distribution/manual-publish-package.ts'),
+  manualPublishRoute: path.join(root, 'src/app/api/short-video-distribution/manual-publish-package/route.ts'),
+  manualPublishPanel: path.join(root, 'src/components/short-video-distribution/manual-publish-package-panel.tsx'),
 };
 
 function read(file) {
@@ -24,8 +27,12 @@ const sidebar = read(files.sidebar);
 const ownerDecisionLib = read(files.ownerDecisionLib);
 const ownerDecisionRoute = read(files.ownerDecisionRoute);
 const ownerDecisionPanel = read(files.ownerDecisionPanel);
+const manualPublishLib = read(files.manualPublishLib);
+const manualPublishRoute = read(files.manualPublishRoute);
+const manualPublishPanel = read(files.manualPublishPanel);
 const combinedNewModule = `${page}\n${planner}\n${fixture}`;
 const ownerDecisionModule = `${ownerDecisionLib}\n${ownerDecisionRoute}\n${ownerDecisionPanel}`;
+const manualPublishModule = `${manualPublishLib}\n${manualPublishRoute}\n${manualPublishPanel}`;
 
 const expectedPlatforms = ['youtube_shorts', 'facebook_reels', 'instagram_reels', 'tiktok'];
 for (const platform of expectedPlatforms) {
@@ -159,6 +166,76 @@ for (const pattern of forbiddenOwnerDecisionPatterns) {
   if (pattern.test(ownerDecisionModule)) throw new Error(`Forbidden pattern found in owner decision layer: ${pattern}`);
 }
 
+const manualPublishRequiredSnippets = [
+  'ManualPublishPackage',
+  'package_id',
+  'master_video_id',
+  'variant_id',
+  'platform_label',
+  'owner_decision',
+  'source_badge',
+  'source_id',
+  'source_type',
+  'master_video_url',
+  'caption',
+  'hashtags',
+  'cta',
+  'suggested_manual_steps',
+  'creative_score',
+  'readiness',
+  'generated_at',
+  'safety_flags',
+  'manual_publish_package_v1',
+  'Manual Publish Package',
+  'label="caption"',
+  'label="hashtags"',
+  'label="CTA"',
+  'label="video URL"',
+  'Download JSON',
+  'manual export only',
+  'approved_for_manual_publish',
+  'ready_for_owner_review',
+  'facebook_publish_enabled: false',
+  'instagram_publish_enabled: false',
+  'tiktok_publish_enabled: false',
+  'youtube_publish_enabled: false',
+  'line_broadcast_enabled: false',
+  'scheduler_enabled: false',
+  'external_api_calls_performed: false',
+  'production_actions_performed: false',
+  'mark_posted_performed: false',
+  'all_publish_flags_false',
+];
+
+for (const snippet of manualPublishRequiredSnippets) {
+  if (!manualPublishModule.includes(snippet) && !page.includes(snippet)) throw new Error(`Missing manual publish package snippet: ${snippet}`);
+}
+
+const forbiddenManualPublishPatterns = [
+  /graph\.facebook\.com/i,
+  /business_discovery/i,
+  /videos\.insert/i,
+  /content\/posting/i,
+  /api\.tiktok/i,
+  /LINE_BROADCAST_API/i,
+  /publish_enabled\s*:\s*true/i,
+  /publish_attempted\s*:\s*true/i,
+  /facebook_publish_enabled\s*:\s*true/i,
+  /instagram_publish_enabled\s*:\s*true/i,
+  /tiktok_publish_enabled\s*:\s*true/i,
+  /youtube_publish_enabled\s*:\s*true/i,
+  /scheduler_enabled\s*:\s*true/i,
+  /line_broadcast_enabled\s*:\s*true/i,
+  /external_api_calls_performed\s*:\s*true/i,
+  /mark_posted_performed\s*:\s*true/i,
+  /production_actions_performed\s*:\s*true/i,
+  /process\.env/,
+];
+
+for (const pattern of forbiddenManualPublishPatterns) {
+  if (pattern.test(manualPublishModule)) throw new Error(`Forbidden pattern found in manual publish package layer: ${pattern}`);
+}
+
 console.log(JSON.stringify({
   ok: true,
   route: '/short-video-distribution',
@@ -170,6 +247,9 @@ console.log(JSON.stringify({
   summary_fields: summaryFields,
   no_publish_action_exists: true,
   owner_review_decision_layer_v1: true,
+  manual_publish_package_v1: true,
+  manual_publish_package_api: '/api/short-video-distribution/manual-publish-package',
+  manual_publish_package_safety_flags_false: true,
   allowed_owner_decisions: ['approve', 'reject', 'request_changes'],
   decision_audit_log: 'runtime/short-video-preview-owner-decisions.jsonl',
   all_decision_safety_flags_false: true,

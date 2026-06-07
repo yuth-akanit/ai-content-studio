@@ -8,19 +8,13 @@ import { sampleApprovedMasterVerticalVideo } from '@/lib/short-video-distributio
 import { sampleMediaComposerMasterVideoRecord } from '@/lib/media-composer';
 import { loadShortVideoOwnerDecisionState, type ShortVideoOwnerReviewDecisionState } from '@/lib/short-video-distribution/owner-review-decisions';
 import { OwnerReviewDecisionPanel } from '@/components/short-video-distribution/owner-review-decision-panel';
+import { ManualPublishPackagePanel } from '@/components/short-video-distribution/manual-publish-package-panel';
+import {
+  buildManualPublishPackages,
+  buildShortVideoPreviewSourceMetadata,
+} from '@/lib/short-video-distribution/manual-publish-package';
 
 type ShortVideoDistributionSearchParams = Promise<Record<string, string | string[] | undefined>>;
-
-type PreviewSourceMetadata = {
-  master_video_id: string;
-  master_video_url: string;
-  source_type: string;
-  source_badge: string;
-  source_id: string;
-  tts_script: string;
-  fallback_used: boolean;
-  source_label: 'real_media_composer_preview_metadata' | 'static_sample_fixture_fallback';
-};
 
 const metadataLabelMap: Record<string, string> = {
   title: 'หัวข้อ',
@@ -70,48 +64,6 @@ function friendlyValue(value: unknown): string {
   if (Array.isArray(value)) return value.join(', ');
   const text = String(value);
   return systemValueLabelMap[text] || text;
-}
-
-function firstParam(params: Record<string, string | string[] | undefined>, key: string): string {
-  const value = params[key];
-  const text = Array.isArray(value) ? value[0] : value;
-  return String(text || '').trim();
-}
-
-function isHttpOrLocalVideoReference(value: string): boolean {
-  return /^https?:\/\//.test(value) || value.startsWith('/');
-}
-
-function boolFromParam(value: string, fallback: boolean): boolean {
-  if (value === 'true') return true;
-  if (value === 'false') return false;
-  return fallback;
-}
-
-function buildPreviewSourceMetadata(params: Record<string, string | string[] | undefined>): PreviewSourceMetadata {
-  const requestedMasterVideoUrl = firstParam(params, 'master_video_url');
-  const masterVideoUrl = isHttpOrLocalVideoReference(requestedMasterVideoUrl)
-    ? requestedMasterVideoUrl
-    : sampleApprovedMasterVerticalVideo.video_url;
-  const sourceBadge = firstParam(params, 'source_badge') || sampleMediaComposerMasterVideoRecord.source_badge;
-  const hasRealPreviewMetadata = Boolean(
-    firstParam(params, 'master_video_id')
-      || firstParam(params, 'source_id')
-      || requestedMasterVideoUrl
-      || firstParam(params, 'tts_script'),
-  ) && sourceBadge !== 'sample';
-  const fallbackUsed = boolFromParam(firstParam(params, 'fallback_used'), !hasRealPreviewMetadata);
-
-  return {
-    master_video_id: firstParam(params, 'master_video_id') || sampleApprovedMasterVerticalVideo.id,
-    master_video_url: masterVideoUrl,
-    source_type: firstParam(params, 'source_type') || sampleMediaComposerMasterVideoRecord.source_type,
-    source_badge: sourceBadge,
-    source_id: firstParam(params, 'source_id') || 'sample-image-pair',
-    tts_script: firstParam(params, 'tts_script') || sampleMediaComposerMasterVideoRecord.tts_script,
-    fallback_used: fallbackUsed,
-    source_label: fallbackUsed ? 'static_sample_fixture_fallback' : 'real_media_composer_preview_metadata',
-  };
 }
 
 function metadataEntries(metadata: PlatformMetadata): Array<{ label: string; value: string; key: string }> {
@@ -307,7 +259,7 @@ function VideoIcon() {
 }
 
 export default async function ShortVideoDistributionPage({ searchParams }: { searchParams: ShortVideoDistributionSearchParams }) {
-  const sourceMetadata = buildPreviewSourceMetadata(await searchParams);
+  const sourceMetadata = buildShortVideoPreviewSourceMetadata(await searchParams);
   const masterVideoForPreview = {
     ...sampleApprovedMasterVerticalVideo,
     id: sourceMetadata.master_video_id,
@@ -319,6 +271,7 @@ export default async function ShortVideoDistributionPage({ searchParams }: { sea
   };
   const preview = buildShortVideoPreviewQueue(masterVideoForPreview);
   const ownerDecisionStateByVariant = await loadShortVideoOwnerDecisionState();
+  const manualPublishPackages = buildManualPublishPackages(sourceMetadata, ownerDecisionStateByVariant);
   const readyLabel = `${preview.summary.ready_count} พร้อม / ${preview.summary.needs_improvement_count} ควรปรับ / ${preview.summary.blocked_count} ยังไม่ควรโพสต์`;
   const sourceBadgeTone = sourceMetadata.fallback_used
     ? 'border-amber-200 bg-amber-50 text-amber-800'
@@ -411,6 +364,8 @@ export default async function ShortVideoDistributionPage({ searchParams }: { sea
           </div>
         </CardContent>
       </Card>
+
+      <ManualPublishPackagePanel packages={manualPublishPackages} />
 
       <section className="grid gap-4 xl:grid-cols-2" aria-label="ข้อความตัวอย่างแยกตามแพลตฟอร์ม">
         {preview.preview_queue.map((variant) => (
