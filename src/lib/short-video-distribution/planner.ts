@@ -176,11 +176,15 @@ function hasField(metadata: PlatformMetadata, field: string): boolean {
   return value !== undefined && value !== null && value !== '' && (!Array.isArray(value) || value.length > 0);
 }
 
+function isHttpOrLocalVideoUrl(value: string): boolean {
+  return /^https?:\/\//.test(value || '') || /^\//.test(value || '');
+}
+
 function assertApprovedMasterVideo(masterVideo: MasterVerticalVideo): void {
   const errors: string[] = [];
   if (masterVideo.approval_status !== 'approved') errors.push('approval_status must be approved');
   if (masterVideo.asset_type !== 'vertical_mp4') errors.push('asset_type must be vertical_mp4');
-  if (!/^https?:\/\//.test(masterVideo.video_url || '')) errors.push('video_url must be an http(s) URL');
+  if (!isHttpOrLocalVideoUrl(masterVideo.video_url || '')) errors.push('video_url must be an http(s) URL or local public path');
   if (Number(masterVideo.duration_seconds || 0) <= 0) errors.push('duration_seconds must be greater than zero');
   if (!/^(9:16|0\.5625)$/.test(masterVideo.aspect_ratio || '')) errors.push('aspect_ratio must be 9:16');
   if (errors.length) {
@@ -235,7 +239,7 @@ function scoreQuality(masterVideo: MasterVerticalVideo, platform: ShortVideoPlat
   const rules = SHORT_VIDEO_PLATFORMS[platform];
   const checks: QualityGateCheck[] = [
     { name: 'approved_vertical_mp4', pass: masterVideo.approval_status === 'approved' && masterVideo.asset_type === 'vertical_mp4', weight: 20 },
-    { name: 'has_video_url', pass: /^https?:\/\//.test(masterVideo.video_url || ''), weight: 10 },
+    { name: 'has_video_url', pass: isHttpOrLocalVideoUrl(masterVideo.video_url || ''), weight: 10 },
     { name: 'duration_short_video_ready', pass: masterVideo.duration_seconds > 0 && masterVideo.duration_seconds <= 90, weight: 10 },
     { name: 'safe_preview_only_flags', pass: Object.values(SHORT_VIDEO_PREVIEW_ONLY_FLAGS).every((value) => value === false), weight: 20 },
     { name: 'required_platform_fields', pass: rules.requiredFields.every((field) => hasField(metadata, field)), weight: 20 },

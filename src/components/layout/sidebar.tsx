@@ -26,6 +26,7 @@ const navItems = [
   { href: '/campaigns', label: THAI_UI_LABELS.campaign_workspace, icon: FolderKanban },
   { href: '/campaigns/short-form', label: 'Short-form', icon: Clapperboard },
   { href: '/product-video', label: 'Product Video', icon: Video },
+  { href: '/media-composer', label: 'Media Composer', icon: Clapperboard },
   { href: '/short-video-distribution', label: 'ตัวอย่าง Short Video', icon: RadioTower },
   { href: '/settings', label: THAI_UI_LABELS.settings, icon: Settings },
 ];

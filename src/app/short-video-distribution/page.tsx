@@ -2,8 +2,10 @@ import { AlertTriangle, Award, CheckCircle2, Copy, Eye, ShieldCheck, Sparkles } 
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PageHeader } from '@/components/shared/page-header';
+import Link from 'next/link';
 import { buildShortVideoPreviewQueue, type PlatformMetadata, type ShortVideoPlatformVariant } from '@/lib/short-video-distribution/planner';
 import { sampleApprovedMasterVerticalVideo } from '@/lib/short-video-distribution/sample-fixture';
+import { sampleMediaComposerMasterVideoRecord } from '@/lib/media-composer';
 
 const metadataLabelMap: Record<string, string> = {
   title: 'หัวข้อ',
@@ -284,11 +286,22 @@ export default function ShortVideoDistributionPage() {
           <div className="rounded-2xl border border-slate-200 bg-white/80 p-4 text-sm leading-6 text-slate-700">
             <div className="mb-2 flex items-center gap-2 font-bold text-slate-950">
               <Eye className="h-4 w-4 text-indigo-600" />
-              คลิปต้นฉบับที่ใช้ทำตัวอย่าง
+              คลิปต้นฉบับที่ใช้ทำตัวอย่างจาก Media Composer
             </div>
-            <div className="grid gap-2 md:grid-cols-2">
-              <p><span className="font-semibold">รหัสคลิป:</span> {preview.master_video_id}</p>
-              <p><span className="font-semibold">รูปแบบ:</span> วิดีโอแนวตั้ง MP4, {sampleApprovedMasterVerticalVideo.aspect_ratio}, {sampleApprovedMasterVerticalVideo.duration_seconds} วินาที</p>
+            <div className="grid gap-4 md:grid-cols-[160px_1fr]">
+              <video className="aspect-[9/16] w-full rounded-2xl bg-slate-950 shadow-sm" controls preload="metadata" playsInline>
+                <source src={sampleApprovedMasterVerticalVideo.video_url} type="video/mp4" />
+                Browser ไม่รองรับวิดีโอ MP4
+              </video>
+              <div className="space-y-2">
+                <p><span className="font-semibold">รหัสคลิป:</span> {preview.master_video_id}</p>
+                <p><span className="font-semibold">รูปแบบ:</span> วิดีโอแนวตั้ง MP4, {sampleApprovedMasterVerticalVideo.aspect_ratio}, {sampleApprovedMasterVerticalVideo.duration_seconds} วินาที</p>
+                <p><span className="font-semibold">source_type:</span> {sampleMediaComposerMasterVideoRecord.source_type}</p>
+                <p><span className="font-semibold">ready_for_distribution_preview:</span> {String(sampleMediaComposerMasterVideoRecord.ready_for_distribution_preview)}</p>
+                <Link href="/media-composer" className="inline-flex min-h-10 items-center rounded-2xl border border-indigo-200 bg-indigo-50 px-4 font-black text-indigo-700 hover:bg-indigo-100">
+                  เปิด Media Composer
+                </Link>
+              </div>
             </div>
           </div>
         </CardContent>

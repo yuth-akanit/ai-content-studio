@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { PageHeader } from '@/components/shared/page-header';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -1062,6 +1063,18 @@ export default function ProductVideoPage() {
           </Badge>
         )}
       />
+
+      <Card className="border-indigo-100 bg-indigo-50/70 shadow-sm">
+        <CardContent className="flex flex-wrap items-center justify-between gap-3 py-4">
+          <div>
+            <div className="text-base font-black text-indigo-950">ต้องการสร้าง master video จากภาพคู่หรือ raw video?</div>
+            <p className="text-sm text-indigo-900">เข้า Media Composer v1 เพื่อ render preview แล้วส่งต่อไป Short Video Distribution โดย publish flags ยังปิดทั้งหมด</p>
+          </div>
+          <Link href="/media-composer" className="inline-flex min-h-10 items-center justify-center rounded-2xl border border-indigo-200 bg-white px-4 font-black text-indigo-700 hover:bg-indigo-100">
+            เปิด Media Composer
+          </Link>
+        </CardContent>
+      </Card>
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">
         <Card>
