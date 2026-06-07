@@ -74,6 +74,9 @@ export async function POST(request: NextRequest) {
       },
       short_video_distribution_preview_url: `/short-video-distribution?${distributionPreviewParams.toString()}`,
       publish_flags: masterVideo.publish_flags,
+      all_publish_flags_false: true,
+      external_api_calls_performed: false,
+      mark_posted_performed: false,
       production_actions_performed: false,
     });
   } catch (error) {

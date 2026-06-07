@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowRight, Film, ImagePlus, Loader2, ShieldCheck, Volume2 } from 'lucide-react';
+import { ArrowRight, Film, ImagePlus, Loader2, ShieldCheck, Upload, Volume2 } from 'lucide-react';
 import { PageHeader } from '@/components/shared/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -55,6 +55,21 @@ function flagLabel(value: boolean): string {
   return value ? 'เปิด' : 'ปิด';
 }
 
+function sourceBadgeDescription(badge?: MediaComposerSourceBadge): string {
+  switch (badge) {
+    case 'sample':
+      return 'sample — ไฟล์ตัวอย่างของระบบ ใช้เมื่อยังไม่มี media จริงให้เลือก';
+    case 'minio_safe_url':
+      return 'minio_safe_url — ไฟล์นี้มาจาก media ที่เคยอัปโหลด/สร้างไว้ในระบบ';
+    case 'product_video_preview_log':
+      return 'product_video_preview_log — ไฟล์นี้มาจาก media ที่เคยอัปโหลด/สร้างไว้ในระบบ';
+    case 'uploaded_asset':
+      return 'uploaded_asset — ไฟล์นี้มาจาก media ที่เคยอัปโหลด/สร้างไว้ในระบบ';
+    default:
+      return 'sample — ไฟล์ตัวอย่างของระบบ';
+  }
+}
+
 function buildRequestBody(state: InputState) {
   if (state.source_type === 'image_pair') {
     return {
@@ -92,6 +107,11 @@ export default function MediaComposerPage() {
     if (state.source_type === 'image_pair') return 'สร้างจากภาพก่อน/หลัง พร้อม pan/zoom/crossfade';
     return 'รีเฟรม raw video เป็น 9:16 ลดเสียงเดิม และใส่ TTS/subtitle/CTA';
   }, [state.source_type]);
+
+  const selectedSourceOption = useMemo(
+    () => sourceOptions.find((option) => option.id === selectedSourceId),
+    [sourceOptions, selectedSourceId],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -235,6 +255,30 @@ export default function MediaComposerPage() {
                   <div className="rounded-xl bg-white px-3 py-2 ring-1 ring-indigo-100">source_badge: <b>{state.source_badge || 'sample'}</b></div>
                   <div className="rounded-xl bg-white px-3 py-2 ring-1 ring-indigo-100">source_id: <b>{state.source_id || 'sample-image-pair'}</b></div>
                 </div>
+                <div className="rounded-2xl border border-indigo-100 bg-white p-3 text-sm leading-6 text-indigo-950">
+                  <div className="font-black">ที่มาของ media ที่เลือก</div>
+                  <p>{sourceBadgeDescription(state.source_badge)}</p>
+                  {selectedSourceOption?.source_url_summary ? (
+                    <p className="mt-1 break-words text-xs text-indigo-800">source_url_summary: {selectedSourceOption.source_url_summary}</p>
+                  ) : null}
+                  <p className="mt-2 text-xs font-bold text-amber-700">อัปโหลดไฟล์ใหม่ในหน้านี้ยังไม่เปิดใช้งาน</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-700">
+              <div className="flex items-center gap-2 font-black text-slate-950">
+                <Upload className="h-4 w-4 text-slate-500" />
+                Direct Upload — coming next
+              </div>
+              <p className="mt-1 leading-6">อัปโหลดไฟล์ใหม่ในหน้านี้ยังไม่เปิดใช้งาน จึงไม่แสดงว่าไฟล์ถูกอัปโหลดจากหน้านี้ถ้ายังมาจาก preview log / minio / uploaded asset เดิม</p>
+              <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                {['Upload Raw Video', 'Upload Before Image', 'Upload After Image'].map((label) => (
+                  <button key={label} type="button" disabled className="min-h-11 rounded-2xl border border-slate-200 bg-white px-3 text-left text-xs font-black text-slate-400">
+                    {label}
+                    <span className="block font-semibold">coming next</span>
+                  </button>
+                ))}
               </div>
             </div>
 

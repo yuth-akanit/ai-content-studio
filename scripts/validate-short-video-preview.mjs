@@ -13,6 +13,8 @@ const files = {
   manualPublishLib: path.join(root, 'src/lib/short-video-distribution/manual-publish-package.ts'),
   manualPublishRoute: path.join(root, 'src/app/api/short-video-distribution/manual-publish-package/route.ts'),
   manualPublishPanel: path.join(root, 'src/components/short-video-distribution/manual-publish-package-panel.tsx'),
+  mediaComposerLib: path.join(root, 'src/lib/media-composer.ts'),
+  mediaComposerPage: path.join(root, 'src/app/media-composer/page.tsx'),
 };
 
 function read(file) {
@@ -30,6 +32,8 @@ const ownerDecisionPanel = read(files.ownerDecisionPanel);
 const manualPublishLib = read(files.manualPublishLib);
 const manualPublishRoute = read(files.manualPublishRoute);
 const manualPublishPanel = read(files.manualPublishPanel);
+const mediaComposerLib = read(files.mediaComposerLib);
+const mediaComposerPage = read(files.mediaComposerPage);
 const combinedNewModule = `${page}\n${planner}\n${fixture}`;
 const ownerDecisionModule = `${ownerDecisionLib}\n${ownerDecisionRoute}\n${ownerDecisionPanel}`;
 const manualPublishModule = `${manualPublishLib}\n${manualPublishRoute}\n${manualPublishPanel}`;
@@ -234,6 +238,24 @@ const forbiddenManualPublishPatterns = [
 
 for (const pattern of forbiddenManualPublishPatterns) {
   if (pattern.test(manualPublishModule)) throw new Error(`Forbidden pattern found in manual publish package layer: ${pattern}`);
+}
+
+const mediaComposerRequiredSnippets = [
+  'raw_video_passthrough_preview',
+  "master_video_url: isRawVideoPassthrough ? input.raw_video_url : SAMPLE_MASTER_VIDEO_URL",
+  'ไฟล์นี้มาจาก media ที่เคยอัปโหลด/สร้างไว้ในระบบ',
+  'อัปโหลดไฟล์ใหม่ในหน้านี้ยังไม่เปิดใช้งาน',
+  'Upload Raw Video',
+  'Upload Before Image',
+  'Upload After Image',
+  'sample',
+  'minio_safe_url',
+  'product_video_preview_log',
+  'uploaded_asset',
+];
+
+for (const snippet of mediaComposerRequiredSnippets) {
+  if (!mediaComposerLib.includes(snippet) && !mediaComposerPage.includes(snippet)) throw new Error(`Missing media composer snippet: ${snippet}`);
 }
 
 console.log(JSON.stringify({

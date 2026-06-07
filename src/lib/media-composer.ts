@@ -123,11 +123,13 @@ export function buildMediaComposerMasterVideoRecord(input: MediaComposerInput): 
   const cta = cleanText(input.cta_banner, DEFAULT_CTA);
   const ttsScript = cleanText(input.tts_script, DEFAULT_TTS_SCRIPT);
   const isImagePair = input.source_type === 'image_pair';
+  const isRawVideoPassthrough = input.source_type === 'raw_video'
+    && !input.raw_video_url.startsWith('/samples/');
 
   return {
     id: `master_video_media_composer_${input.source_type}_preview_001`,
     record_type: 'master_video',
-    master_video_url: SAMPLE_MASTER_VIDEO_URL,
+    master_video_url: isRawVideoPassthrough ? input.raw_video_url : SAMPLE_MASTER_VIDEO_URL,
     duration_seconds: 5.4,
     source_type: input.source_type,
     tts_script: ttsScript,
@@ -136,7 +138,11 @@ export function buildMediaComposerMasterVideoRecord(input: MediaComposerInput): 
     asset_type: 'vertical_mp4',
     aspect_ratio: '9:16',
     brand,
-    title: isImagePair ? 'Before/After ล้างแอร์ PA Air Service' : 'Raw Video รีเฟรมเป็นคลิปแนวตั้ง PA Air Service',
+    title: isImagePair
+      ? 'Before/After ล้างแอร์ PA Air Service'
+      : isRawVideoPassthrough
+        ? 'raw_video_passthrough_preview'
+        : 'Raw Video รีเฟรมเป็นคลิปแนวตั้ง PA Air Service',
     service: 'ล้างแอร์บ้าน',
     service_area: 'สมุทรปราการ',
     value_prop: 'แปลงไฟล์ต้นทางให้เป็น master video แนวตั้งพร้อมเสียง TTS ซับไตเติล และ CTA สำหรับตรวจทานก่อนกระจายคลิป',
@@ -160,7 +166,13 @@ export function buildMediaComposerMasterVideoRecord(input: MediaComposerInput): 
         ]
       : [
           { name: 'input_model', status: 'planned', detail: 'source_type=raw_video with raw_video_url' },
-          { name: 'normalize_9_16', status: 'planned', detail: 'center crop/scale raw footage to vertical 1080x1920' },
+          {
+            name: isRawVideoPassthrough ? 'raw_video_passthrough_preview' : 'normalize_9_16',
+            status: isRawVideoPassthrough ? 'rendered_sample' : 'planned',
+            detail: isRawVideoPassthrough
+              ? 'real raw_video_url is passed through as master_video_url for manual preview; no /samples fallback used'
+              : 'center crop/scale raw footage to vertical 1080x1920',
+          },
           { name: 'audio_mix', status: 'planned', detail: 'reduce original audio and use tts_script as primary voiceover' },
           { name: 'subtitles_cta', status: 'planned', detail: 'subtitle and CTA banner overlay prepared for preview render' },
         ],
