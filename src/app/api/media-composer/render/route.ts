@@ -7,15 +7,21 @@ import {
   type MediaComposerInput,
 } from '@/lib/media-composer';
 
+import { listReadOnlyMediaComposerSourceOptions } from '@/lib/media-composer-real-media-adapter';
+
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
+  const sources = await listReadOnlyMediaComposerSourceOptions();
   return NextResponse.json({
     ok: true,
     module: 'media_composer_v1',
     mode: 'preview_render_only',
     supported_source_types: ['image_pair', 'raw_video'],
     sample_input: sampleMediaComposerImagePairInput,
+    source_options: sources.options,
+    fallback_used: sources.fallback_used,
+    source_counts: sources.source_counts,
     master_video: sampleMediaComposerMasterVideoRecord,
     publish_flags: sampleMediaComposerMasterVideoRecord.publish_flags,
     ready_for_distribution_preview: sampleMediaComposerMasterVideoRecord.ready_for_distribution_preview,
@@ -49,10 +55,12 @@ export async function POST(request: NextRequest) {
         master_video_url: masterVideo.master_video_url,
         duration_seconds: masterVideo.duration_seconds,
         source_type: masterVideo.source_type,
+        source_badge: masterVideo.source_badge,
+        source_id: masterVideo.source_id,
         tts_script: masterVideo.tts_script,
         ready_for_distribution_preview: masterVideo.ready_for_distribution_preview,
       },
-      short_video_distribution_preview_url: `/short-video-distribution?master_video_id=${encodeURIComponent(masterVideo.id)}`,
+      short_video_distribution_preview_url: `/short-video-distribution?master_video_id=${encodeURIComponent(masterVideo.id)}&source_badge=${encodeURIComponent(masterVideo.source_badge)}&source_id=${encodeURIComponent(masterVideo.source_id || '')}`,
       publish_flags: masterVideo.publish_flags,
       production_actions_performed: false,
     });

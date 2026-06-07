@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ArrowRight, Film, ImagePlus, Loader2, ShieldCheck, Volume2 } from 'lucide-react';
 import { PageHeader } from '@/components/shared/page-header';
 import { Badge } from '@/components/ui/badge';
@@ -9,13 +9,22 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { sampleMediaComposerImagePairInput, sampleMediaComposerRawVideoInput, type MediaComposerMasterVideoRecord, type MediaComposerSourceType } from '@/lib/media-composer';
+import { sampleMediaComposerImagePairInput, sampleMediaComposerRawVideoInput, type MediaComposerMasterVideoRecord, type MediaComposerSourceBadge, type MediaComposerSourceType } from '@/lib/media-composer';
+import type { MediaComposerSourceOption } from '@/lib/media-composer-real-media-adapter';
 
 type ComposerResponse = {
   ok: boolean;
   error?: string;
   errors?: string[];
   master_video?: MediaComposerMasterVideoRecord;
+  production_actions_performed: false;
+};
+
+type SourcesResponse = {
+  ok: boolean;
+  source_options?: MediaComposerSourceOption[];
+  fallback_used?: boolean;
+  source_counts?: Record<MediaComposerSourceBadge, number>;
   production_actions_performed: false;
 };
 
@@ -26,6 +35,8 @@ type InputState = {
   raw_video_url: string;
   tts_script: string;
   cta_banner: string;
+  source_id?: string;
+  source_badge?: MediaComposerSourceBadge;
 };
 
 const defaultState: InputState = {
@@ -35,6 +46,8 @@ const defaultState: InputState = {
   raw_video_url: sampleMediaComposerRawVideoInput.raw_video_url,
   tts_script: sampleMediaComposerImagePairInput.tts_script,
   cta_banner: sampleMediaComposerImagePairInput.cta_banner || 'ทัก PA Air Service เพื่อจองคิวล้างแอร์',
+  source_id: 'sample-image-pair',
+  source_badge: 'sample',
 };
 
 function flagLabel(value: boolean): string {
@@ -50,6 +63,8 @@ function buildRequestBody(state: InputState) {
       tts_script: state.tts_script,
       cta_banner: state.cta_banner,
       brand: 'PA Air Service',
+      source_id: state.source_id,
+      source_badge: state.source_badge,
     };
   }
 
@@ -59,18 +74,79 @@ function buildRequestBody(state: InputState) {
     tts_script: state.tts_script,
     cta_banner: state.cta_banner,
     brand: 'PA Air Service',
+    source_id: state.source_id,
+    source_badge: state.source_badge,
   };
 }
-
 export default function MediaComposerPage() {
   const [state, setState] = useState<InputState>(defaultState);
   const [loading, setLoading] = useState(false);
+  const [loadingSources, setLoadingSources] = useState(true);
+  const [sourceOptions, setSourceOptions] = useState<MediaComposerSourceOption[]>([]);
+  const [selectedSourceId, setSelectedSourceId] = useState('sample-image-pair');
+  const [fallbackUsed, setFallbackUsed] = useState(true);
   const [result, setResult] = useState<ComposerResponse | null>(null);
 
   const sourceSummary = useMemo(() => {
     if (state.source_type === 'image_pair') return 'สร้างจากภาพก่อน/หลัง พร้อม pan/zoom/crossfade';
     return 'รีเฟรม raw video เป็น 9:16 ลดเสียงเดิม และใส่ TTS/subtitle/CTA';
   }, [state.source_type]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadSources() {
+      setLoadingSources(true);
+      try {
+        const response = await fetch('/api/media-composer/sources', { cache: 'no-store' });
+        const data = (await response.json()) as SourcesResponse;
+        if (cancelled) return;
+        const options = data.source_options || [];
+        setSourceOptions(options);
+        setFallbackUsed(Boolean(data.fallback_used));
+        const first = options[0];
+        if (first) applySourceOption(first);
+      } catch {
+        if (!cancelled) {
+          setSourceOptions([]);
+          setFallbackUsed(true);
+        }
+      } finally {
+        if (!cancelled) setLoadingSources(false);
+      }
+    }
+    loadSources();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  function applySourceOption(option: MediaComposerSourceOption) {
+    setSelectedSourceId(option.id);
+    if (option.input.source_type === 'image_pair') {
+      setState({
+        source_type: 'image_pair',
+        before_image_url: option.input.before_image_url,
+        after_image_url: option.input.after_image_url,
+        raw_video_url: sampleMediaComposerRawVideoInput.raw_video_url,
+        tts_script: option.input.tts_script,
+        cta_banner: option.input.cta_banner || defaultState.cta_banner,
+        source_id: option.input.source_id || option.id,
+        source_badge: option.input.source_badge || option.source_badge,
+      });
+      return;
+    }
+
+    setState({
+      source_type: 'raw_video',
+      before_image_url: sampleMediaComposerImagePairInput.before_image_url,
+      after_image_url: sampleMediaComposerImagePairInput.after_image_url,
+      raw_video_url: option.input.raw_video_url,
+      tts_script: option.input.tts_script,
+      cta_banner: option.input.cta_banner || defaultState.cta_banner,
+      source_id: option.input.source_id || option.id,
+      source_badge: option.input.source_badge || option.source_badge,
+    });
+  }
 
   async function renderPreview() {
     setLoading(true);
@@ -123,6 +199,44 @@ export default function MediaComposerPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-5">
+            <div className="rounded-2xl border border-indigo-100 bg-indigo-50/70 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-black text-indigo-950">Read-only real media adapter</div>
+                  <p className="text-sm leading-6 text-indigo-900">
+                    โหลดเฉพาะ metadata จาก Product Video preview logs ที่อนุมัติแล้วหรือ safe media URL; ไม่มีการ mutate DB และไม่มี publish API
+                  </p>
+                </div>
+                <Badge variant="outline" className="border-indigo-200 bg-white text-indigo-700">
+                  {fallbackUsed ? 'sample fallback' : 'real media available'}
+                </Badge>
+              </div>
+              <div className="mt-4 space-y-2">
+                <Label htmlFor="media-source">เลือกแหล่ง media</Label>
+                <select
+                  id="media-source"
+                  value={selectedSourceId}
+                  disabled={loadingSources || sourceOptions.length === 0}
+                  onChange={(event) => {
+                    const option = sourceOptions.find((item) => item.id === event.target.value);
+                    if (option) applySourceOption(option);
+                  }}
+                  className="min-h-11 w-full rounded-2xl border border-indigo-200 bg-white px-4 text-sm font-semibold text-slate-900 outline-none ring-indigo-500/20 transition focus:border-indigo-500 focus:ring-4"
+                >
+                  {loadingSources ? <option>กำลังโหลด source แบบ read-only...</option> : null}
+                  {sourceOptions.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      [{option.source_badge}] {option.label}
+                    </option>
+                  ))}
+                </select>
+                <div className="grid gap-2 text-xs text-indigo-950 sm:grid-cols-2">
+                  <div className="rounded-xl bg-white px-3 py-2 ring-1 ring-indigo-100">source_badge: <b>{state.source_badge || 'sample'}</b></div>
+                  <div className="rounded-xl bg-white px-3 py-2 ring-1 ring-indigo-100">source_id: <b>{state.source_id || 'sample-image-pair'}</b></div>
+                </div>
+              </div>
+            </div>
+
             <div className="grid gap-3 sm:grid-cols-2">
               <button
                 type="button"
@@ -192,6 +306,8 @@ export default function MediaComposerPage() {
                   <OutputLine label="master_video_url" value={result.master_video.master_video_url} />
                   <OutputLine label="duration_seconds" value={`${result.master_video.duration_seconds}`} />
                   <OutputLine label="source_type" value={result.master_video.source_type} />
+                  <OutputLine label="source_badge" value={result.master_video.source_badge} />
+                  <OutputLine label="source_id" value={result.master_video.source_id || '-'} />
                   <OutputLine label="ready_for_distribution_preview" value="true" />
                 </div>
                 <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm leading-6 text-emerald-950">

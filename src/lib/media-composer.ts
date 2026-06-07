@@ -2,11 +2,15 @@ import type { MasterVerticalVideo } from '@/lib/short-video-distribution/planner
 
 export type MediaComposerSourceType = 'image_pair' | 'raw_video';
 
+export type MediaComposerSourceBadge = 'sample' | 'product_video_preview_log' | 'uploaded_asset' | 'minio_safe_url';
+
 export type MediaComposerBaseInput = {
   source_type: MediaComposerSourceType;
   tts_script: string;
   cta_banner?: string;
   brand?: string;
+  source_id?: string;
+  source_badge?: MediaComposerSourceBadge;
 };
 
 export type MediaComposerImagePairInput = MediaComposerBaseInput & {
@@ -50,6 +54,8 @@ export type MediaComposerMasterVideoRecord = {
   hook: string;
   visual_notes: string;
   creative_angle: string;
+  source_badge: MediaComposerSourceBadge;
+  source_id?: string;
   composer_mode: 'preview_render_only';
   render_steps: MediaComposerRenderStep[];
   publish_flags: {
@@ -142,6 +148,8 @@ export function buildMediaComposerMasterVideoRecord(input: MediaComposerInput): 
       ? 'Image pair mode: render 1080x1920 MP4 with pan/zoom before shot, crossfade, after shot, PA Air Service branding, subtitles, and CTA banner.'
       : 'Raw video mode: normalize source video to 9:16, reduce original audio, add Thai TTS script audio, subtitles, PA Air Service branding, and CTA banner.',
     creative_angle: 'ใช้หลักฐานก่อน-หลังและคำพูดธรรมชาติภาษาไทยเพื่อให้เจ้าของตรวจ master video ก่อนส่งไปหน้า Short Video Distribution',
+    source_badge: input.source_badge || 'sample',
+    source_id: input.source_id,
     composer_mode: 'preview_render_only',
     render_steps: isImagePair
       ? [
