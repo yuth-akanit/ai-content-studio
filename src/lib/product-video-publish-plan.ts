@@ -12,6 +12,7 @@ import {
   ProductVideoSelectedFacebookPage,
   resolveProductVideoSelectedFacebookPage,
 } from '@/lib/product-video-facebook-page';
+import { ProductVideoQualityScore, isPublishQualityAllowed, normalizeQualityScore } from '@/lib/product-video-quality-score';
 
 export type ProductVideoPublishPlanStatus = 'publish_plan_ready';
 export type ProductVideoPublishPlanMedia =
@@ -60,6 +61,7 @@ export interface ProductVideoPublishPlanPreview extends ProductVideoPreviewSafet
     block_reason: string | null;
   }>;
   selected_page_count: number;
+  quality_score: ProductVideoQualityScore;
   content: {
     caption: string;
     marketing_caption: string;
@@ -242,6 +244,22 @@ export async function buildProductVideoPublishPlanPreview(
       status: 409,
     });
   }
+  const qualityScore = normalizeQualityScore(item);
+  const publishQuality = isPublishQualityAllowed(qualityScore);
+  if (!publishQuality.allowed) {
+    const code = !qualityScore
+      ? 'product_video_quality_score_missing'
+      : qualityScore.quality_score < 80
+        ? 'product_video_quality_score_too_low_for_publish'
+        : 'product_video_quality_decision_not_ready';
+    throw Object.assign(new Error(publishQuality.reason || code), {
+      code,
+      status: 409,
+      quality_score: qualityScore,
+      block_reason: publishQuality.reason,
+    });
+  }
+  const normalizedQualityScore = qualityScore as ProductVideoQualityScore;
   assertBrandTargetPageGuard(item);
 
   const metadata = await findLatestProductVideoMediaMetadata(item.preview_id);
@@ -274,6 +292,7 @@ export async function buildProductVideoPublishPlanPreview(
     },
     target_pages: targetPages.length > 0 ? targetPages : [primaryTargetPage],
     selected_page_count: targetPages.length > 0 ? targetPages.length : 1,
+    quality_score: normalizedQualityScore,
     content: {
       caption: item.marketing_caption || item.caption,
       marketing_caption: item.marketing_caption || item.caption || '',

@@ -988,13 +988,18 @@ export async function executeProductVideoManualMultiPagePublish(input: {
       const code = typeof (error as { code?: unknown }).code === 'string'
         ? (error as { code: string }).code
         : 'manual_publish_page_failed';
+      const blockReason = typeof (error as { block_reason?: unknown }).block_reason === 'string'
+        ? (error as { block_reason: string }).block_reason
+        : typeof (error as { message?: unknown }).message === 'string'
+          ? (error as { message: string }).message
+          : code;
       pageResults.push({
         page_name: page.selected_page_name,
         selected_channel_id: page.selected_channel_id,
         selected_page_id: page.selected_page_id,
         facebook_page_id: page.facebook_page_id,
         publish_allowed: false,
-        block_reason: code,
+        block_reason: blockReason,
         duplicate_found: false,
         token_resolved: Boolean(page.page_access_token),
         facebook_post_performed: false,

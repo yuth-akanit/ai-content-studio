@@ -31,6 +31,7 @@ type PreviewLogStatus =
   | 'changes_requested';
 
 type PreviewDecision = 'approve' | 'reject' | 'request_changes';
+type QualityDecision = 'ready_for_owner_review' | 'needs_improvement' | 'blocked_low_quality';
 
 type PublishPageResult = {
   page_name: string;
@@ -201,6 +202,14 @@ interface PreviewLogItem {
   media_type?: string;
   media_checksum?: string;
   media_status?: string;
+  content_id?: string;
+  quality_score?: number;
+  hook_score?: number;
+  visual_clarity_score?: number;
+  before_after_score?: number;
+  caption_score?: number;
+  cta_score?: number;
+  decision?: QualityDecision;
 }
 
 type BrandContext = 'syncflow' | 'paa_air';
@@ -346,6 +355,23 @@ function getBrandPageMismatchMessage(item: PreviewLogItem): string | null {
   }
 
   return null;
+}
+
+function getQualityBlockReason(item: PreviewLogItem, gate: 'render' | 'publish'): string | null {
+  if (typeof item.quality_score !== 'number') {
+    return gate === 'render' ? 'Quality score is missing for render.' : 'Quality score is missing for publish.';
+  }
+  if (gate === 'render' && item.quality_score < 70) return 'Quality score is too low for render.';
+  if (gate === 'publish' && item.quality_score < 80) return 'Quality score is too low for publish.';
+  if (gate === 'publish' && item.decision !== 'ready_for_owner_review') return 'Quality decision is not ready_for_owner_review.';
+  return null;
+}
+
+function getQualityBadgeVariant(decision?: QualityDecision): 'default' | 'secondary' | 'destructive' | 'outline' {
+  if (decision === 'ready_for_owner_review') return 'default';
+  if (decision === 'needs_improvement') return 'secondary';
+  if (decision === 'blocked_low_quality') return 'destructive';
+  return 'outline';
 }
 
 function getFacebookPageId(item: PreviewLogItem, plan?: PublishPlanPreview): string {
@@ -634,6 +660,12 @@ export default function ProductVideoPage() {
 
     if (!hasRealUploadedAsset(item.asset_id || item.uploaded_asset_id, item.public_image_url) || isFallbackAppIconUrl(item.public_image_url)) {
       toast.error('Render ถูกบล็อก: ต้องใช้รูปที่อัปโหลดจริงจาก /api/product-video/assets/<uuid> ไม่ใช่ app-icon fallback');
+      return;
+    }
+
+    const qualityBlockReason = getQualityBlockReason(item, 'render');
+    if (qualityBlockReason) {
+      toast.error(qualityBlockReason);
       return;
     }
 
@@ -1297,6 +1329,28 @@ export default function ProductVideoPage() {
                   </div>
                 </details>
 
+                <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-4 text-xs text-indigo-950 space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="text-sm font-semibold">Quality Score</div>
+                    <Badge variant={getQualityBadgeVariant(item.decision)}>{item.decision || 'quality_score_missing'}</Badge>
+                  </div>
+                  <div className="text-2xl font-bold">{typeof item.quality_score === 'number' ? item.quality_score : '-'}<span className="text-sm font-medium"> / 100</span></div>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <div>hook_score: <span className="font-medium">{item.hook_score ?? '-'}</span></div>
+                    <div>visual_clarity_score: <span className="font-medium">{item.visual_clarity_score ?? '-'}</span></div>
+                    <div>before_after_score: <span className="font-medium">{item.before_after_score ?? '-'}</span></div>
+                    <div>caption_score: <span className="font-medium">{item.caption_score ?? '-'}</span></div>
+                    <div>cta_score: <span className="font-medium">{item.cta_score ?? '-'}</span></div>
+                    <div>decision: <span className="font-medium">{item.decision || '-'}</span></div>
+                  </div>
+                  {getQualityBlockReason(item, 'render') ? (
+                    <div className="rounded-lg border border-red-200 bg-red-50 p-2 font-semibold text-red-800">Render block: {getQualityBlockReason(item, 'render')}</div>
+                  ) : null}
+                  {getQualityBlockReason(item, 'publish') ? (
+                    <div className="rounded-lg border border-red-200 bg-red-50 p-2 font-semibold text-red-800">Publish block: {getQualityBlockReason(item, 'publish')}</div>
+                  ) : null}
+                </div>
+
                 <div className="grid gap-2 text-xs text-gray-600 sm:grid-cols-2">
                   <div>brand_context: <span className="font-medium text-gray-900">{item.brand_context}</span></div>
                   <div>target_page_key: <span className="font-medium text-gray-900">{item.target_page_key}</span></div>
@@ -1364,7 +1418,7 @@ export default function ProductVideoPage() {
                     <Button
                       size="sm"
                       onClick={() => handleRenderRequest(item.preview_id)}
-                      disabled={renderingPreviewId === item.preview_id || !item.public_image_url || !item.image_urls?.length || !hasRealUploadedAsset(item.asset_id || item.uploaded_asset_id, item.public_image_url) || isFallbackAppIconUrl(item.public_image_url)}
+                      disabled={renderingPreviewId === item.preview_id || Boolean(getQualityBlockReason(item, 'render')) || !item.public_image_url || !item.image_urls?.length || !hasRealUploadedAsset(item.asset_id || item.uploaded_asset_id, item.public_image_url) || isFallbackAppIconUrl(item.public_image_url)}
                       title={item.public_image_url && item.image_urls?.length ? 'ส่งคำขอ render ด้วย public image URL' : 'ต้องมี public_image_url จากรูปที่อัปโหลดก่อน'}
                     >
                       {renderingPreviewId === item.preview_id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Clapperboard className="mr-2 h-4 w-4" />}
@@ -1424,7 +1478,7 @@ export default function ProductVideoPage() {
                     size="sm"
                     variant="secondary"
                     onClick={() => handlePublishPlanPreview(item.preview_id)}
-                    disabled={item.status !== 'approved_for_future_publish' || loadingPublishPlanId === item.preview_id}
+                    disabled={item.status !== 'approved_for_future_publish' || Boolean(getQualityBlockReason(item, 'publish')) || loadingPublishPlanId === item.preview_id}
                     title={item.status === 'approved_for_future_publish' ? 'สร้าง publish plan preview แบบ read-only' : 'ต้อง approved_for_future_publish ก่อน'}
                   >
                     {loadingPublishPlanId === item.preview_id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
@@ -1497,7 +1551,7 @@ export default function ProductVideoPage() {
                     <Button
                       size="sm"
                       onClick={() => handlePublishAuthorization(item.preview_id)}
-                      disabled={authorizingPreviewId === item.preview_id}
+                      disabled={Boolean(getQualityBlockReason(item, 'publish')) || authorizingPreviewId === item.preview_id}
                     >
                       {authorizingPreviewId === item.preview_id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                       Authorize publish manually ({publishPlan.selected_page_count || publishPlan.target_pages?.length || 1} เพจ)
@@ -1536,7 +1590,7 @@ export default function ProductVideoPage() {
                     <Button
                       size="sm"
                       onClick={() => handlePublishExecutionDryRun(item.preview_id)}
-                      disabled={dryRunningExecutionPreviewId === item.preview_id}
+                      disabled={Boolean(getQualityBlockReason(item, 'publish')) || dryRunningExecutionPreviewId === item.preview_id}
                     >
                       {dryRunningExecutionPreviewId === item.preview_id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                       Run guarded dry-run executor ({getPreviewSelectedPageEntries(item).length || 1} เพจ)
@@ -1545,7 +1599,7 @@ export default function ProductVideoPage() {
                       size="sm"
                       variant="destructive"
                       onClick={() => handleManualPublishExecute(item)}
-                      disabled={manualPublishingPreviewId === item.preview_id}
+                      disabled={Boolean(getQualityBlockReason(item, 'publish')) || manualPublishingPreviewId === item.preview_id}
                       title="Manual executor gate: real publish ยังถูก block จนกว่า flag/approval แยกจะเปิด"
                     >
                       {manualPublishingPreviewId === item.preview_id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}

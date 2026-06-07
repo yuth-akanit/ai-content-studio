@@ -1,6 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import {
+  ProductVideoQualityDecision,
+  evaluateProductVideoQualityScore,
+  normalizeQualityScore,
+} from '@/lib/product-video-quality-score';
 
 type ProductVideoPlatform = 'facebook_page' | 'facebook' | 'line' | string;
 
@@ -67,6 +72,14 @@ export interface ProductVideoPreviewLogInput {
   error?: string | null;
   status?: ProductVideoPreviewLogStatus;
   renderer_called?: boolean;
+  content_id?: string;
+  quality_score?: number;
+  hook_score?: number;
+  visual_clarity_score?: number;
+  before_after_score?: number;
+  caption_score?: number;
+  cta_score?: number;
+  decision?: ProductVideoQualityDecision;
 }
 
 export interface ProductVideoPreviewLogRecord extends Omit<ProductVideoPreviewLogInput, 'renderer_called'>, ProductVideoPreviewSafetyFlags {
@@ -174,6 +187,19 @@ function normalizePreviewLogRecord(value: unknown): ProductVideoPreviewLogRecord
     phaya_called: false,
     s3_upload_performed: false,
     mark_posted_performed: false,
+    ...(() => {
+      const quality = normalizeQualityScore(value as Partial<ProductVideoPreviewLogRecord>);
+      return quality ? {
+        content_id: quality.content_id || value.preview_id,
+        quality_score: quality.quality_score,
+        hook_score: quality.hook_score,
+        visual_clarity_score: quality.visual_clarity_score,
+        before_after_score: quality.before_after_score,
+        caption_score: quality.caption_score,
+        cta_score: quality.cta_score,
+        decision: quality.decision,
+      } : {};
+    })(),
   };
 }
 
@@ -257,8 +283,11 @@ export async function appendProductVideoPreviewLog(
   const logPath = getPreviewLogPath();
   await mkdir(path.dirname(logPath), { recursive: true });
 
+  const previewId = randomUUID();
+  const qualityScore = normalizeQualityScore({ ...input, preview_id: previewId }) || evaluateProductVideoQualityScore({ ...(input as unknown as Record<string, unknown>), preview_id: previewId });
+
   const record: ProductVideoPreviewLogRecord = {
-    preview_id: randomUUID(),
+    preview_id: previewId,
     created_at: new Date().toISOString(),
     brand_context: input.brand_context,
     target_page_key: input.target_page_key,
@@ -304,6 +333,14 @@ export async function appendProductVideoPreviewLog(
     media_checksum: input.media_checksum,
     media_status: input.media_status,
     error: input.error ?? null,
+    content_id: qualityScore.content_id,
+    quality_score: qualityScore.quality_score,
+    hook_score: qualityScore.hook_score,
+    visual_clarity_score: qualityScore.visual_clarity_score,
+    before_after_score: qualityScore.before_after_score,
+    caption_score: qualityScore.caption_score,
+    cta_score: qualityScore.cta_score,
+    decision: qualityScore.decision,
     ...PRODUCT_VIDEO_PREVIEW_SAFETY_FLAGS,
     renderer_called: input.renderer_called === true,
   };
@@ -458,9 +495,14 @@ export async function updateProductVideoPreviewLog(
       continue;
     }
 
-    updatedItem = {
+    const mergedItem = {
       ...record,
       ...updates,
+    } as ProductVideoPreviewLogRecord;
+    const qualityScore = normalizeQualityScore(mergedItem) || (record.quality_score === undefined ? null : normalizeQualityScore(record));
+
+    updatedItem = {
+      ...mergedItem,
       publish_allowed: false,
       facebook_post_performed: false,
       line_broadcast_performed: false,
@@ -468,6 +510,16 @@ export async function updateProductVideoPreviewLog(
       phaya_called: false,
       s3_upload_performed: false,
       mark_posted_performed: false,
+      ...(qualityScore ? {
+        content_id: qualityScore.content_id || cleanPreviewId,
+        quality_score: qualityScore.quality_score,
+        hook_score: qualityScore.hook_score,
+        visual_clarity_score: qualityScore.visual_clarity_score,
+        before_after_score: qualityScore.before_after_score,
+        caption_score: qualityScore.caption_score,
+        cta_score: qualityScore.cta_score,
+        decision: qualityScore.decision,
+      } : {}),
       updated_at: new Date().toISOString(),
     } as ProductVideoPreviewLogRecord;
 

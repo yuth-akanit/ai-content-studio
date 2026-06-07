@@ -103,12 +103,19 @@ export async function POST(
       ? (error as { code: string }).code
       : 'publish_execution_dry_run_failed';
 
+    const message = typeof (error as { message?: unknown }).message === 'string'
+      ? (error as { message: string }).message
+      : code;
+    const blockReason = typeof (error as { block_reason?: unknown }).block_reason === 'string'
+      ? (error as { block_reason: string }).block_reason
+      : null;
+
     if (status >= 500) {
       console.error('[product-video] publish execution dry-run failed', error);
     }
 
     return NextResponse.json(
-      { ok: false, error: code, ...PRODUCT_VIDEO_PREVIEW_SAFETY_FLAGS },
+      { ok: false, error: code, message, block_reason: blockReason, ...PRODUCT_VIDEO_PREVIEW_SAFETY_FLAGS },
       { status },
     );
   }

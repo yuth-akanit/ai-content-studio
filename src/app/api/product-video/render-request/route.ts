@@ -6,6 +6,7 @@ import {
 } from '@/lib/product-video-preview-log';
 import { findLatestProductVideoMediaMetadata, appendProductVideoMockMediaMetadata } from '@/lib/product-video-media-metadata';
 import { forwardRenderRequestToExternal, validatePublicImageUrl, validatePublicMediaUrl } from '@/lib/product-video-render-adapter';
+import { isRenderQualityAllowed, normalizeQualityScore } from '@/lib/product-video-quality-score';
 
 export const dynamic = 'force-dynamic';
 
@@ -92,6 +93,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { ok: false, error: 'preview_log_not_found', ...PRODUCT_VIDEO_PREVIEW_SAFETY_FLAGS },
         { status: 404 }
+      );
+    }
+
+    const qualityScore = normalizeQualityScore(item);
+    const renderQuality = isRenderQualityAllowed(qualityScore);
+    if (!renderQuality.allowed) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: qualityScore ? 'product_video_quality_score_too_low_for_render' : 'product_video_quality_score_missing',
+          message: renderQuality.reason,
+          block_reason: renderQuality.reason,
+          quality_score: qualityScore,
+          ...PRODUCT_VIDEO_PREVIEW_SAFETY_FLAGS,
+        },
+        { status: 409 },
       );
     }
 
