@@ -12,6 +12,32 @@ type UpdateScheduledPostInput = z.infer<typeof updateScheduledPostSchema>;
 
 const TABLE = 'scheduled_posts';
 
+function chunkArray<T>(items: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size));
+  }
+  return chunks;
+}
+
+const CREATE_SELECT = `
+  id,
+  content_id,
+  social_page_id,
+  scheduled_at,
+  status,
+  retry_count,
+  max_retries,
+  error_message,
+  locked_at,
+  locked_by,
+  posted_at,
+  post_log_id,
+  metadata,
+  created_at,
+  updated_at
+`;
+
 function buildSelect(campaignFilter: boolean) {
   const contentRelation = campaignFilter
     ? 'generated_contents!inner(id,project_id,platform,content_type,topic,output_payload,created_at)'
@@ -87,13 +113,22 @@ export async function createScheduledPosts(input: CreateScheduledPostsInput) {
     };
   });
 
-  const { data, error } = await db
-    .from(TABLE)
-    .insert(rows)
-    .select('*');
+  const created = [];
 
-  if (error) throw new Error(`Failed to create scheduled posts: ${error.message}`);
-  return data || [];
+  for (const chunk of chunkArray(rows, 5)) {
+    const { data, error } = await db
+      .from(TABLE)
+      .insert(chunk)
+      .select(CREATE_SELECT);
+
+    if (error) {
+      throw new Error(`Failed to create scheduled posts: ${error.message}`);
+    }
+
+    created.push(...(data || []));
+  }
+
+  return created;
 }
 
 export async function updateScheduledPost(id: string, input: UpdateScheduledPostInput) {

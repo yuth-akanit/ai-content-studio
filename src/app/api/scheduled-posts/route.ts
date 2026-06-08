@@ -12,6 +12,38 @@ import {
 
 export const dynamic = 'force-dynamic';
 
+function classifyCreateError(error: Error) {
+  const message = error.message.toLowerCase();
+
+  if (
+    message.includes('statement timeout') ||
+    message.includes('canceling statement') ||
+    message.includes('520') ||
+    message.includes('cloudflare') ||
+    message.includes('web server is returning an unknown error')
+  ) {
+    return {
+      status: 503,
+      body: {
+        ok: false,
+        error: 'scheduled_posts_create_retryable',
+        message: 'Scheduled post creation timed out. Please retry.',
+        retryable: true,
+      },
+    };
+  }
+
+  return {
+    status: 500,
+    body: {
+      ok: false,
+      error: 'scheduled_posts_create_failed',
+      message: 'Failed to create scheduled posts',
+      retryable: false,
+    },
+  };
+}
+
 // TODO(security): protect these UI-facing endpoints with real app auth before
 // exposing the Studio publicly. They currently use server-side service role
 // access because the app has no user auth layer yet.
@@ -63,8 +95,19 @@ export async function POST(request: NextRequest) {
     }
 
     console.error('[scheduled-posts] create failed', error);
+
+    if (error instanceof Error) {
+      const classified = classifyCreateError(error);
+      return NextResponse.json(classified.body, { status: classified.status });
+    }
+
     return NextResponse.json(
-      { ok: false, error: 'Failed to create scheduled posts' },
+      {
+        ok: false,
+        error: 'scheduled_posts_create_failed',
+        message: 'Failed to create scheduled posts',
+        retryable: false,
+      },
       { status: 500 },
     );
   }
