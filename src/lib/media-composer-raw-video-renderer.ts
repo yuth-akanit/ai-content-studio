@@ -10,17 +10,17 @@ import {
   PRODUCT_VIDEO_ASSET_METADATA_LOG_PATH,
   type ProductVideoUploadedAssetMetadata,
 } from '@/lib/product-video-assets';
-import type { MediaComposerRawVideoInput } from '@/lib/media-composer';
+import type { MediaComposerAudioMixMode, MediaComposerRawVideoInput } from '@/lib/media-composer';
 
 const execFileAsync = promisify(execFile);
 const OUTPUT_MIME_TYPE = 'video/mp4';
 const OUTPUT_EXTENSION = '.mp4';
-const MAX_OVERLAY_TEXT_CHARS = 90;
+const MAX_OVERLAY_TEXT_CHARS = 56;
 
 type MediaComposerRawVideoInputWithVoiceover = MediaComposerRawVideoInput & {
   voiceover_audio_url?: string;
   voiceover_enabled?: boolean;
-  audio_mix_mode?: 'voiceover_only' | 'duck_original_with_voiceover' | 'original_only';
+  audio_mix_mode?: MediaComposerAudioMixMode;
 };
 
 
@@ -42,7 +42,8 @@ export type RawVideoRenderResult = {
   master_video_url_is_sample: false;
   fallback_used: false;
   voiceover_audio_used?: boolean;
-  audio_mix_mode?: 'voiceover_only' | 'duck_original_with_voiceover' | 'original_only';
+  generated_voiceover_used?: boolean;
+  audio_mix_mode?: MediaComposerAudioMixMode;
   external_tts_calls_performed?: boolean;
   production_actions_performed?: boolean;
   voiceover_debug?: {
@@ -51,6 +52,7 @@ export type RawVideoRenderResult = {
     voiceover_asset_found: boolean;
     voiceover_mime_type: string | null;
     voiceover_local_asset_path: string | null;
+    voiceover_source_badge: string | null;
   };
   visible_overlays: {
     title_overlay: true;
@@ -76,6 +78,7 @@ export type RawVideoRenderBlocked = {
 function cleanOverlayText(value: unknown, fallback: string): string {
   const text = String(value || '')
     .replace(/PA\s*Air\s*Service/gi, 'พีเอเอ แอร์ เซอร์วิส')
+    .replace(/\.{2,}|…/g, ' ')
     .replace(/[\r\n]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
@@ -178,7 +181,7 @@ async function ffprobeHasAudio(inputPath: string): Promise<boolean> {
   }
 }
 
-async function runFfmpegCompose(inputPath: string, outputPath: string, textFiles: { title: string; cta: string; subtitle: string }, voiceoverPath?: string, audioMixMode: 'voiceover_only' | 'duck_original_with_voiceover' | 'original_only' = 'original_only'): Promise<void> {
+async function runFfmpegCompose(inputPath: string, outputPath: string, textFiles: { title: string; cta: string; subtitle: string }, voiceoverPath?: string, audioMixMode: MediaComposerAudioMixMode = 'original_only'): Promise<void> {
   const videoFilter = [
     'scale=1080:1920:force_original_aspect_ratio=decrease',
     'pad=1080:1920:(ow-iw)/2:(oh-ih)/2:color=0x111827',
@@ -301,7 +304,16 @@ export async function renderUploadedRawVideoPreview(input: MediaComposerRawVideo
   const voiceoverPath = voiceoverInput.voiceover_enabled && voiceoverOriginal?.mime_type.startsWith('audio/')
     ? voiceoverOriginal.local_asset_path
     : undefined;
-  const audioMixMode = voiceoverInput.audio_mix_mode || (voiceoverPath ? 'duck_original_with_voiceover' : 'original_only');
+  const audioMixMode: MediaComposerAudioMixMode = voiceoverInput.audio_mix_mode || (voiceoverPath ? 'voiceover_only' : 'original_only');
+
+  if (audioMixMode === 'voiceover_only' && !voiceoverPath) {
+    return {
+      ...blockedBase,
+      status: 'render_failed',
+      error: 'voiceover_audio_required',
+      message: 'voiceover audio is required for voiceover_only render; original/raw video audio will not be used as fallback',
+    };
+  }
 
   const output = buildOutputMetadata(request, original);
   const outputDir = path.dirname(output.local_asset_path);
@@ -330,6 +342,7 @@ export async function renderUploadedRawVideoPreview(input: MediaComposerRawVideo
       master_video_url_is_original_upload: false,
       master_video_url_is_sample: false,
       voiceover_audio_used: Boolean(voiceoverPath),
+      generated_voiceover_used: voiceoverOriginal?.source_badge === 'generated_voiceover',
       audio_mix_mode: audioMixMode,
       external_tts_calls_performed: false,
       production_actions_performed: false,
@@ -339,6 +352,7 @@ export async function renderUploadedRawVideoPreview(input: MediaComposerRawVideo
         voiceover_asset_found: Boolean(voiceoverOriginal),
         voiceover_mime_type: voiceoverOriginal?.mime_type || null,
         voiceover_local_asset_path: voiceoverOriginal?.local_asset_path || null,
+        voiceover_source_badge: voiceoverOriginal?.source_badge || null,
       },
       fallback_used: false,
       visible_overlays: {

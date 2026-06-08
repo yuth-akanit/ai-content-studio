@@ -18,6 +18,7 @@ export interface ProductVideoUploadedAssetMetadata {
   media_urls: string[];
   media_type: 'image' | 'video' | 'audio';
   uploaded_at: string;
+  source_badge?: 'uploaded_asset' | 'generated_voiceover';
 }
 
 const SAFE_ASSET_ID_RE = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,180}$/;
@@ -145,6 +146,7 @@ function parseMetadataLine(line: string): ProductVideoUploadedAssetMetadata | nu
       public_media_url: publicMediaUrl,
       media_urls: Array.isArray(parsed.media_urls) ? parsed.media_urls : [publicMediaUrl].filter(Boolean),
       media_type: parsed.media_type === 'video' || parsed.media_type === 'image' || parsed.media_type === 'audio' ? parsed.media_type : mediaType,
+      source_badge: parsed.source_badge === 'generated_voiceover' ? 'generated_voiceover' : parsed.source_badge === 'uploaded_asset' ? 'uploaded_asset' : undefined,
       image_urls: Array.isArray(parsed.image_urls) ? parsed.image_urls : (mediaType === 'image' ? [publicMediaUrl].filter(Boolean) : []),
     } as ProductVideoUploadedAssetMetadata;
   } catch {

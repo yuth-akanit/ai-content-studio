@@ -29,7 +29,9 @@ type SourcesResponse = {
   production_actions_performed: false;
 };
 
-type UploadKind = 'raw_video' | 'before_image' | 'after_image';
+type UploadKind = 'raw_video' | 'before_image' | 'after_image' | 'voiceover_audio';
+
+type AudioMixMode = 'voiceover_only' | 'duck_original_with_voiceover' | 'original_only';
 
 type MediaComposerUploadResponse = {
   ok: boolean;
@@ -48,6 +50,19 @@ type MediaComposerUploadResponse = {
   production_actions_performed?: false;
 };
 
+type VoiceoverGenerateResponse = {
+  ok: boolean;
+  error?: string;
+  message?: string;
+  voiceover_audio_url?: string;
+  asset_id?: string;
+  media_type?: 'audio';
+  mime_type?: string;
+  source_badge?: 'generated_voiceover';
+  external_tts_calls_performed?: boolean;
+  production_actions_performed?: false;
+};
+
 type InputMode = 'existing' | 'upload';
 
 type InputState = {
@@ -55,6 +70,9 @@ type InputState = {
   before_image_url: string;
   after_image_url: string;
   raw_video_url: string;
+  voiceover_audio_url: string;
+  voiceover_enabled: boolean;
+  audio_mix_mode: AudioMixMode;
   tts_script: string;
   cta_banner: string;
   source_id?: string;
@@ -66,6 +84,9 @@ const defaultState: InputState = {
   before_image_url: sampleMediaComposerImagePairInput.before_image_url,
   after_image_url: sampleMediaComposerImagePairInput.after_image_url,
   raw_video_url: sampleMediaComposerRawVideoInput.raw_video_url,
+  voiceover_audio_url: '',
+  voiceover_enabled: true,
+  audio_mix_mode: 'voiceover_only',
   tts_script: sampleMediaComposerImagePairInput.tts_script,
   cta_banner: sampleMediaComposerImagePairInput.cta_banner || 'ทัก PA Air Service เพื่อจองคิวล้างแอร์',
   source_id: 'sample-image-pair',
@@ -108,6 +129,9 @@ function buildRequestBody(state: InputState) {
   return {
     source_type: 'raw_video',
     raw_video_url: state.raw_video_url,
+    voiceover_audio_url: state.voiceover_audio_url,
+    voiceover_enabled: true,
+    audio_mix_mode: state.audio_mix_mode || 'voiceover_only',
     tts_script: state.tts_script,
     cta_banner: state.cta_banner,
     brand: 'PA Air Service',
@@ -123,6 +147,8 @@ export default function MediaComposerPage() {
   const [uploadingKind, setUploadingKind] = useState<UploadKind | null>(null);
   const [uploadSummary, setUploadSummary] = useState<Partial<Record<UploadKind, MediaComposerUploadResponse>>>({});
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [generatingVoiceover, setGeneratingVoiceover] = useState(false);
+  const [voiceoverResult, setVoiceoverResult] = useState<VoiceoverGenerateResponse | null>(null);
   const [sourceOptions, setSourceOptions] = useState<MediaComposerSourceOption[]>([]);
   const [selectedSourceId, setSelectedSourceId] = useState('sample-image-pair');
   const [fallbackUsed, setFallbackUsed] = useState(true);
@@ -175,6 +201,9 @@ export default function MediaComposerPage() {
         before_image_url: option.input.before_image_url,
         after_image_url: option.input.after_image_url,
         raw_video_url: sampleMediaComposerRawVideoInput.raw_video_url,
+        voiceover_audio_url: state.voiceover_audio_url,
+        voiceover_enabled: state.voiceover_enabled,
+        audio_mix_mode: state.audio_mix_mode,
         tts_script: option.input.tts_script,
         cta_banner: option.input.cta_banner || defaultState.cta_banner,
         source_id: option.input.source_id || option.id,
@@ -188,6 +217,9 @@ export default function MediaComposerPage() {
       before_image_url: sampleMediaComposerImagePairInput.before_image_url,
       after_image_url: sampleMediaComposerImagePairInput.after_image_url,
       raw_video_url: option.input.raw_video_url,
+      voiceover_audio_url: state.voiceover_audio_url,
+      voiceover_enabled: state.voiceover_enabled,
+      audio_mix_mode: state.audio_mix_mode,
       tts_script: option.input.tts_script,
       cta_banner: option.input.cta_banner || defaultState.cta_banner,
       source_id: option.input.source_id || option.id,
@@ -225,6 +257,16 @@ export default function MediaComposerPage() {
           raw_video_url: data.public_media_url || '',
           source_id: sourceId,
           source_badge: 'uploaded_asset',
+        }));
+        return;
+      }
+
+      if (kind === 'voiceover_audio') {
+        setState((current) => ({
+          ...current,
+          voiceover_audio_url: data.public_media_url || '',
+          voiceover_enabled: true,
+          audio_mix_mode: 'voiceover_only',
         }));
         return;
       }
@@ -271,6 +313,42 @@ export default function MediaComposerPage() {
       });
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function generateVoiceoverPreview() {
+    setGeneratingVoiceover(true);
+    setVoiceoverResult(null);
+    try {
+      const response = await fetch('/api/media-composer/voiceover/generate', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          tts_script: state.tts_script,
+          voice: 'thai_natural_female',
+          language: 'th-TH',
+          source_badge: 'generated_voiceover',
+        }),
+      });
+      const data = (await response.json()) as VoiceoverGenerateResponse;
+      setVoiceoverResult(data);
+      if (response.ok && data.ok && data.voiceover_audio_url) {
+        setState((current) => ({
+          ...current,
+          voiceover_audio_url: data.voiceover_audio_url || '',
+          voiceover_enabled: true,
+          audio_mix_mode: 'voiceover_only',
+        }));
+      }
+    } catch (error) {
+      setVoiceoverResult({
+        ok: false,
+        error: error instanceof Error ? error.message : 'media_composer_voiceover_generate_failed',
+        external_tts_calls_performed: false,
+        production_actions_performed: false,
+      });
+    } finally {
+      setGeneratingVoiceover(false);
     }
   }
 
@@ -377,14 +455,15 @@ export default function MediaComposerPage() {
                 Direct Upload — อัปโหลดจากหน้านี้โดยตรง
               </div>
               <p className="mt-1 leading-6">อัปโหลดใหม่โดยตรงสำหรับเจ้าของ/แอดมินบนมือถือ ระบบจะเก็บใน safe uploaded asset storage และตั้ง source_badge=uploaded_asset โดยไม่โพสต์จริง</p>
-              <div className="mt-3 grid gap-3 sm:grid-cols-3">
+              <div className="mt-3 grid gap-3 sm:grid-cols-4">
                 <UploadButton label="Upload Raw Video" accept="video/*" uploading={uploadingKind === 'raw_video'} onFile={(file) => uploadDirectFile('raw_video', file)} />
+                <UploadButton label="Upload Voiceover Audio" accept="audio/*" uploading={uploadingKind === 'voiceover_audio'} onFile={(file) => uploadDirectFile('voiceover_audio', file)} />
                 <UploadButton label="Upload Before Image" accept="image/*" uploading={uploadingKind === 'before_image'} onFile={(file) => uploadDirectFile('before_image', file)} />
                 <UploadButton label="Upload After Image" accept="image/*" uploading={uploadingKind === 'after_image'} onFile={(file) => uploadDirectFile('after_image', file)} />
               </div>
               {uploadError ? <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-red-800">Upload error: {uploadError}</div> : null}
               <div className="mt-3 grid gap-2">
-                {(['raw_video', 'before_image', 'after_image'] as UploadKind[]).map((kind) => (
+                {(['raw_video', 'voiceover_audio', 'before_image', 'after_image'] as UploadKind[]).map((kind) => (
                   <UploadSummaryLine key={kind} kind={kind} item={uploadSummary[kind]} />
                 ))}
               </div>
@@ -426,6 +505,42 @@ export default function MediaComposerPage() {
             <div className="space-y-2">
               <Label htmlFor="tts-script">tts_script</Label>
               <Textarea id="tts-script" value={state.tts_script} onChange={(event) => setState((current) => ({ ...current, tts_script: event.target.value }))} className="min-h-28" />
+            </div>
+
+            <div className="rounded-2xl border border-indigo-100 bg-indigo-50/70 p-4 text-sm text-indigo-950">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="font-black">AI Voiceover</div>
+                  <p className="mt-1 leading-6">Generate Thai Voiceover Preview จาก tts_script หรือใช้อัปโหลด voiceover_audio เองได้ ค่าเริ่มต้นคือ voiceover_only — ตัดเสียงต้นฉบับออกจาก MP4</p>
+                </div>
+                <Badge className="bg-indigo-600 text-white hover:bg-indigo-600">audio_mix_mode={state.audio_mix_mode}</Badge>
+              </div>
+              <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_auto]">
+                <select
+                  value={state.audio_mix_mode}
+                  onChange={(event) => setState((current) => ({ ...current, audio_mix_mode: event.target.value as AudioMixMode }))}
+                  className="min-h-11 rounded-2xl border border-indigo-200 bg-white px-4 text-sm font-semibold text-slate-900 outline-none ring-indigo-500/20 transition focus:border-indigo-500 focus:ring-4"
+                >
+                  <option value="voiceover_only">voiceover_only — ใช้เสียงบรรยายเท่านั้น</option>
+                  <option value="duck_original_with_voiceover">duck_original_with_voiceover — ลดเสียงต้นฉบับ (ต้องเลือกเองภายหลัง)</option>
+                  <option value="original_only">original_only — ใช้เสียงต้นฉบับเท่านั้น</option>
+                </select>
+                <Button type="button" onClick={generateVoiceoverPreview} disabled={generatingVoiceover} className="min-h-11 rounded-2xl bg-indigo-600 px-4 font-black text-white hover:bg-indigo-700">
+                  {generatingVoiceover ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Volume2 className="mr-2 h-4 w-4" />}
+                  Generate Thai Voiceover Preview
+                </Button>
+              </div>
+              {voiceoverResult && !voiceoverResult.ok ? (
+                <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900">
+                  {voiceoverResult.error}: {voiceoverResult.message || 'ไม่เรียก external TTS'} · external_tts_calls_performed=false
+                </div>
+              ) : null}
+              {state.voiceover_audio_url ? (
+                <div className="mt-3 space-y-2 rounded-xl bg-white p-3 ring-1 ring-indigo-100">
+                  <audio controls className="w-full" src={state.voiceover_audio_url} />
+                  <OutputLine label="generated/manual voiceover_audio_url" value={state.voiceover_audio_url} />
+                </div>
+              ) : null}
             </div>
 
             <Field label="CTA banner" value={state.cta_banner} onChange={(value) => setState((current) => ({ ...current, cta_banner: value }))} />
@@ -528,6 +643,7 @@ function UploadButton({ label, accept, uploading, onFile }: { label: string; acc
 function UploadSummaryLine({ kind, item }: { kind: UploadKind; item?: MediaComposerUploadResponse }) {
   const label: Record<UploadKind, string> = {
     raw_video: 'Raw Video',
+    voiceover_audio: 'Voiceover Audio',
     before_image: 'Before Image',
     after_image: 'After Image',
   };

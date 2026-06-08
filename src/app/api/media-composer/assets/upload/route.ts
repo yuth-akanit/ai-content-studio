@@ -22,17 +22,14 @@ type MediaComposerUploadKind = 'raw_video' | 'before_image' | 'after_image' | 'v
 
 const MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024;
 const MAX_VIDEO_SIZE_BYTES = 80 * 1024 * 1024;
-const ALLOWED_UPLOAD_KINDS = new Set<MediaComposerUploadKind>(['raw_video', 'before_image', 'after_image']);
+const ALLOWED_UPLOAD_KINDS = new Set<MediaComposerUploadKind>(['raw_video', 'before_image', 'after_image', 'voiceover_audio']);
 
 function cleanText(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
 function isUploadKind(value: string): value is MediaComposerUploadKind {
-  return value === 'raw_video'
-    || value === 'before_image'
-    || value === 'after_image'
-    || value === 'voiceover_audio';
+  return ALLOWED_UPLOAD_KINDS.has(value as MediaComposerUploadKind);
 }
 
 function buildError(status: number, error: string, message: string) {

@@ -18,6 +18,8 @@ const files = {
   mediaComposerPage: path.join(root, 'src/app/media-composer/page.tsx'),
   mediaComposerRenderRoute: path.join(root, 'src/app/api/media-composer/render/route.ts'),
   mediaComposerUploadRoute: path.join(root, 'src/app/api/media-composer/assets/upload/route.ts'),
+  mediaComposerVoiceoverRoute: path.join(root, 'src/app/api/media-composer/voiceover/generate/route.ts'),
+  mediaComposerTtsLib: path.join(root, 'src/lib/media-composer-tts.ts'),
 };
 
 function read(file) {
@@ -40,6 +42,8 @@ const mediaComposerRenderer = read(files.mediaComposerRenderer);
 const mediaComposerPage = read(files.mediaComposerPage);
 const mediaComposerRenderRoute = read(files.mediaComposerRenderRoute);
 const mediaComposerUploadRoute = read(files.mediaComposerUploadRoute);
+const mediaComposerVoiceoverRoute = read(files.mediaComposerVoiceoverRoute);
+const mediaComposerTtsLib = read(files.mediaComposerTtsLib);
 const combinedNewModule = `${page}\n${planner}\n${fixture}`;
 const ownerDecisionModule = `${ownerDecisionLib}\n${ownerDecisionRoute}\n${ownerDecisionPanel}`;
 const manualPublishModule = `${manualPublishLib}\n${manualPublishRoute}\n${manualPublishPanel}`;
@@ -254,6 +258,11 @@ const mediaComposerRequiredSnippets = [
   'เลือกจาก media ในระบบ',
   'อัปโหลดใหม่โดยตรง',
   'Upload Raw Video',
+  'Upload Voiceover Audio',
+  'AI Voiceover',
+  'Generate Thai Voiceover Preview',
+  'voiceover_only',
+  'duck_original_with_voiceover',
   'Upload Before Image',
   'Upload After Image',
   'upload_success',
@@ -274,6 +283,7 @@ const mediaComposerUploadRequiredSnippets = [
   'raw_video',
   'before_image',
   'after_image',
+  'voiceover_audio',
   'public_media_url',
   'source_badge: \'uploaded_asset\'',
   'all_publish_flags_false: true',
@@ -295,11 +305,52 @@ const mediaComposerRealRenderV2RequiredSnippets = [
   'subtitle_burn_in: true',
   'master_video_url_is_original_upload: false',
   'ffprobeDurationSeconds',
+  'voiceover audio is required for voiceover_only',
+  "shouldDuckOriginal ? '[a]' : '1:a:0'",
 ];
 
 for (const snippet of mediaComposerRealRenderV2RequiredSnippets) {
   if (!mediaComposerRenderer.includes(snippet) && !mediaComposerRenderRoute.includes(snippet) && !mediaComposerPage.includes(snippet)) {
     throw new Error(`Missing media composer real render v2 snippet: ${snippet}`);
+  }
+}
+
+const mediaComposerVoiceoverV22RequiredSnippets = [
+  'media_composer_voiceover_v2_2',
+  'MEDIA_COMPOSER_TTS_ENABLED',
+  'MEDIA_COMPOSER_TTS_PROVIDER',
+  'MEDIA_COMPOSER_TTS_MODEL',
+  'MEDIA_COMPOSER_REAL_TTS_APPROVED',
+  'media_composer_tts_disabled',
+  'real_tts_provider_not_approved',
+  'generated_voiceover',
+  'generateDeterministicThaiPreviewWav',
+  'external_tts_calls_performed: false',
+  'production_actions_performed: false',
+  'all_publish_flags_false: true',
+];
+
+for (const snippet of mediaComposerVoiceoverV22RequiredSnippets) {
+  if (!mediaComposerVoiceoverRoute.includes(snippet) && !mediaComposerTtsLib.includes(snippet) && !mediaComposerRenderer.includes(snippet) && !mediaComposerPage.includes(snippet)) {
+    throw new Error(`Missing media composer voiceover v2.2 snippet: ${snippet}`);
+  }
+}
+
+const forbiddenMediaComposerVoiceoverPatterns = [
+  /graph\.facebook\.com/i,
+  /business_discovery/i,
+  /videos\.insert/i,
+  /api\.tiktok/i,
+  /youtube\.com/i,
+  /LINE_BROADCAST_API/i,
+  /line_broadcast_enabled\s*:\s*true/i,
+  /production_actions_performed\s*:\s*true/i,
+  /external_tts_calls_performed\s*:\s*true/i,
+];
+
+for (const pattern of forbiddenMediaComposerVoiceoverPatterns) {
+  if (pattern.test(mediaComposerVoiceoverRoute) || pattern.test(mediaComposerTtsLib) || pattern.test(mediaComposerRenderer)) {
+    throw new Error(`Forbidden pattern found in media composer voiceover v2.2 layer: ${pattern}`);
   }
 }
 
@@ -327,5 +378,6 @@ console.log(JSON.stringify({
 }, null, 2));
 
 
-console.log('media_composer_voiceover_v2_1=true')
+console.log('media_composer_voiceover_v2_2=true')
+console.log('media_composer_default_audio_mix_mode=voiceover_only')
 console.log('external_tts_calls_performed=false')

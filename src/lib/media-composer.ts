@@ -4,6 +4,8 @@ export type MediaComposerSourceType = 'image_pair' | 'raw_video';
 
 export type MediaComposerSourceBadge = 'sample' | 'product_video_preview_log' | 'uploaded_asset' | 'minio_safe_url';
 
+export type MediaComposerAudioMixMode = 'voiceover_only' | 'duck_original_with_voiceover' | 'original_only';
+
 export type MediaComposerBaseInput = {
   source_type: MediaComposerSourceType;
   tts_script: string;
@@ -11,6 +13,9 @@ export type MediaComposerBaseInput = {
   brand?: string;
   source_id?: string;
   source_badge?: MediaComposerSourceBadge;
+  voiceover_audio_url?: string;
+  voiceover_enabled?: boolean;
+  audio_mix_mode?: MediaComposerAudioMixMode;
 };
 
 export type MediaComposerImagePairInput = MediaComposerBaseInput & {
@@ -87,9 +92,9 @@ export type MediaComposerMasterVideoRecord = {
     before_image_url?: string;
     after_image_url?: string;
     raw_video_url?: string;
-  voiceover_audio_url?: string;
-  voiceover_enabled?: boolean;
-  audio_mix_mode?: 'voiceover_only' | 'duck_original_with_voiceover' | 'original_only';
+    voiceover_audio_url?: string;
+    voiceover_enabled?: boolean;
+    audio_mix_mode?: MediaComposerAudioMixMode;
   };
   render_mode: 'sample_fixture' | 'raw_video_passthrough_preview' | 'composed_preview_mp4';
   renderer_status: 'not_requested' | 'rendered' | 'renderer_missing' | 'render_failed';
@@ -132,6 +137,10 @@ export function validateMediaComposerInput(input: MediaComposerInput): string[] 
 
   if (input.source_type === 'raw_video') {
     if (!isHttpOrLocalUrl(input.raw_video_url || '')) errors.push('raw_video_url must be http(s) or local path');
+  }
+
+  if (input.audio_mix_mode && !['voiceover_only', 'duck_original_with_voiceover', 'original_only'].includes(input.audio_mix_mode)) {
+    errors.push('audio_mix_mode must be voiceover_only, duck_original_with_voiceover, or original_only');
   }
 
   return errors;
@@ -179,7 +188,7 @@ export function buildMediaComposerMasterVideoRecord(input: MediaComposerInput, o
     hook: 'เห็นความต่างก่อนและหลังล้างแอร์',
     visual_notes: isImagePair
       ? 'Image pair mode: render 1080x1920 MP4 with pan/zoom before shot, crossfade, after shot, PA Air Service branding, subtitles, and CTA banner.'
-      : 'Raw video mode: normalize source video to 9:16, reduce original audio, add Thai TTS script audio, subtitles, PA Air Service branding, and CTA banner.',
+      : 'Raw video mode: normalize source video to 9:16, remove original source audio by default, use narration-only voiceover audio, subtitles, PA Air Service branding, and CTA banner.',
     creative_angle: 'ใช้หลักฐานก่อน-หลังและคำพูดธรรมชาติภาษาไทยเพื่อให้เจ้าของตรวจ master video ก่อนส่งไปหน้า Short Video Distribution',
     source_badge: input.source_badge || 'sample',
     source_id: input.source_id,
@@ -202,7 +211,7 @@ export function buildMediaComposerMasterVideoRecord(input: MediaComposerInput, o
                   : 'real raw_video_url is passed through as master_video_url for manual preview; no /samples fallback used')
               : 'center crop/scale raw footage to vertical 1080x1920',
           },
-          { name: 'audio_mix', status: 'planned', detail: 'reduce original audio and use tts_script as primary voiceover' },
+          { name: 'audio_mix', status: 'planned', detail: 'voiceover_only by default: remove original/raw source audio and use narration-only voiceover track' },
           { name: 'subtitles_cta', status: 'planned', detail: 'subtitle and CTA banner overlay prepared for preview render' },
         ],
     publish_flags: {
@@ -221,6 +230,9 @@ export function buildMediaComposerMasterVideoRecord(input: MediaComposerInput, o
         }
       : {
           raw_video_url: input.raw_video_url,
+          voiceover_audio_url: input.voiceover_audio_url,
+          voiceover_enabled: input.voiceover_enabled,
+          audio_mix_mode: input.audio_mix_mode,
         },
     render_mode: renderMode,
     renderer_status: overrides.renderer_status || 'not_requested',
