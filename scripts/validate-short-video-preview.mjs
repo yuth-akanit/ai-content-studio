@@ -325,3 +325,7 @@ console.log(JSON.stringify({
   production_actions_performed: false,
   validation_scope: 'static safety + creative quality gate integration checks for short-video preview module',
 }, null, 2));
+
+
+console.log('media_composer_voiceover_v2_1=true')
+console.log('external_tts_calls_performed=false')

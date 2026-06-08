@@ -87,6 +87,9 @@ export type MediaComposerMasterVideoRecord = {
     before_image_url?: string;
     after_image_url?: string;
     raw_video_url?: string;
+  voiceover_audio_url?: string;
+  voiceover_enabled?: boolean;
+  audio_mix_mode?: 'voiceover_only' | 'duck_original_with_voiceover' | 'original_only';
   };
   render_mode: 'sample_fixture' | 'raw_video_passthrough_preview' | 'composed_preview_mp4';
   renderer_status: 'not_requested' | 'rendered' | 'renderer_missing' | 'render_failed';

@@ -1,3 +1,13 @@
+
+const allowedAudioMimeTypes = new Set([
+  'audio/mpeg',
+  'audio/mp3',
+  'audio/wav',
+  'audio/x-wav',
+  'audio/mp4',
+  'audio/aac',
+  'audio/m4a',
+]);
 import { NextRequest, NextResponse } from 'next/server';
 import { PRODUCT_VIDEO_PREVIEW_SAFETY_FLAGS } from '@/lib/product-video-preview-log';
 import {
@@ -8,7 +18,7 @@ import type { MediaComposerInput } from '@/lib/media-composer';
 
 export const dynamic = 'force-dynamic';
 
-type MediaComposerUploadKind = 'raw_video' | 'before_image' | 'after_image';
+type MediaComposerUploadKind = 'raw_video' | 'before_image' | 'after_image' | 'voiceover_audio';
 
 const MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024;
 const MAX_VIDEO_SIZE_BYTES = 80 * 1024 * 1024;
@@ -19,7 +29,10 @@ function cleanText(value: unknown): string {
 }
 
 function isUploadKind(value: string): value is MediaComposerUploadKind {
-  return ALLOWED_UPLOAD_KINDS.has(value as MediaComposerUploadKind);
+  return value === 'raw_video'
+    || value === 'before_image'
+    || value === 'after_image'
+    || value === 'voiceover_audio';
 }
 
 function buildError(status: number, error: string, message: string) {
@@ -30,7 +43,7 @@ function buildError(status: number, error: string, message: string) {
       message,
       module: 'media_composer_direct_upload_v1',
       preview_only: true,
-      source_badge: 'uploaded_asset',
+source_badge: 'uploaded_asset',
       all_publish_flags_false: true,
       external_api_calls_performed: false,
       production_actions_performed: false,
@@ -50,7 +63,7 @@ function buildPreviewInput(uploadKind: MediaComposerUploadKind, publicMediaUrl: 
   };
 
   if (uploadKind === 'raw_video') {
-    return {
+return {
       source_type: 'raw_video',
       raw_video_url: publicMediaUrl,
       ...base,
@@ -72,7 +85,7 @@ export async function POST(request: NextRequest) {
     const file = formData.get('file');
 
     if (!isUploadKind(uploadKindText)) {
-      return buildError(400, 'invalid_upload_kind', 'upload_kind must be raw_video, before_image, or after_image');
+      return buildError(400, 'invalid_upload_kind', 'upload_kind must be raw_video, before_image, after_image, or voiceover_audio');
     }
 
     if (!file || !(file instanceof File)) {
@@ -81,10 +94,17 @@ export async function POST(request: NextRequest) {
 
     const mimeType = file.type || '';
     const expectsVideo = uploadKindText === 'raw_video';
+    const expectsVoiceoverAudio = uploadKindText === 'voiceover_audio';
+    const expectsImage = uploadKindText === 'before_image' || uploadKindText === 'after_image';
     if (expectsVideo && !mimeType.startsWith('video/')) {
       return buildError(400, 'invalid_mime_type', 'Upload Raw Video requires a video file');
     }
-    if (!expectsVideo && !mimeType.startsWith('image/')) {
+
+    if (expectsVoiceoverAudio && !mimeType.startsWith('audio/')) {
+      return buildError(400, 'invalid_mime_type', 'Voiceover uploads require an audio file');
+    }
+
+    if (expectsImage && !mimeType.startsWith('image/')) {
       return buildError(400, 'invalid_mime_type', 'Before/After uploads require image files');
     }
 
@@ -95,7 +115,13 @@ export async function POST(request: NextRequest) {
 
     const metadata = createProductVideoUploadedAssetMetadata({
       request,
-      originalFilename: file.name || (expectsVideo ? 'uploaded_raw_video.mp4' : 'uploaded_image.png'),
+      originalFilename:
+        file.name ||
+        (expectsVideo
+          ? 'uploaded_raw_video.mp4'
+          : expectsVoiceoverAudio
+            ? 'uploaded_voiceover.mp3'
+            : 'uploaded_image.png'),
       mimeType,
       sizeBytes: file.size,
     });
@@ -110,7 +136,7 @@ export async function POST(request: NextRequest) {
       status: 'upload_success',
       module: 'media_composer_direct_upload_v1',
       preview_only: true,
-      upload_kind: uploadKindText,
+upload_kind: uploadKindText,
       asset_id: metadata.asset_id,
       uploaded_asset_id: metadata.asset_id,
       filename: metadata.filename,

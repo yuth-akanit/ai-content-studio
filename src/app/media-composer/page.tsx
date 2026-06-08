@@ -521,6 +521,7 @@ function UploadButton({ label, accept, uploading, onFile }: { label: string; acc
         onChange={(event) => onFile(event.target.files?.[0] || null)}
       />
     </label>
+
   );
 }
 

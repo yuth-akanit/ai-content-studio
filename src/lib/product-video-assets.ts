@@ -16,7 +16,7 @@ export interface ProductVideoUploadedAssetMetadata {
   public_media_url: string;
   image_urls: string[];
   media_urls: string[];
-  media_type: 'image' | 'video';
+  media_type: 'image' | 'video' | 'audio';
   uploaded_at: string;
 }
 
@@ -34,6 +34,15 @@ const VIDEO_EXTENSION_CONTENT_TYPES: Record<string, string> = {
   '.mov': 'video/quicktime',
   '.m4v': 'video/x-m4v',
   '.webm': 'video/webm',
+};
+const AUDIO_EXTENSION_CONTENT_TYPES: Record<string, string> = {
+  '.mp3': 'audio/mpeg',
+  '.m4a': 'audio/mp4',
+  '.aac': 'audio/aac',
+  '.wav': 'audio/wav',
+  '.ogg': 'audio/ogg',
+  '.opus': 'audio/ogg',
+  '.webm': 'audio/webm',
 };
 
 export function cleanProductVideoFilename(name: string): string {
@@ -54,7 +63,7 @@ export function getImageContentTypeForFilename(filename: string, fallback = 'app
 
 export function getMediaContentTypeForFilename(filename: string, fallback = 'application/octet-stream'): string {
   const ext = path.extname(filename).toLowerCase();
-  return IMAGE_EXTENSION_CONTENT_TYPES[ext] || VIDEO_EXTENSION_CONTENT_TYPES[ext] || fallback;
+  return IMAGE_EXTENSION_CONTENT_TYPES[ext] || VIDEO_EXTENSION_CONTENT_TYPES[ext] || AUDIO_EXTENSION_CONTENT_TYPES[ext] || fallback;
 }
 
 export function isSupportedProductVideoImageFilename(filename: string): boolean {
@@ -82,7 +91,7 @@ export function createProductVideoUploadedAssetMetadata(input: {
   const assetId = randomUUID();
   const savedFilename = `${assetId}${ext}`;
   const publicMediaUrl = buildProductVideoPublicAssetUrl(input.request, assetId);
-  const mediaType: 'image' | 'video' = input.mimeType.startsWith('video/') ? 'video' : 'image';
+  const mediaType: 'image' | 'video' | 'audio' = input.mimeType.startsWith('video/') ? 'video' : input.mimeType.startsWith('audio/') ? 'audio' : 'image';
 
   return {
     asset_id: assetId,
@@ -130,12 +139,12 @@ function parseMetadataLine(line: string): ProductVideoUploadedAssetMetadata | nu
     const publicMediaUrl = typeof parsed.public_media_url === 'string'
       ? parsed.public_media_url
       : parsed.public_image_url;
-    const mediaType: 'image' | 'video' = parsed.mime_type.startsWith('video/') ? 'video' : 'image';
+    const mediaType: 'image' | 'video' | 'audio' = parsed.mime_type.startsWith('video/') ? 'video' : parsed.mime_type.startsWith('audio/') ? 'audio' : 'image';
     return {
       ...parsed,
       public_media_url: publicMediaUrl,
       media_urls: Array.isArray(parsed.media_urls) ? parsed.media_urls : [publicMediaUrl].filter(Boolean),
-      media_type: parsed.media_type === 'video' || parsed.media_type === 'image' ? parsed.media_type : mediaType,
+      media_type: parsed.media_type === 'video' || parsed.media_type === 'image' || parsed.media_type === 'audio' ? parsed.media_type : mediaType,
       image_urls: Array.isArray(parsed.image_urls) ? parsed.image_urls : (mediaType === 'image' ? [publicMediaUrl].filter(Boolean) : []),
     } as ProductVideoUploadedAssetMetadata;
   } catch {
@@ -165,18 +174,27 @@ export async function findProductVideoUploadedAsset(assetIdOrFilename: string): 
   ));
 
   if (!match) return null;
-  const resolvedPath = getProductVideoUploadPathForFilename(match.saved_filename);
+  let resolvedPath = match.local_asset_path;
+  if (typeof resolvedPath !== 'string' || resolvedPath.trim().length === 0) {
+    resolvedPath = getProductVideoUploadPathForFilename(match.saved_filename);
+  }
   try {
     const fileStat = await stat(resolvedPath);
     if (!fileStat.isFile()) return null;
   } catch {
-    return null;
+    resolvedPath = getProductVideoUploadPathForFilename(match.saved_filename);
+    try {
+      const fileStat = await stat(resolvedPath);
+      if (!fileStat.isFile()) return null;
+    } catch {
+      return null;
+    }
   }
 
   return {
     ...match,
     local_asset_path: resolvedPath,
-    mime_type: match.mime_type.startsWith('image/') || match.mime_type.startsWith('video/')
+    mime_type: match.mime_type.startsWith('image/') || match.mime_type.startsWith('video/') || match.mime_type.startsWith('audio/')
       ? match.mime_type
       : getMediaContentTypeForFilename(match.saved_filename, 'application/octet-stream'),
   };

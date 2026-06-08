@@ -17,6 +17,13 @@ const OUTPUT_MIME_TYPE = 'video/mp4';
 const OUTPUT_EXTENSION = '.mp4';
 const MAX_OVERLAY_TEXT_CHARS = 90;
 
+type MediaComposerRawVideoInputWithVoiceover = MediaComposerRawVideoInput & {
+  voiceover_audio_url?: string;
+  voiceover_enabled?: boolean;
+  audio_mix_mode?: 'voiceover_only' | 'duck_original_with_voiceover' | 'original_only';
+};
+
+
 type RawVideoRendererStatus = 'rendered' | 'renderer_missing' | 'source_not_uploaded_asset' | 'render_failed';
 
 export type RawVideoRenderResult = {
@@ -34,6 +41,17 @@ export type RawVideoRenderResult = {
   master_video_url_is_original_upload: false;
   master_video_url_is_sample: false;
   fallback_used: false;
+  voiceover_audio_used?: boolean;
+  audio_mix_mode?: 'voiceover_only' | 'duck_original_with_voiceover' | 'original_only';
+  external_tts_calls_performed?: boolean;
+  production_actions_performed?: boolean;
+  voiceover_debug?: {
+    voiceover_audio_url_present: boolean;
+    voiceover_asset_id: string | null;
+    voiceover_asset_found: boolean;
+    voiceover_mime_type: string | null;
+    voiceover_local_asset_path: string | null;
+  };
   visible_overlays: {
     title_overlay: true;
     cta_banner: true;
@@ -57,6 +75,7 @@ export type RawVideoRenderBlocked = {
 
 function cleanOverlayText(value: unknown, fallback: string): string {
   const text = String(value || '')
+    .replace(/PA\s*Air\s*Service/gi, 'พีเอเอ แอร์ เซอร์วิส')
     .replace(/[\r\n]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
@@ -140,28 +159,36 @@ function drawText(textFile: string, y: string, fontSize: number): string {
   return `drawtext=fontfile=/usr/share/fonts/truetype/noto/NotoSansThai-Regular.ttf:textfile='${textFile.replace(/'/g, "'\\''")}':fontcolor=white:fontsize=${fontSize}:x=(w-text_w)/2:y=${y}:box=1:boxcolor=black@0.92:boxborderw=18`;
 }
 
-async function runFfmpegCompose(inputPath: string, outputPath: string, textFiles: { title: string; cta: string; subtitle: string }): Promise<void> {
-  const filter = [
+async function ffprobeHasAudio(inputPath: string): Promise<boolean> {
+  try {
+    const { stdout } = await execFileAsync('ffprobe', [
+      '-v',
+      'error',
+      '-select_streams',
+      'a:0',
+      '-show_entries',
+      'stream=codec_type',
+      '-of',
+      'csv=p=0',
+      inputPath,
+    ], { timeout: 30000, maxBuffer: 1024 * 256 });
+    return stdout.trim().split(/\s+/).includes('audio');
+  } catch {
+    return false;
+  }
+}
+
+async function runFfmpegCompose(inputPath: string, outputPath: string, textFiles: { title: string; cta: string; subtitle: string }, voiceoverPath?: string, audioMixMode: 'voiceover_only' | 'duck_original_with_voiceover' | 'original_only' = 'original_only'): Promise<void> {
+  const videoFilter = [
     'scale=1080:1920:force_original_aspect_ratio=decrease',
     'pad=1080:1920:(ow-iw)/2:(oh-ih)/2:color=0x111827',
     'drawbox=x=0:y=0:w=1080:h=220:color=0x111827@1.0:t=fill',
-    drawText(textFiles.title, '54', 54),
-    drawText(textFiles.subtitle, '1240', 42),
+    drawText(textFiles.subtitle, '1320', 38),
     'drawbox=x=0:y=1360:w=1080:h=560:color=0x111827@1.0:t=fill',
-    drawText(textFiles.cta, '1580', 52),
+    drawText(textFiles.cta, '1605', 52),
   ].join(',');
 
-  await execFileAsync('ffmpeg', [
-    '-hide_banner',
-    '-y',
-    '-i',
-    inputPath,
-    '-map',
-    '0:v:0',
-    '-map',
-    '0:a?',
-    '-vf',
-    filter,
+  const commonOutputArgs = [
     '-c:v',
     'libx264',
     '-preset',
@@ -178,6 +205,45 @@ async function runFfmpegCompose(inputPath: string, outputPath: string, textFiles
     '+faststart',
     '-shortest',
     outputPath,
+  ];
+
+  if (!voiceoverPath) {
+    await execFileAsync('ffmpeg', [
+      '-hide_banner',
+      '-y',
+      '-i',
+      inputPath,
+      '-map',
+      '0:v:0',
+      '-map',
+      '0:a?',
+      '-vf',
+      videoFilter,
+      ...commonOutputArgs,
+    ], { timeout: 180000, maxBuffer: 1024 * 1024 * 4 });
+    return;
+  }
+
+  const inputHasAudio = await ffprobeHasAudio(inputPath);
+  const shouldDuckOriginal = audioMixMode === 'duck_original_with_voiceover' && inputHasAudio;
+  const filterComplex = shouldDuckOriginal
+    ? `[0:v]${videoFilter}[v];[0:a:0]volume=0.25[a0];[1:a:0]volume=1.0[a1];[a0][a1]amix=inputs=2:duration=first:dropout_transition=0[a]`
+    : `[0:v]${videoFilter}[v]`;
+
+  await execFileAsync('ffmpeg', [
+    '-hide_banner',
+    '-y',
+    '-i',
+    inputPath,
+    '-i',
+    voiceoverPath,
+    '-filter_complex',
+    filterComplex,
+    '-map',
+    '[v]',
+    '-map',
+    shouldDuckOriginal ? '[a]' : '1:a:0',
+    ...commonOutputArgs,
   ], { timeout: 180000, maxBuffer: 1024 * 1024 * 4 });
 }
 
@@ -225,6 +291,18 @@ export async function renderUploadedRawVideoPreview(input: MediaComposerRawVideo
     };
   }
 
+  const voiceoverInput = input as MediaComposerRawVideoInputWithVoiceover;
+  const voiceoverAssetId = voiceoverInput.voiceover_audio_url
+    ? extractProductVideoAssetId(voiceoverInput.voiceover_audio_url)
+    : null;
+  const voiceoverOriginal = voiceoverAssetId
+    ? await findProductVideoUploadedAsset(voiceoverAssetId)
+    : null;
+  const voiceoverPath = voiceoverInput.voiceover_enabled && voiceoverOriginal?.mime_type.startsWith('audio/')
+    ? voiceoverOriginal.local_asset_path
+    : undefined;
+  const audioMixMode = voiceoverInput.audio_mix_mode || (voiceoverPath ? 'duck_original_with_voiceover' : 'original_only');
+
   const output = buildOutputMetadata(request, original);
   const outputDir = path.dirname(output.local_asset_path);
   const workDir = path.join(outputDir, `media-composer-real-render-v2-${output.asset_id}`);
@@ -232,7 +310,7 @@ export async function renderUploadedRawVideoPreview(input: MediaComposerRawVideo
     await mkdir(outputDir, { recursive: true });
     await mkdir(workDir, { recursive: true });
     const textFiles = await writeOverlayTextFiles(workDir, input);
-    await runFfmpegCompose(original.local_asset_path, output.local_asset_path, textFiles);
+    await runFfmpegCompose(original.local_asset_path, output.local_asset_path, textFiles, voiceoverPath, audioMixMode);
     const durationSeconds = await ffprobeDurationSeconds(output.local_asset_path);
     const { size } = await import('node:fs/promises').then(({ stat }) => stat(output.local_asset_path));
     await appendRenderedMetadata(output, size);
@@ -251,6 +329,17 @@ export async function renderUploadedRawVideoPreview(input: MediaComposerRawVideo
       source_type: 'raw_video',
       master_video_url_is_original_upload: false,
       master_video_url_is_sample: false,
+      voiceover_audio_used: Boolean(voiceoverPath),
+      audio_mix_mode: audioMixMode,
+      external_tts_calls_performed: false,
+      production_actions_performed: false,
+      voiceover_debug: {
+        voiceover_audio_url_present: Boolean(voiceoverInput.voiceover_audio_url),
+        voiceover_asset_id: voiceoverAssetId,
+        voiceover_asset_found: Boolean(voiceoverOriginal),
+        voiceover_mime_type: voiceoverOriginal?.mime_type || null,
+        voiceover_local_asset_path: voiceoverOriginal?.local_asset_path || null,
+      },
       fallback_used: false,
       visible_overlays: {
         title_overlay: true,
