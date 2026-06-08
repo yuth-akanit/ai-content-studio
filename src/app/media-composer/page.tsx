@@ -130,8 +130,9 @@ export default function MediaComposerPage() {
 
   const sourceSummary = useMemo(() => {
     if (state.source_type === 'image_pair') return 'สร้างจากภาพก่อน/หลัง พร้อม pan/zoom/crossfade';
-    return 'รีเฟรม raw video เป็น 9:16 ลดเสียงเดิม และใส่ TTS/subtitle/CTA';
-  }, [state.source_type]);
+    if (state.source_badge === 'uploaded_asset') return 'Real Render v2: สร้าง composed preview MP4 ใหม่จาก uploaded raw video พร้อม 9:16 canvas, title/subtitle/CTA overlay';
+    return 'Passthrough preview: ใช้ raw_video_url เดิมเป็น master_video_url เพื่อ manual preview เท่านั้น';
+  }, [state.source_type, state.source_badge]);
 
   const selectedSourceOption = useMemo(
     () => sourceOptions.find((option) => option.id === selectedSourceId),
@@ -407,7 +408,7 @@ export default function MediaComposerPage() {
               >
                 <Volume2 className="h-5 w-5 text-indigo-600" />
                 <div className="mt-2 font-black text-slate-950">Raw Video</div>
-                <p className="text-sm leading-6 text-slate-600">raw_video_url → normalize 9:16 + TTS/subtitle/CTA</p>
+                <p className="text-sm leading-6 text-slate-600">uploaded_asset → composed preview MP4; other raw_video_url → passthrough preview</p>
               </button>
             </div>
 
@@ -461,6 +462,10 @@ export default function MediaComposerPage() {
                   <OutputLine label="source_type" value={result.master_video.source_type} />
                   <OutputLine label="source_badge" value={result.master_video.source_badge} />
                   <OutputLine label="source_id" value={result.master_video.source_id || '-'} />
+                  <OutputLine label="render_mode" value={result.master_video.render_mode} />
+                  <OutputLine label="renderer_status" value={result.master_video.renderer_status} />
+                  <OutputLine label="fallback_used" value={`${result.master_video.fallback_used}`} />
+                  <OutputLine label="master_video_url_is_original_upload" value={`${result.master_video.master_video_url_is_original_upload}`} />
                   <OutputLine label="ready_for_distribution_preview" value="true" />
                 </div>
                 <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm leading-6 text-emerald-950">

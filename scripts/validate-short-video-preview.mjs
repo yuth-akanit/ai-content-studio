@@ -14,7 +14,9 @@ const files = {
   manualPublishRoute: path.join(root, 'src/app/api/short-video-distribution/manual-publish-package/route.ts'),
   manualPublishPanel: path.join(root, 'src/components/short-video-distribution/manual-publish-package-panel.tsx'),
   mediaComposerLib: path.join(root, 'src/lib/media-composer.ts'),
+  mediaComposerRenderer: path.join(root, 'src/lib/media-composer-raw-video-renderer.ts'),
   mediaComposerPage: path.join(root, 'src/app/media-composer/page.tsx'),
+  mediaComposerRenderRoute: path.join(root, 'src/app/api/media-composer/render/route.ts'),
   mediaComposerUploadRoute: path.join(root, 'src/app/api/media-composer/assets/upload/route.ts'),
 };
 
@@ -34,7 +36,9 @@ const manualPublishLib = read(files.manualPublishLib);
 const manualPublishRoute = read(files.manualPublishRoute);
 const manualPublishPanel = read(files.manualPublishPanel);
 const mediaComposerLib = read(files.mediaComposerLib);
+const mediaComposerRenderer = read(files.mediaComposerRenderer);
 const mediaComposerPage = read(files.mediaComposerPage);
+const mediaComposerRenderRoute = read(files.mediaComposerRenderRoute);
 const mediaComposerUploadRoute = read(files.mediaComposerUploadRoute);
 const combinedNewModule = `${page}\n${planner}\n${fixture}`;
 const ownerDecisionModule = `${ownerDecisionLib}\n${ownerDecisionRoute}\n${ownerDecisionPanel}`;
@@ -244,7 +248,8 @@ for (const pattern of forbiddenManualPublishPatterns) {
 
 const mediaComposerRequiredSnippets = [
   'raw_video_passthrough_preview',
-  "master_video_url: isRawVideoPassthrough ? input.raw_video_url : SAMPLE_MASTER_VIDEO_URL",
+  'composed_preview_mp4',
+  'masterVideoUrl',
   'ไฟล์นี้มาจาก media ที่เคยอัปโหลด/สร้างไว้ในระบบ',
   'เลือกจาก media ในระบบ',
   'อัปโหลดใหม่โดยตรง',
@@ -280,6 +285,24 @@ for (const snippet of mediaComposerUploadRequiredSnippets) {
   if (!mediaComposerUploadRoute.includes(snippet)) throw new Error(`Missing media composer upload snippet: ${snippet}`);
 }
 
+const mediaComposerRealRenderV2RequiredSnippets = [
+  'media_composer_real_render_v2',
+  'renderer_missing',
+  'composed_preview_mp4',
+  'visible_overlays: {',
+  'title_overlay: true',
+  'cta_banner: true',
+  'subtitle_burn_in: true',
+  'master_video_url_is_original_upload: false',
+  'ffprobeDurationSeconds',
+];
+
+for (const snippet of mediaComposerRealRenderV2RequiredSnippets) {
+  if (!mediaComposerRenderer.includes(snippet) && !mediaComposerRenderRoute.includes(snippet) && !mediaComposerPage.includes(snippet)) {
+    throw new Error(`Missing media composer real render v2 snippet: ${snippet}`);
+  }
+}
+
 console.log(JSON.stringify({
   ok: true,
   route: '/short-video-distribution',
@@ -294,6 +317,7 @@ console.log(JSON.stringify({
   manual_publish_package_v1: true,
   manual_publish_package_api: '/api/short-video-distribution/manual-publish-package',
   manual_publish_package_safety_flags_false: true,
+  media_composer_real_render_v2: true,
   allowed_owner_decisions: ['approve', 'reject', 'request_changes'],
   decision_audit_log: 'runtime/short-video-preview-owner-decisions.jsonl',
   all_decision_safety_flags_false: true,

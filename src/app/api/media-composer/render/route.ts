@@ -8,6 +8,7 @@ import {
 } from '@/lib/media-composer';
 
 import { listReadOnlyMediaComposerSourceOptions } from '@/lib/media-composer-real-media-adapter';
+import { renderUploadedRawVideoPreview } from '@/lib/media-composer-raw-video-renderer';
 
 export const dynamic = 'force-dynamic';
 
@@ -45,7 +46,26 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const masterVideo = buildMediaComposerMasterVideoRecord(body);
+    const rawVideoRender = body.source_type === 'raw_video' && body.source_badge === 'uploaded_asset'
+      ? await renderUploadedRawVideoPreview(body, request)
+      : null;
+
+    if (rawVideoRender && !rawVideoRender.ok) {
+      return NextResponse.json(
+        rawVideoRender,
+        { status: rawVideoRender.status === 'renderer_missing' ? 503 : 400 },
+      );
+    }
+
+    const masterVideo = buildMediaComposerMasterVideoRecord(body, rawVideoRender?.ok ? {
+      master_video_url: rawVideoRender.public_media_url,
+      duration_seconds: rawVideoRender.duration_seconds,
+      render_mode: 'composed_preview_mp4',
+      renderer_status: 'rendered',
+      fallback_used: false,
+      master_video_url_is_original_upload: false,
+      visible_overlays: rawVideoRender.visible_overlays,
+    } : undefined);
     const distributionPreviewParams = new URLSearchParams({
       master_video_id: masterVideo.id,
       master_video_url: masterVideo.master_video_url,
@@ -53,7 +73,7 @@ export async function POST(request: NextRequest) {
       source_badge: masterVideo.source_badge,
       source_id: masterVideo.source_id || '',
       tts_script: masterVideo.tts_script,
-      fallback_used: String(masterVideo.source_badge === 'sample'),
+      fallback_used: String(masterVideo.fallback_used),
       ready_for_distribution_preview: String(masterVideo.ready_for_distribution_preview),
     });
 
@@ -70,8 +90,14 @@ export async function POST(request: NextRequest) {
         source_id: masterVideo.source_id,
         tts_script: masterVideo.tts_script,
         ready_for_distribution_preview: masterVideo.ready_for_distribution_preview,
-        fallback_used: masterVideo.source_badge === 'sample',
+        fallback_used: masterVideo.fallback_used,
+        render_mode: masterVideo.render_mode,
+        renderer_status: masterVideo.renderer_status,
+        master_video_url_is_original_upload: masterVideo.master_video_url_is_original_upload,
+        master_video_url_is_sample: masterVideo.master_video_url.startsWith('/samples/'),
+        visible_overlays: masterVideo.visible_overlays,
       },
+      raw_video_render: rawVideoRender,
       short_video_distribution_preview_url: `/short-video-distribution?${distributionPreviewParams.toString()}`,
       publish_flags: masterVideo.publish_flags,
       all_publish_flags_false: true,

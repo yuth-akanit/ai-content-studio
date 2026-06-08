@@ -28,8 +28,24 @@ export type MediaComposerInput = MediaComposerImagePairInput | MediaComposerRawV
 
 export type MediaComposerRenderStep = {
   name: string;
-  status: 'planned' | 'rendered_sample';
+  status: 'planned' | 'rendered_sample' | 'rendered';
   detail: string;
+};
+
+export type MediaComposerVisibleOverlays = {
+  title_overlay: boolean;
+  cta_banner: boolean;
+  subtitle_burn_in: boolean;
+};
+
+export type MediaComposerMasterVideoOverrides = {
+  master_video_url?: string;
+  duration_seconds?: number;
+  render_mode?: 'sample_fixture' | 'raw_video_passthrough_preview' | 'composed_preview_mp4';
+  renderer_status?: 'not_requested' | 'rendered' | 'renderer_missing' | 'render_failed';
+  fallback_used?: boolean;
+  master_video_url_is_original_upload?: boolean;
+  visible_overlays?: MediaComposerVisibleOverlays;
 };
 
 export type MediaComposerMasterVideoRecord = {
@@ -72,6 +88,11 @@ export type MediaComposerMasterVideoRecord = {
     after_image_url?: string;
     raw_video_url?: string;
   };
+  render_mode: 'sample_fixture' | 'raw_video_passthrough_preview' | 'composed_preview_mp4';
+  renderer_status: 'not_requested' | 'rendered' | 'renderer_missing' | 'render_failed';
+  fallback_used: boolean;
+  master_video_url_is_original_upload: boolean;
+  visible_overlays: MediaComposerVisibleOverlays;
 };
 
 const SAMPLE_MASTER_VIDEO_URL = '/samples/media-composer-paa-image-pair-master.mp4';
@@ -113,7 +134,7 @@ export function validateMediaComposerInput(input: MediaComposerInput): string[] 
   return errors;
 }
 
-export function buildMediaComposerMasterVideoRecord(input: MediaComposerInput): MediaComposerMasterVideoRecord {
+export function buildMediaComposerMasterVideoRecord(input: MediaComposerInput, overrides: MediaComposerMasterVideoOverrides = {}): MediaComposerMasterVideoRecord {
   const errors = validateMediaComposerInput(input);
   if (errors.length) {
     throw new Error(errors.join('; '));
@@ -125,12 +146,15 @@ export function buildMediaComposerMasterVideoRecord(input: MediaComposerInput): 
   const isImagePair = input.source_type === 'image_pair';
   const isRawVideoPassthrough = input.source_type === 'raw_video'
     && !input.raw_video_url.startsWith('/samples/');
+  const masterVideoUrl = overrides.master_video_url || (isRawVideoPassthrough ? input.raw_video_url : SAMPLE_MASTER_VIDEO_URL);
+  const renderMode = overrides.render_mode || (isRawVideoPassthrough ? 'raw_video_passthrough_preview' : 'sample_fixture');
+  const isOriginalUploadUrl = input.source_type === 'raw_video' && masterVideoUrl === input.raw_video_url;
 
   return {
     id: `master_video_media_composer_${input.source_type}_preview_001`,
     record_type: 'master_video',
-    master_video_url: isRawVideoPassthrough ? input.raw_video_url : SAMPLE_MASTER_VIDEO_URL,
-    duration_seconds: 5.4,
+    master_video_url: masterVideoUrl,
+    duration_seconds: overrides.duration_seconds || 5.4,
     source_type: input.source_type,
     tts_script: ttsScript,
     ready_for_distribution_preview: true,
@@ -141,7 +165,7 @@ export function buildMediaComposerMasterVideoRecord(input: MediaComposerInput): 
     title: isImagePair
       ? 'Before/After ล้างแอร์ PA Air Service'
       : isRawVideoPassthrough
-        ? 'raw_video_passthrough_preview'
+        ? (renderMode === 'composed_preview_mp4' ? 'composed_preview_mp4' : 'raw_video_passthrough_preview')
         : 'Raw Video รีเฟรมเป็นคลิปแนวตั้ง PA Air Service',
     service: 'ล้างแอร์บ้าน',
     service_area: 'สมุทรปราการ',
@@ -167,10 +191,12 @@ export function buildMediaComposerMasterVideoRecord(input: MediaComposerInput): 
       : [
           { name: 'input_model', status: 'planned', detail: 'source_type=raw_video with raw_video_url' },
           {
-            name: isRawVideoPassthrough ? 'raw_video_passthrough_preview' : 'normalize_9_16',
-            status: isRawVideoPassthrough ? 'rendered_sample' : 'planned',
+            name: renderMode === 'composed_preview_mp4' ? 'composed_preview_mp4' : (isRawVideoPassthrough ? 'raw_video_passthrough_preview' : 'normalize_9_16'),
+            status: renderMode === 'composed_preview_mp4' ? 'rendered' : (isRawVideoPassthrough ? 'rendered_sample' : 'planned'),
             detail: isRawVideoPassthrough
-              ? 'real raw_video_url is passed through as master_video_url for manual preview; no /samples fallback used'
+              ? (renderMode === 'composed_preview_mp4'
+                  ? 'uploaded raw_video was composed into a new preview MP4 with 9:16 canvas, title overlay, burned-in subtitle text, and bottom CTA banner; no /samples fallback used'
+                  : 'real raw_video_url is passed through as master_video_url for manual preview; no /samples fallback used')
               : 'center crop/scale raw footage to vertical 1080x1920',
           },
           { name: 'audio_mix', status: 'planned', detail: 'reduce original audio and use tts_script as primary voiceover' },
@@ -193,6 +219,15 @@ export function buildMediaComposerMasterVideoRecord(input: MediaComposerInput): 
       : {
           raw_video_url: input.raw_video_url,
         },
+    render_mode: renderMode,
+    renderer_status: overrides.renderer_status || 'not_requested',
+    fallback_used: overrides.fallback_used ?? (!isRawVideoPassthrough),
+    master_video_url_is_original_upload: overrides.master_video_url_is_original_upload ?? isOriginalUploadUrl,
+    visible_overlays: overrides.visible_overlays || {
+      title_overlay: renderMode === 'composed_preview_mp4',
+      cta_banner: renderMode === 'composed_preview_mp4',
+      subtitle_burn_in: renderMode === 'composed_preview_mp4',
+    },
   };
 }
 
