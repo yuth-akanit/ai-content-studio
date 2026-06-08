@@ -40,7 +40,12 @@ ENV NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL
 ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY
 
 # ffmpeg is required for Media Composer Real Render v2 preview-only local video composition.
-RUN apk add --no-cache ffmpeg
+RUN apk add --no-cache ffmpeg fontconfig font-noto font-noto-thai && \
+    mkdir -p /usr/share/fonts/truetype/noto && \
+    THAI_FONT="$(find /usr/share/fonts -type f \( -name 'NotoSansThai-Regular.ttf' -o -name 'NotoLoopedThai-Regular.ttf' \) | head -n 1)" && \
+    test -n "$THAI_FONT" && \
+    ln -sf "$THAI_FONT" /usr/share/fonts/truetype/noto/NotoSansThai-Regular.ttf && \
+    fc-cache -f
 
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
