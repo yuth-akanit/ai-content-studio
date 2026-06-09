@@ -444,6 +444,14 @@ export default function MediaComposerPage() {
     }
   }
 
+  const isUploadedMediaAssetUrl = (value?: string) => Boolean(value && value.includes('/api/product-video/assets/'));
+  const canRenderMasterVideo =
+    (state.source_type === 'raw_video' && isUploadedMediaAssetUrl(state.raw_video_url)) ||
+    (state.source_type === 'image_pair' &&
+      isUploadedMediaAssetUrl(state.before_image_url) &&
+      isUploadedMediaAssetUrl(state.after_image_url));
+  const renderBlockedMessage = 'กรุณาอัปโหลดรูปหรือวิดีโอก่อน Render';
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -674,10 +682,17 @@ export default function MediaComposerPage() {
 
             <Field label="CTA banner" value={state.cta_banner} onChange={(value) => setState((current) => ({ ...current, cta_banner: value }))} />
 
-            <Button onClick={renderPreview} disabled={loading} className="min-h-11 rounded-2xl bg-indigo-600 px-5 font-black text-white hover:bg-indigo-700">
-              {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Film className="mr-2 h-4 w-4" />}
-              Render Preview Master Video
-            </Button>
+            <div className="space-y-2">
+              <Button onClick={renderPreview} disabled={loading || !canRenderMasterVideo} className="min-h-11 rounded-2xl bg-indigo-600 px-5 font-black text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-slate-300">
+                {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Film className="mr-2 h-4 w-4" />}
+                Render Preview Master Video
+              </Button>
+              {!canRenderMasterVideo ? (
+                <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900">
+                  {renderBlockedMessage}
+                </p>
+              ) : null}
+            </div>
           </CardContent>
         </Card>
 

@@ -42,11 +42,11 @@ export async function GET(_request: NextRequest, context: AssetRouteContext) {
     );
   }
 
-  const contentType = metadata.mime_type.startsWith('image/') || metadata.mime_type.startsWith('video/')
+  const contentType = metadata.mime_type.startsWith('image/') || metadata.mime_type.startsWith('video/') || metadata.mime_type.startsWith('audio/')
     ? metadata.mime_type
     : getMediaContentTypeForFilename(metadata.saved_filename, 'application/octet-stream');
 
-  if (!contentType.startsWith('image/') && !contentType.startsWith('video/')) {
+  if (!contentType.startsWith('image/') && !contentType.startsWith('video/') && !contentType.startsWith('audio/')) {
     return NextResponse.json(
       {
         ok: false,
