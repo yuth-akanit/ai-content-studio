@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         ...result,
-        module: 'media_composer_voiceover_v2_2',
+        module: 'media_composer_voiceover_v2_3a',
         preview_only: true,
         production_actions_performed: false,
         publish_flags: {
@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         ok: false,
-        module: 'media_composer_voiceover_v2_2',
+        module: 'media_composer_voiceover_v2_3a',
         preview_only: true,
         error: 'media_composer_voiceover_generate_failed',
         message: error instanceof Error ? error.message : 'Unknown voiceover generation error',

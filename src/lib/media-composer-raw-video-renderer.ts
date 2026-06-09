@@ -344,7 +344,7 @@ export async function renderUploadedRawVideoPreview(input: MediaComposerRawVideo
       voiceover_audio_used: Boolean(voiceoverPath),
       generated_voiceover_used: voiceoverOriginal?.source_badge === 'generated_voiceover',
       audio_mix_mode: audioMixMode,
-      external_tts_calls_performed: false,
+      external_tts_calls_performed: Boolean(voiceoverOriginal?.external_tts_calls_performed),
       production_actions_performed: false,
       voiceover_debug: {
         voiceover_audio_url_present: Boolean(voiceoverInput.voiceover_audio_url),

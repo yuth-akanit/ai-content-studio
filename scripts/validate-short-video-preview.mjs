@@ -315,24 +315,29 @@ for (const snippet of mediaComposerRealRenderV2RequiredSnippets) {
   }
 }
 
-const mediaComposerVoiceoverV22RequiredSnippets = [
-  'media_composer_voiceover_v2_2',
+const mediaComposerVoiceoverV23ARequiredSnippets = [
+  'media_composer_voiceover_v2_3a',
   'MEDIA_COMPOSER_TTS_ENABLED',
   'MEDIA_COMPOSER_TTS_PROVIDER',
-  'MEDIA_COMPOSER_TTS_MODEL',
+  'MEDIA_COMPOSER_TTS_MAX_CHARS',
   'MEDIA_COMPOSER_REAL_TTS_APPROVED',
+  'ELEVENLABS_API_KEY',
+  'ELEVENLABS_VOICE_ID',
+  'eleven_multilingual_v2',
   'media_composer_tts_disabled',
-  'real_tts_provider_not_approved',
+  'real_tts_not_approved',
   'generated_voiceover',
   'generateDeterministicThaiPreviewWav',
   'external_tts_calls_performed: false',
   'production_actions_performed: false',
   'all_publish_flags_false: true',
+  'key_present',
+  'audio/mpeg',
 ];
 
-for (const snippet of mediaComposerVoiceoverV22RequiredSnippets) {
+for (const snippet of mediaComposerVoiceoverV23ARequiredSnippets) {
   if (!mediaComposerVoiceoverRoute.includes(snippet) && !mediaComposerTtsLib.includes(snippet) && !mediaComposerRenderer.includes(snippet) && !mediaComposerPage.includes(snippet)) {
-    throw new Error(`Missing media composer voiceover v2.2 snippet: ${snippet}`);
+    throw new Error(`Missing media composer voiceover v2.3A snippet: ${snippet}`);
   }
 }
 
@@ -345,13 +350,16 @@ const forbiddenMediaComposerVoiceoverPatterns = [
   /LINE_BROADCAST_API/i,
   /line_broadcast_enabled\s*:\s*true/i,
   /production_actions_performed\s*:\s*true/i,
-  /external_tts_calls_performed\s*:\s*true/i,
 ];
 
 for (const pattern of forbiddenMediaComposerVoiceoverPatterns) {
   if (pattern.test(mediaComposerVoiceoverRoute) || pattern.test(mediaComposerTtsLib) || pattern.test(mediaComposerRenderer)) {
-    throw new Error(`Forbidden pattern found in media composer voiceover v2.2 layer: ${pattern}`);
+    throw new Error(`Forbidden pattern found in media composer voiceover v2.3A layer: ${pattern}`);
   }
+}
+
+if (/external_tts_calls_performed\s*:\s*true/i.test(mediaComposerVoiceoverRoute) || /external_tts_calls_performed\s*:\s*true/i.test(mediaComposerRenderer)) {
+  throw new Error('external_tts_calls_performed=true is only allowed inside the gated TTS adapter library');
 }
 
 console.log(JSON.stringify({
@@ -378,6 +386,6 @@ console.log(JSON.stringify({
 }, null, 2));
 
 
-console.log('media_composer_voiceover_v2_2=true')
+console.log('media_composer_voiceover_v2_3a=true')
 console.log('media_composer_default_audio_mix_mode=voiceover_only')
 console.log('external_tts_calls_performed=false')

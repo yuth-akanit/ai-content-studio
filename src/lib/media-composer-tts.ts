@@ -1,11 +1,12 @@
-import { createHash } from 'node:crypto';
+import { createHash, createSign } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 import {
   createProductVideoUploadedAssetMetadata,
   saveProductVideoUploadedAsset,
 } from '@/lib/product-video-assets';
 
 export type MediaComposerTtsVoice = 'thai_natural_female' | 'thai_natural_male';
-export type MediaComposerTtsProvider = 'openai' | 'mock';
+export type MediaComposerTtsProvider = 'mock' | 'elevenlabs' | 'google' | 'phaya';
 
 export type MediaComposerVoiceoverGenerateInput = {
   tts_script: string;
@@ -20,9 +21,15 @@ export type MediaComposerVoiceoverGenerateResult = {
   asset_id: string;
   media_type: 'audio';
   mime_type: 'audio/wav' | 'audio/mpeg';
+  public_media_url: string;
+  local_asset_path: string;
   source_badge: 'generated_voiceover';
   tts_provider: MediaComposerTtsProvider;
   tts_model: string;
+  key_present?: boolean;
+  generated_voiceover_used: true;
+  voiceover_audio_used: true;
+  audio_mix_mode: 'voiceover_only';
   external_tts_calls_performed: boolean;
   production_actions_performed: false;
   all_publish_flags_false: true;
@@ -35,14 +42,17 @@ export type MediaComposerVoiceoverGenerateBlocked = {
   media_type: 'audio';
   source_badge: 'generated_voiceover';
   tts_provider: string;
-  external_tts_calls_performed: false;
+  tts_model?: string;
+  key_present?: boolean;
+  external_tts_calls_performed: boolean;
   production_actions_performed: false;
   all_publish_flags_false: true;
 };
 
-const DEFAULT_TTS_PROVIDER: MediaComposerTtsProvider = 'openai';
-const DEFAULT_TTS_MODEL = 'gpt-4o-mini-tts';
-const MAX_TTS_SCRIPT_CHARS = 1800;
+const DEFAULT_TTS_PROVIDER: MediaComposerTtsProvider = 'mock';
+const DEFAULT_MOCK_TTS_MODEL = 'mock-deterministic-thai-preview-wav';
+const DEFAULT_ELEVENLABS_MODEL = 'eleven_multilingual_v2';
+const DEFAULT_TTS_MAX_CHARS = 350;
 
 function cleanText(value: unknown): string {
   return typeof value === 'string' ? value.replace(/\s+/g, ' ').trim() : '';
@@ -57,12 +67,23 @@ function ttsProvider(): MediaComposerTtsProvider | string {
   return provider || DEFAULT_TTS_PROVIDER;
 }
 
-function ttsModel(): string {
-  return (process.env.MEDIA_COMPOSER_TTS_MODEL || DEFAULT_TTS_MODEL).trim() || DEFAULT_TTS_MODEL;
+function ttsModel(provider: string): string {
+  if (provider === 'elevenlabs') {
+    return (process.env.ELEVENLABS_MODEL_ID || DEFAULT_ELEVENLABS_MODEL).trim() || DEFAULT_ELEVENLABS_MODEL;
+  }
+  if (provider === 'google') {
+    return (process.env.GOOGLE_TTS_VOICE_NAME || 'th-TH-Standard-A').trim() || 'th-TH-Standard-A';
+  }
+  return (process.env.MEDIA_COMPOSER_TTS_MODEL || DEFAULT_MOCK_TTS_MODEL).trim() || DEFAULT_MOCK_TTS_MODEL;
 }
 
 function realTtsApproved(): boolean {
   return (process.env.MEDIA_COMPOSER_REAL_TTS_APPROVED || 'false').trim().toLowerCase() === 'true';
+}
+
+function ttsMaxChars(): number {
+  const parsed = Number.parseInt((process.env.MEDIA_COMPOSER_TTS_MAX_CHARS || '').trim(), 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_TTS_MAX_CHARS;
 }
 
 function makeWavHeader(dataBytes: number, sampleRate: number): Buffer {
@@ -106,106 +127,356 @@ function generateDeterministicThaiPreviewWav(script: string, voice: MediaCompose
   return Buffer.concat([makeWavHeader(data.length, sampleRate), data]);
 }
 
-export async function generateMediaComposerVoiceover(
-  input: MediaComposerVoiceoverGenerateInput,
-  request: Request,
-): Promise<MediaComposerVoiceoverGenerateResult | MediaComposerVoiceoverGenerateBlocked> {
-  const script = cleanText(input.tts_script);
-  const provider = ttsProvider();
-  const model = ttsModel();
-  const voice: MediaComposerTtsVoice = input.voice === 'thai_natural_male' ? 'thai_natural_male' : 'thai_natural_female';
+function blocked(input: {
+  error: string;
+  message: string;
+  provider: string;
+  model?: string;
+  keyPresent?: boolean;
+  externalCalled?: boolean;
+}): MediaComposerVoiceoverGenerateBlocked {
+  return {
+    ok: false,
+    error: input.error,
+    message: input.message,
+    media_type: 'audio',
+    source_badge: 'generated_voiceover',
+    tts_provider: String(input.provider),
+    tts_model: input.model,
+    key_present: input.keyPresent,
+    external_tts_calls_performed: Boolean(input.externalCalled),
+    production_actions_performed: false,
+    all_publish_flags_false: true,
+  };
+}
 
-  if (!ttsEnabled()) {
-    return {
-      ok: false,
-      error: 'media_composer_tts_disabled',
-      message: 'MEDIA_COMPOSER_TTS_ENABLED=false; AI voiceover generation is disabled and no external TTS call was made',
-      media_type: 'audio',
-      source_badge: 'generated_voiceover',
-      tts_provider: String(provider),
-      external_tts_calls_performed: false,
-      production_actions_performed: false,
-      all_publish_flags_false: true,
-    };
+async function generateElevenLabsMp3(script: string, model: string): Promise<{ buffer: Buffer; keyPresent: boolean }> {
+  const apiKey = (process.env.ELEVENLABS_API_KEY || '').trim();
+  const voiceId = (process.env.ELEVENLABS_VOICE_ID || '').trim();
+  const keyPresent = Boolean(apiKey);
+
+  if (!apiKey || !voiceId) {
+    throw Object.assign(new Error('elevenlabs_credentials_missing'), {
+      code: 'elevenlabs_credentials_missing',
+      keyPresent,
+    });
   }
 
-  if (!script) {
-    return {
-      ok: false,
-      error: 'tts_script_required',
-      message: 'tts_script is required for generated voiceover preview',
-      media_type: 'audio',
-      source_badge: 'generated_voiceover',
-      tts_provider: String(provider),
-      external_tts_calls_performed: false,
-      production_actions_performed: false,
-      all_publish_flags_false: true,
-    };
+  const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}`, {
+    method: 'POST',
+    headers: {
+      'xi-api-key': apiKey,
+      'Content-Type': 'application/json',
+      Accept: 'audio/mpeg',
+    },
+    body: JSON.stringify({
+      text: script,
+      model_id: model,
+      output_format: 'mp3_44100_128',
+      voice_settings: {
+        stability: 0.45,
+        similarity_boost: 0.75,
+        style: 0.15,
+        use_speaker_boost: true,
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    throw Object.assign(new Error(`elevenlabs_tts_failed_${response.status}`), {
+      code: 'elevenlabs_tts_failed',
+      status: response.status,
+      keyPresent,
+    });
   }
 
-  if (script.length > MAX_TTS_SCRIPT_CHARS) {
-    return {
-      ok: false,
-      error: 'tts_script_too_long',
-      message: `tts_script must be ${MAX_TTS_SCRIPT_CHARS} characters or fewer for preview generation`,
-      media_type: 'audio',
-      source_badge: 'generated_voiceover',
-      tts_provider: String(provider),
-      external_tts_calls_performed: false,
-      production_actions_performed: false,
-      all_publish_flags_false: true,
-    };
+  return { buffer: Buffer.from(await response.arrayBuffer()), keyPresent };
+}
+
+function base64Url(input: Buffer | string): string {
+  const buffer = Buffer.isBuffer(input) ? input : Buffer.from(input);
+  return buffer.toString('base64').replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+}
+
+async function getGoogleServiceAccountAccessToken(): Promise<{ token: string; keyPresent: boolean }> {
+  const credentialsPath = (process.env.GOOGLE_APPLICATION_CREDENTIALS || '').trim();
+  if (!credentialsPath) {
+    throw Object.assign(new Error('google_credentials_missing'), {
+      code: 'google_credentials_missing',
+      keyPresent: false,
+    });
   }
 
-  if (provider !== 'mock') {
-    if (!realTtsApproved()) {
-      return {
-        ok: false,
-        error: 'real_tts_provider_not_approved',
-        message: 'Real TTS provider is gated. Set MEDIA_COMPOSER_REAL_TTS_APPROVED=true only after owner approval. No external TTS call was made.',
-        media_type: 'audio',
-        source_badge: 'generated_voiceover',
-        tts_provider: String(provider),
-        external_tts_calls_performed: false,
-        production_actions_performed: false,
-        all_publish_flags_false: true,
-      };
-    }
-
-    return {
-      ok: false,
-      error: 'real_tts_provider_not_implemented_safe_build',
-      message: 'Safe-build currently blocks real TTS execution until owner approves and provider implementation proof is run. No external TTS call was made.',
-      media_type: 'audio',
-      source_badge: 'generated_voiceover',
-      tts_provider: String(provider),
-      external_tts_calls_performed: false,
-      production_actions_performed: false,
-      all_publish_flags_false: true,
-    };
+  const credentials = JSON.parse(await readFile(credentialsPath, 'utf8')) as {
+    client_email?: string;
+    private_key?: string;
+    token_uri?: string;
+  };
+  const keyPresent = Boolean(credentials.private_key);
+  if (!credentials.client_email || !credentials.private_key) {
+    throw Object.assign(new Error('google_credentials_missing'), {
+      code: 'google_credentials_missing',
+      keyPresent,
+    });
   }
 
-  const buffer = generateDeterministicThaiPreviewWav(script, voice);
+  const tokenUri = credentials.token_uri || 'https://oauth2.googleapis.com/token';
+  const now = Math.floor(Date.now() / 1000);
+  const header = base64Url(JSON.stringify({ alg: 'RS256', typ: 'JWT' }));
+  const claim = base64Url(JSON.stringify({
+    iss: credentials.client_email,
+    scope: 'https://www.googleapis.com/auth/cloud-platform',
+    aud: tokenUri,
+    iat: now,
+    exp: now + 3600,
+  }));
+  const signingInput = `${header}.${claim}`;
+  const signer = createSign('RSA-SHA256');
+  signer.update(signingInput);
+  signer.end();
+  const assertion = `${signingInput}.${base64Url(signer.sign(credentials.private_key))}`;
+
+  const response = await fetch(tokenUri, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+      assertion,
+    }),
+  });
+
+  if (!response.ok) {
+    throw Object.assign(new Error(`google_oauth_failed_${response.status}`), {
+      code: 'google_oauth_failed',
+      keyPresent,
+      status: response.status,
+    });
+  }
+
+  const body = await response.json() as { access_token?: string };
+  if (!body.access_token) {
+    throw Object.assign(new Error('google_oauth_token_missing'), {
+      code: 'google_oauth_token_missing',
+      keyPresent,
+    });
+  }
+  return { token: body.access_token, keyPresent };
+}
+
+async function generateGoogleMp3(script: string): Promise<{ buffer: Buffer; keyPresent: boolean }> {
+  const { token, keyPresent } = await getGoogleServiceAccountAccessToken();
+  const languageCode = (process.env.GOOGLE_TTS_LANGUAGE_CODE || 'th-TH').trim() || 'th-TH';
+  const voiceName = (process.env.GOOGLE_TTS_VOICE_NAME || 'th-TH-Standard-A').trim() || 'th-TH-Standard-A';
+  const audioEncoding = (process.env.GOOGLE_TTS_AUDIO_ENCODING || 'MP3').trim().toUpperCase() || 'MP3';
+  const response = await fetch('https://texttospeech.googleapis.com/v1/text:synthesize', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      input: { text: script },
+      voice: { languageCode, name: voiceName },
+      audioConfig: { audioEncoding },
+    }),
+  });
+
+  if (!response.ok) {
+    throw Object.assign(new Error(`google_tts_failed_${response.status}`), {
+      code: 'google_tts_failed',
+      status: response.status,
+      keyPresent,
+    });
+  }
+
+  const body = await response.json() as { audioContent?: string };
+  if (!body.audioContent) {
+    throw Object.assign(new Error('google_tts_audio_missing'), {
+      code: 'google_tts_audio_missing',
+      keyPresent,
+    });
+  }
+  return { buffer: Buffer.from(body.audioContent, 'base64'), keyPresent };
+}
+
+async function saveGeneratedVoiceoverAsset(input: {
+  request: Request;
+  buffer: Buffer;
+  filename: string;
+  mimeType: 'audio/wav' | 'audio/mpeg';
+  provider: MediaComposerTtsProvider;
+  model: string;
+  externalCalled: boolean;
+  keyPresent?: boolean;
+}): Promise<MediaComposerVoiceoverGenerateResult> {
   const metadata = createProductVideoUploadedAssetMetadata({
-    request,
-    originalFilename: `generated_voiceover_${voice}.wav`,
-    mimeType: 'audio/wav',
-    sizeBytes: buffer.length,
+    request: input.request,
+    originalFilename: input.filename,
+    mimeType: input.mimeType,
+    sizeBytes: input.buffer.length,
   });
   metadata.source_badge = 'generated_voiceover';
-  await saveProductVideoUploadedAsset(metadata, buffer);
+  metadata.media_type = 'audio';
+  metadata.tts_provider = input.provider;
+  metadata.external_tts_calls_performed = input.externalCalled;
+  await saveProductVideoUploadedAsset(metadata, input.buffer);
 
   return {
     ok: true,
     voiceover_audio_url: metadata.public_media_url,
     asset_id: metadata.asset_id,
     media_type: 'audio',
-    mime_type: 'audio/wav',
+    mime_type: input.mimeType,
+    public_media_url: metadata.public_media_url,
+    local_asset_path: metadata.local_asset_path,
     source_badge: 'generated_voiceover',
-    tts_provider: 'mock',
-    tts_model: model,
-    external_tts_calls_performed: false,
+    tts_provider: input.provider,
+    tts_model: input.model,
+    key_present: input.keyPresent,
+    generated_voiceover_used: true,
+    voiceover_audio_used: true,
+    audio_mix_mode: 'voiceover_only',
+    external_tts_calls_performed: input.externalCalled,
     production_actions_performed: false,
     all_publish_flags_false: true,
   };
+}
+
+export async function generateMediaComposerVoiceover(
+  input: MediaComposerVoiceoverGenerateInput,
+  request: Request,
+): Promise<MediaComposerVoiceoverGenerateResult | MediaComposerVoiceoverGenerateBlocked> {
+  const script = cleanText(input.tts_script);
+  const provider = ttsProvider();
+  const model = ttsModel(String(provider));
+  const maxChars = ttsMaxChars();
+  const voice: MediaComposerTtsVoice = input.voice === 'thai_natural_male' ? 'thai_natural_male' : 'thai_natural_female';
+
+  if (!ttsEnabled()) {
+    return blocked({
+      error: 'media_composer_tts_disabled',
+      message: 'MEDIA_COMPOSER_TTS_ENABLED=false; AI voiceover generation is disabled and no external TTS call was made',
+      provider: String(provider),
+      model,
+    });
+  }
+
+  if (!script) {
+    return blocked({
+      error: 'tts_script_required',
+      message: 'tts_script is required for generated voiceover preview',
+      provider: String(provider),
+      model,
+    });
+  }
+
+  if (script.length > maxChars) {
+    return blocked({
+      error: 'tts_script_too_long',
+      message: `tts_script must be ${maxChars} characters or fewer for preview generation`,
+      provider: String(provider),
+      model,
+    });
+  }
+
+  if (provider === 'mock') {
+    const buffer = generateDeterministicThaiPreviewWav(script, voice);
+    return saveGeneratedVoiceoverAsset({
+      request,
+      buffer,
+      filename: `generated_voiceover_${voice}.wav`,
+      mimeType: 'audio/wav',
+      provider: 'mock',
+      model,
+      externalCalled: false,
+    });
+  }
+
+  if (provider !== 'elevenlabs' && provider !== 'google' && provider !== 'phaya') {
+    return blocked({
+      error: 'unsupported_tts_provider',
+      message: 'MEDIA_COMPOSER_TTS_PROVIDER must be mock, elevenlabs, google, or phaya',
+      provider: String(provider),
+      model,
+    });
+  }
+
+  if (!realTtsApproved()) {
+    return blocked({
+      error: 'real_tts_not_approved',
+      message: 'Real TTS provider is gated. Set MEDIA_COMPOSER_REAL_TTS_APPROVED=true only after owner approval. No external TTS call was made.',
+      provider: String(provider),
+      model,
+      keyPresent: provider === 'elevenlabs' ? Boolean((process.env.ELEVENLABS_API_KEY || '').trim()) : undefined,
+    });
+  }
+
+  if (provider === 'google') {
+    try {
+      const { buffer, keyPresent } = await generateGoogleMp3(script);
+      return saveGeneratedVoiceoverAsset({
+        request,
+        buffer,
+        filename: 'generated_voiceover_google.mp3',
+        mimeType: 'audio/mpeg',
+        provider: 'google',
+        model,
+        externalCalled: true,
+        keyPresent,
+      });
+    } catch (error) {
+      const keyPresent = typeof error === 'object' && error !== null && 'keyPresent' in error
+        ? Boolean((error as { keyPresent?: boolean }).keyPresent)
+        : Boolean((process.env.GOOGLE_APPLICATION_CREDENTIALS || '').trim());
+      const code = typeof error === 'object' && error !== null && 'code' in error
+        ? String((error as { code?: string }).code)
+        : 'google_tts_failed';
+      return blocked({
+        error: code,
+        message: 'Google Cloud Text-to-Speech failed or is not fully configured. Secret values were not printed; only key_present is reported.',
+        provider: 'google',
+        model,
+        keyPresent,
+        externalCalled: code !== 'google_credentials_missing',
+      });
+    }
+  }
+
+  if (provider === 'phaya') {
+    return blocked({
+      error: 'real_tts_provider_not_implemented_safe_build',
+      message: `${provider} TTS is reserved for a later safe-build. No external TTS call was made.`,
+      provider: String(provider),
+      model,
+    });
+  }
+
+  try {
+    const { buffer, keyPresent } = await generateElevenLabsMp3(script, model);
+    return saveGeneratedVoiceoverAsset({
+      request,
+      buffer,
+      filename: 'generated_voiceover_elevenlabs.mp3',
+      mimeType: 'audio/mpeg',
+      provider: 'elevenlabs',
+      model,
+      externalCalled: true,
+      keyPresent,
+    });
+  } catch (error) {
+    const keyPresent = typeof error === 'object' && error !== null && 'keyPresent' in error
+      ? Boolean((error as { keyPresent?: boolean }).keyPresent)
+      : Boolean((process.env.ELEVENLABS_API_KEY || '').trim());
+    const code = typeof error === 'object' && error !== null && 'code' in error
+      ? String((error as { code?: string }).code)
+      : 'elevenlabs_tts_failed';
+    return blocked({
+      error: code,
+      message: 'ElevenLabs TTS failed or is not fully configured. Secret values were not printed; only key_present is reported.',
+      provider: 'elevenlabs',
+      model,
+      keyPresent,
+      externalCalled: code !== 'elevenlabs_credentials_missing',
+    });
+  }
 }

@@ -2,8 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
-export const PRODUCT_VIDEO_UPLOAD_DIR = '/app/runtime/product-video-assets/uploads';
-export const PRODUCT_VIDEO_ASSET_METADATA_LOG_PATH = '/app/runtime/product-video-uploaded-assets.jsonl';
+export const PRODUCT_VIDEO_UPLOAD_DIR = process.env.PRODUCT_VIDEO_UPLOAD_DIR || '/app/runtime/product-video-assets/uploads';
+export const PRODUCT_VIDEO_ASSET_METADATA_LOG_PATH = process.env.PRODUCT_VIDEO_ASSET_METADATA_LOG_PATH || '/app/runtime/product-video-uploaded-assets.jsonl';
 
 export interface ProductVideoUploadedAssetMetadata {
   asset_id: string;
@@ -19,6 +19,8 @@ export interface ProductVideoUploadedAssetMetadata {
   media_type: 'image' | 'video' | 'audio';
   uploaded_at: string;
   source_badge?: 'uploaded_asset' | 'generated_voiceover';
+  tts_provider?: 'mock' | 'elevenlabs' | 'google' | 'phaya';
+  external_tts_calls_performed?: boolean;
 }
 
 const SAFE_ASSET_ID_RE = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,180}$/;
@@ -147,6 +149,8 @@ function parseMetadataLine(line: string): ProductVideoUploadedAssetMetadata | nu
       media_urls: Array.isArray(parsed.media_urls) ? parsed.media_urls : [publicMediaUrl].filter(Boolean),
       media_type: parsed.media_type === 'video' || parsed.media_type === 'image' || parsed.media_type === 'audio' ? parsed.media_type : mediaType,
       source_badge: parsed.source_badge === 'generated_voiceover' ? 'generated_voiceover' : parsed.source_badge === 'uploaded_asset' ? 'uploaded_asset' : undefined,
+      tts_provider: parsed.tts_provider === 'mock' || parsed.tts_provider === 'elevenlabs' || parsed.tts_provider === 'google' || parsed.tts_provider === 'phaya' ? parsed.tts_provider : undefined,
+      external_tts_calls_performed: typeof parsed.external_tts_calls_performed === 'boolean' ? parsed.external_tts_calls_performed : undefined,
       image_urls: Array.isArray(parsed.image_urls) ? parsed.image_urls : (mediaType === 'image' ? [publicMediaUrl].filter(Boolean) : []),
     } as ProductVideoUploadedAssetMetadata;
   } catch {
