@@ -418,6 +418,7 @@ export default function MediaComposerPage() {
         body: JSON.stringify({
           tts_script: state.tts_script,
           voice: 'thai_natural_male',
+          voice_name: activePreset.voiceName,
           language: 'th-TH',
           source_badge: 'generated_voiceover',
         }),

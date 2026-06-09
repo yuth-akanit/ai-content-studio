@@ -43,6 +43,7 @@ export type MediaComposerVoiceoverGenerateBlocked = {
   source_badge: 'generated_voiceover';
   tts_provider: string;
   tts_model?: string;
+  voice_name?: string;
   key_present?: boolean;
   external_tts_calls_performed: boolean;
   production_actions_performed: false;
@@ -67,12 +68,19 @@ function ttsProvider(): MediaComposerTtsProvider | string {
   return provider || DEFAULT_TTS_PROVIDER;
 }
 
-function ttsModel(provider: string): string {
+function resolveGoogleTtsVoiceName(input?: { voice?: MediaComposerTtsVoice; voice_name?: string }): string {
+  const requested = String(input?.voice_name || '').trim();
+  if (requested) return requested;
+  if (input?.voice === 'thai_natural_male') return 'th-TH-Chirp3-HD-Charon';
+  return (process.env.GOOGLE_TTS_VOICE_NAME || 'th-TH-Standard-A').trim() || 'th-TH-Standard-A';
+}
+
+function ttsModel(provider: string, input?: { voice?: MediaComposerTtsVoice; voice_name?: string }): string {
   if (provider === 'elevenlabs') {
     return (process.env.ELEVENLABS_MODEL_ID || DEFAULT_ELEVENLABS_MODEL).trim() || DEFAULT_ELEVENLABS_MODEL;
   }
   if (provider === 'google') {
-    return (process.env.GOOGLE_TTS_VOICE_NAME || 'th-TH-Standard-A').trim() || 'th-TH-Standard-A';
+    return resolveGoogleTtsVoiceName(input);
   }
   return (process.env.MEDIA_COMPOSER_TTS_MODEL || DEFAULT_MOCK_TTS_MODEL).trim() || DEFAULT_MOCK_TTS_MODEL;
 }
@@ -263,10 +271,10 @@ async function getGoogleServiceAccountAccessToken(): Promise<{ token: string; ke
   return { token: body.access_token, keyPresent };
 }
 
-async function generateGoogleMp3(script: string): Promise<{ buffer: Buffer; keyPresent: boolean }> {
+async function generateGoogleMp3(script: string, voiceNameOverride?: string): Promise<{ buffer: Buffer; keyPresent: boolean }> {
   const { token, keyPresent } = await getGoogleServiceAccountAccessToken();
   const languageCode = (process.env.GOOGLE_TTS_LANGUAGE_CODE || 'th-TH').trim() || 'th-TH';
-  const voiceName = (process.env.GOOGLE_TTS_VOICE_NAME || 'th-TH-Standard-A').trim() || 'th-TH-Standard-A';
+  const voiceName = (voiceNameOverride || '').trim() || resolveGoogleTtsVoiceName();
   const audioEncoding = (process.env.GOOGLE_TTS_AUDIO_ENCODING || 'MP3').trim().toUpperCase() || 'MP3';
   const response = await fetch('https://texttospeech.googleapis.com/v1/text:synthesize', {
     method: 'POST',
@@ -413,7 +421,7 @@ export async function generateMediaComposerVoiceover(
 
   if (provider === 'google') {
     try {
-      const { buffer, keyPresent } = await generateGoogleMp3(script);
+      const { buffer, keyPresent } = await generateGoogleMp3(script, resolveGoogleTtsVoiceName({ voice, voice_name: (input as { voice_name?: string }).voice_name }));
       return saveGeneratedVoiceoverAsset({
         request,
         buffer,
