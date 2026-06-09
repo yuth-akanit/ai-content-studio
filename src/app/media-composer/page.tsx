@@ -73,6 +73,7 @@ type VoiceoverGenerateResponse = {
   source_badge?: 'generated_voiceover';
   tts_provider?: string;
   tts_model?: string;
+  voice_name?: string;
   key_present?: boolean;
   external_tts_calls_performed?: boolean;
   production_actions_performed?: false;
@@ -665,7 +666,7 @@ export default function MediaComposerPage() {
               </div>
               {voiceoverResult?.ok ? (
                 <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-emerald-900">
-                  voiceover generated · provider={voiceoverResult.tts_provider || activePreset.provider} · voice/model={voiceoverResult.tts_model || activePreset.voiceName} · external_tts_calls_performed={String(voiceoverResult.external_tts_calls_performed)}
+                  voiceover generated · Voice: {voiceoverResult.voice_name || 'not reported'} · Provider/Model: {voiceoverResult.tts_provider || activePreset.provider}/{voiceoverResult.tts_model || 'not reported'} · external_tts_calls_performed={String(voiceoverResult.external_tts_calls_performed)}
                 </div>
               ) : null}
               {voiceoverResult && !voiceoverResult.ok ? (

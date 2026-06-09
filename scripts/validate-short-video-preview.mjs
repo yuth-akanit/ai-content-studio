@@ -344,6 +344,16 @@ const mediaComposerVoiceoverV23ARequiredSnippets = [
   'all_publish_flags_false: true',
   'key_present',
   'audio/mpeg',
+  'voice_name: body.voice_name',
+  'const resolvedVoiceName = resolveGoogleTtsVoiceName({',
+  'voice_name: requestedVoiceName',
+  'unsupported_voice_name',
+  'APPROVED_GOOGLE_TTS_VOICE_NAMES',
+  'generateGoogleMp3(script, resolvedVoiceName)',
+  'voice_name: input.voiceName',
+  'DEFAULT_GOOGLE_TTS_MODEL',
+  'Voice: {voiceoverResult.voice_name',
+  'Provider/Model: {voiceoverResult.tts_provider',
 ];
 
 for (const snippet of mediaComposerVoiceoverV23ARequiredSnippets) {
@@ -371,6 +381,14 @@ for (const pattern of forbiddenMediaComposerVoiceoverPatterns) {
 
 if (/external_tts_calls_performed\s*:\s*true/i.test(mediaComposerVoiceoverRoute) || /external_tts_calls_performed\s*:\s*true/i.test(mediaComposerRenderer)) {
   throw new Error('external_tts_calls_performed=true is only allowed inside the gated TTS adapter library');
+}
+
+if (/voice\/model=/.test(mediaComposerPage)) {
+  throw new Error('Media Composer UI must not conflate voice name and TTS model metadata.');
+}
+
+if (/if \(provider === 'google'\) \{\s*return resolveGoogleTtsVoiceName/s.test(mediaComposerTtsLib)) {
+  throw new Error('tts_model metadata must not be overloaded with the Google voice name.');
 }
 
 const autopilotV2RequiredSnippets = [

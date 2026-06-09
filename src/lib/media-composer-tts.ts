@@ -11,6 +11,7 @@ export type MediaComposerTtsProvider = 'mock' | 'elevenlabs' | 'google' | 'phaya
 export type MediaComposerVoiceoverGenerateInput = {
   tts_script: string;
   voice?: MediaComposerTtsVoice;
+  voice_name?: string;
   language?: 'th-TH' | string;
   source_badge?: 'generated_voiceover' | string;
 };
@@ -26,6 +27,7 @@ export type MediaComposerVoiceoverGenerateResult = {
   source_badge: 'generated_voiceover';
   tts_provider: MediaComposerTtsProvider;
   tts_model: string;
+  voice_name?: string;
   key_present?: boolean;
   generated_voiceover_used: true;
   voiceover_audio_used: true;
@@ -53,7 +55,14 @@ export type MediaComposerVoiceoverGenerateBlocked = {
 const DEFAULT_TTS_PROVIDER: MediaComposerTtsProvider = 'mock';
 const DEFAULT_MOCK_TTS_MODEL = 'mock-deterministic-thai-preview-wav';
 const DEFAULT_ELEVENLABS_MODEL = 'eleven_multilingual_v2';
+const DEFAULT_GOOGLE_TTS_MODEL = 'google-cloud-text-to-speech';
 const DEFAULT_TTS_MAX_CHARS = 350;
+const APPROVED_GOOGLE_TTS_VOICE_NAMES = new Set([
+  'th-TH-Chirp3-HD-Charon',
+  'th-TH-Chirp3-HD-Puck',
+  'th-TH-Chirp3-HD-Achird',
+  'th-TH-Standard-A',
+]);
 
 function cleanText(value: unknown): string {
   return typeof value === 'string' ? value.replace(/\s+/g, ' ').trim() : '';
@@ -68,19 +77,24 @@ function ttsProvider(): MediaComposerTtsProvider | string {
   return provider || DEFAULT_TTS_PROVIDER;
 }
 
-function resolveGoogleTtsVoiceName(input?: { voice?: MediaComposerTtsVoice; voice_name?: string }): string {
-  const requested = String(input?.voice_name || '').trim();
-  if (requested) return requested;
-  if (input?.voice === 'thai_natural_male') return 'th-TH-Chirp3-HD-Charon';
-  return (process.env.GOOGLE_TTS_VOICE_NAME || 'th-TH-Standard-A').trim() || 'th-TH-Standard-A';
+function isApprovedGoogleTtsVoiceName(value: string): boolean {
+  return APPROVED_GOOGLE_TTS_VOICE_NAMES.has(value);
 }
 
-function ttsModel(provider: string, input?: { voice?: MediaComposerTtsVoice; voice_name?: string }): string {
+function resolveGoogleTtsVoiceName(input?: { voice?: MediaComposerTtsVoice; voice_name?: string }): string {
+  const requested = String(input?.voice_name || '').trim();
+  if (requested) return isApprovedGoogleTtsVoiceName(requested) ? requested : '';
+  if (input?.voice === 'thai_natural_male') return 'th-TH-Chirp3-HD-Charon';
+  const envDefault = (process.env.GOOGLE_TTS_VOICE_NAME || 'th-TH-Standard-A').trim() || 'th-TH-Standard-A';
+  return isApprovedGoogleTtsVoiceName(envDefault) ? envDefault : 'th-TH-Standard-A';
+}
+
+function ttsModel(provider: string): string {
   if (provider === 'elevenlabs') {
     return (process.env.ELEVENLABS_MODEL_ID || DEFAULT_ELEVENLABS_MODEL).trim() || DEFAULT_ELEVENLABS_MODEL;
   }
   if (provider === 'google') {
-    return resolveGoogleTtsVoiceName(input);
+    return (process.env.GOOGLE_TTS_MODEL || DEFAULT_GOOGLE_TTS_MODEL).trim() || DEFAULT_GOOGLE_TTS_MODEL;
   }
   return (process.env.MEDIA_COMPOSER_TTS_MODEL || DEFAULT_MOCK_TTS_MODEL).trim() || DEFAULT_MOCK_TTS_MODEL;
 }
@@ -141,6 +155,7 @@ function blocked(input: {
   provider: string;
   model?: string;
   keyPresent?: boolean;
+  voiceName?: string;
   externalCalled?: boolean;
 }): MediaComposerVoiceoverGenerateBlocked {
   return {
@@ -151,6 +166,7 @@ function blocked(input: {
     source_badge: 'generated_voiceover',
     tts_provider: String(input.provider),
     tts_model: input.model,
+    voice_name: input.voiceName,
     key_present: input.keyPresent,
     external_tts_calls_performed: Boolean(input.externalCalled),
     production_actions_performed: false,
@@ -271,10 +287,9 @@ async function getGoogleServiceAccountAccessToken(): Promise<{ token: string; ke
   return { token: body.access_token, keyPresent };
 }
 
-async function generateGoogleMp3(script: string, voiceNameOverride?: string): Promise<{ buffer: Buffer; keyPresent: boolean }> {
+async function generateGoogleMp3(script: string, voiceName: string): Promise<{ buffer: Buffer; keyPresent: boolean }> {
   const { token, keyPresent } = await getGoogleServiceAccountAccessToken();
   const languageCode = (process.env.GOOGLE_TTS_LANGUAGE_CODE || 'th-TH').trim() || 'th-TH';
-  const voiceName = (voiceNameOverride || '').trim() || resolveGoogleTtsVoiceName();
   const audioEncoding = (process.env.GOOGLE_TTS_AUDIO_ENCODING || 'MP3').trim().toUpperCase() || 'MP3';
   const response = await fetch('https://texttospeech.googleapis.com/v1/text:synthesize', {
     method: 'POST',
@@ -316,6 +331,7 @@ async function saveGeneratedVoiceoverAsset(input: {
   model: string;
   externalCalled: boolean;
   keyPresent?: boolean;
+  voiceName?: string;
 }): Promise<MediaComposerVoiceoverGenerateResult> {
   const metadata = createProductVideoUploadedAssetMetadata({
     request: input.request,
@@ -326,6 +342,8 @@ async function saveGeneratedVoiceoverAsset(input: {
   metadata.source_badge = 'generated_voiceover';
   metadata.media_type = 'audio';
   metadata.tts_provider = input.provider;
+  metadata.tts_model = input.model;
+  metadata.voice_name = input.voiceName;
   metadata.external_tts_calls_performed = input.externalCalled;
   await saveProductVideoUploadedAsset(metadata, input.buffer);
 
@@ -340,6 +358,7 @@ async function saveGeneratedVoiceoverAsset(input: {
     source_badge: 'generated_voiceover',
     tts_provider: input.provider,
     tts_model: input.model,
+    voice_name: input.voiceName,
     key_present: input.keyPresent,
     generated_voiceover_used: true,
     voiceover_audio_used: true,
@@ -356,9 +375,24 @@ export async function generateMediaComposerVoiceover(
 ): Promise<MediaComposerVoiceoverGenerateResult | MediaComposerVoiceoverGenerateBlocked> {
   const script = cleanText(input.tts_script);
   const provider = ttsProvider();
-  const model = ttsModel(String(provider));
   const maxChars = ttsMaxChars();
   const voice: MediaComposerTtsVoice = input.voice === 'thai_natural_male' ? 'thai_natural_male' : 'thai_natural_female';
+  const requestedVoiceName = cleanText(input.voice_name);
+  const resolvedVoiceName = resolveGoogleTtsVoiceName({
+    voice: input.voice,
+    voice_name: requestedVoiceName,
+  });
+  const model = ttsModel(String(provider));
+
+  if (!resolvedVoiceName) {
+    return blocked({
+      error: 'unsupported_voice_name',
+      message: 'voice_name is not in the approved Media Composer Google TTS preset allowlist. No external TTS call was made.',
+      provider: String(provider),
+      model,
+      voiceName: undefined,
+    });
+  }
 
   if (!ttsEnabled()) {
     return blocked({
@@ -366,6 +400,7 @@ export async function generateMediaComposerVoiceover(
       message: 'MEDIA_COMPOSER_TTS_ENABLED=false; AI voiceover generation is disabled and no external TTS call was made',
       provider: String(provider),
       model,
+      voiceName: resolvedVoiceName,
     });
   }
 
@@ -375,6 +410,7 @@ export async function generateMediaComposerVoiceover(
       message: 'tts_script is required for generated voiceover preview',
       provider: String(provider),
       model,
+      voiceName: resolvedVoiceName,
     });
   }
 
@@ -384,6 +420,7 @@ export async function generateMediaComposerVoiceover(
       message: `tts_script must be ${maxChars} characters or fewer for preview generation`,
       provider: String(provider),
       model,
+      voiceName: resolvedVoiceName,
     });
   }
 
@@ -397,6 +434,7 @@ export async function generateMediaComposerVoiceover(
       provider: 'mock',
       model,
       externalCalled: false,
+      voiceName: resolvedVoiceName,
     });
   }
 
@@ -406,6 +444,7 @@ export async function generateMediaComposerVoiceover(
       message: 'MEDIA_COMPOSER_TTS_PROVIDER must be mock, elevenlabs, google, or phaya',
       provider: String(provider),
       model,
+      voiceName: resolvedVoiceName,
     });
   }
 
@@ -416,12 +455,13 @@ export async function generateMediaComposerVoiceover(
       provider: String(provider),
       model,
       keyPresent: provider === 'elevenlabs' ? Boolean((process.env.ELEVENLABS_API_KEY || '').trim()) : undefined,
+      voiceName: resolvedVoiceName,
     });
   }
 
   if (provider === 'google') {
     try {
-      const { buffer, keyPresent } = await generateGoogleMp3(script, resolveGoogleTtsVoiceName({ voice, voice_name: (input as { voice_name?: string }).voice_name }));
+      const { buffer, keyPresent } = await generateGoogleMp3(script, resolvedVoiceName);
       return saveGeneratedVoiceoverAsset({
         request,
         buffer,
@@ -431,6 +471,7 @@ export async function generateMediaComposerVoiceover(
         model,
         externalCalled: true,
         keyPresent,
+        voiceName: resolvedVoiceName,
       });
     } catch (error) {
       const keyPresent = typeof error === 'object' && error !== null && 'keyPresent' in error
@@ -445,6 +486,7 @@ export async function generateMediaComposerVoiceover(
         provider: 'google',
         model,
         keyPresent,
+        voiceName: resolvedVoiceName,
         externalCalled: code !== 'google_credentials_missing',
       });
     }
@@ -456,6 +498,7 @@ export async function generateMediaComposerVoiceover(
       message: `${provider} TTS is reserved for a later safe-build. No external TTS call was made.`,
       provider: String(provider),
       model,
+      voiceName: resolvedVoiceName,
     });
   }
 
@@ -470,6 +513,7 @@ export async function generateMediaComposerVoiceover(
       model,
       externalCalled: true,
       keyPresent,
+      voiceName: resolvedVoiceName,
     });
   } catch (error) {
     const keyPresent = typeof error === 'object' && error !== null && 'keyPresent' in error
@@ -484,6 +528,7 @@ export async function generateMediaComposerVoiceover(
       provider: 'elevenlabs',
       model,
       keyPresent,
+      voiceName: resolvedVoiceName,
       externalCalled: code !== 'elevenlabs_credentials_missing',
     });
   }

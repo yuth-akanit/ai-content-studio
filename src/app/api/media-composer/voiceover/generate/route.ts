@@ -13,6 +13,7 @@ export async function POST(request: NextRequest) {
       {
         tts_script: body.tts_script,
         voice: body.voice,
+        voice_name: body.voice_name,
         language: body.language || 'th-TH',
         source_badge: 'generated_voiceover',
       },

@@ -20,6 +20,8 @@ export interface ProductVideoUploadedAssetMetadata {
   uploaded_at: string;
   source_badge?: 'uploaded_asset' | 'generated_voiceover';
   tts_provider?: 'mock' | 'elevenlabs' | 'google' | 'phaya';
+  tts_model?: string;
+  voice_name?: string;
   external_tts_calls_performed?: boolean;
 }
 
@@ -150,6 +152,8 @@ function parseMetadataLine(line: string): ProductVideoUploadedAssetMetadata | nu
       media_type: parsed.media_type === 'video' || parsed.media_type === 'image' || parsed.media_type === 'audio' ? parsed.media_type : mediaType,
       source_badge: parsed.source_badge === 'generated_voiceover' ? 'generated_voiceover' : parsed.source_badge === 'uploaded_asset' ? 'uploaded_asset' : undefined,
       tts_provider: parsed.tts_provider === 'mock' || parsed.tts_provider === 'elevenlabs' || parsed.tts_provider === 'google' || parsed.tts_provider === 'phaya' ? parsed.tts_provider : undefined,
+      tts_model: typeof parsed.tts_model === 'string' ? parsed.tts_model : undefined,
+      voice_name: typeof parsed.voice_name === 'string' ? parsed.voice_name : undefined,
       external_tts_calls_performed: typeof parsed.external_tts_calls_performed === 'boolean' ? parsed.external_tts_calls_performed : undefined,
       image_urls: Array.isArray(parsed.image_urls) ? parsed.image_urls : (mediaType === 'image' ? [publicMediaUrl].filter(Boolean) : []),
     } as ProductVideoUploadedAssetMetadata;
