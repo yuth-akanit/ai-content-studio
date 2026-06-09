@@ -48,12 +48,25 @@ if docker ps -a --format '{{.Names}}' | grep -Fxq "$APP_NAME"; then
   docker rm -f "$APP_NAME" >/dev/null
 fi
 
+GOOGLE_TTS_CREDENTIALS_HOST_PATH="${GOOGLE_TTS_CREDENTIALS_HOST_PATH:-./.secrets/google-tts-service-account.json}"
+GOOGLE_TTS_CREDENTIALS_CONTAINER_PATH="${GOOGLE_TTS_CREDENTIALS_CONTAINER_PATH:-/app/secrets/google-tts-service-account.json}"
+
+if [[ ! -f "$GOOGLE_TTS_CREDENTIALS_HOST_PATH" ]]; then
+  echo "ERROR: Missing Google TTS credentials file at configured host path"
+  exit 1
+fi
+
+GOOGLE_TTS_CREDENTIALS_HOST_ABS="$(cd "$(dirname "$GOOGLE_TTS_CREDENTIALS_HOST_PATH")" && pwd)/$(basename "$GOOGLE_TTS_CREDENTIALS_HOST_PATH")"
+
 echo "==> Starting container: $APP_NAME"
 docker run -d \
   --name "$APP_NAME" \
   --restart unless-stopped \
+  --user root \
   -p "${APP_PORT}:${CONTAINER_PORT}" \
   --env-file "$ENV_FILE" \
+  -e "GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_TTS_CREDENTIALS_CONTAINER_PATH}" \
+  -v "${GOOGLE_TTS_CREDENTIALS_HOST_ABS}:${GOOGLE_TTS_CREDENTIALS_CONTAINER_PATH}:ro" \
   "$IMAGE_NAME" >/dev/null
 
 echo "==> Waiting for health check"
