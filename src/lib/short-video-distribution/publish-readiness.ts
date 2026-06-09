@@ -1,5 +1,3 @@
-import { existsSync } from 'node:fs';
-import path from 'node:path';
 import type { ShortVideoPlatform, ShortVideoPlatformVariant } from './planner';
 import type { RealVideoQualityGateV2 } from './real-video-quality-gate';
 import { hasPassedRealVideoQualityGateV2 } from './real-video-quality-gate';
@@ -33,13 +31,6 @@ const thaiBlockedReason: Record<string, string> = {
   caption_missing: 'ยังไม่มี caption สำหรับโพสต์',
 };
 
-function localVideoExists(videoUrl: string): boolean {
-  if (!videoUrl.startsWith('/')) return /^https:\/\//.test(videoUrl);
-  const normalized = path.normalize(videoUrl).replace(/^([/\\])+/, '');
-  if (normalized.startsWith('..')) return false;
-  return existsSync(path.join(process.cwd(), 'public', normalized));
-}
-
 function captionFromVariant(variant: ShortVideoPlatformVariant): string {
   const metadata = variant.metadata as Record<string, unknown>;
   return String(metadata.caption || metadata.description || metadata.title || '').trim();
@@ -64,7 +55,7 @@ export function buildShortVideoPublishReadiness(
   const providerConnected = process.env.REAL_SOCIAL_PUBLISH_ENABLED === 'true'
     && process.env[providerFlagByPlatform[variant.platform]] === 'true';
   const targetSelected = hasTargetSelected(variant);
-  const videoUrl200 = localVideoExists(variant.video_url);
+  const videoUrl200 = realVideoQualityGateV2.ffprobe_performed && realVideoQualityGateV2.video_stream;
   const captionPresent = captionFromVariant(variant).length > 0;
 
   const blockedCodes = [

@@ -11,6 +11,7 @@ import type { ShortVideoOwnerReviewDecisionState } from '@/lib/short-video-distr
 export type ShortVideoPreviewSourceMetadata = {
   master_video_id: string;
   master_video_url: string;
+  video_asset_id: string;
   source_type: string;
   source_badge: string;
   source_id: string;
@@ -138,6 +139,7 @@ export function buildShortVideoPreviewSourceMetadata(
   return {
     master_video_id: firstParam(params, 'master_video_id') || sampleApprovedMasterVerticalVideo.id,
     master_video_url: masterVideoUrl,
+    video_asset_id: firstParam(params, 'video_asset_id') || '',
     source_type: firstParam(params, 'source_type') || sampleMediaComposerMasterVideoRecord.source_type,
     source_badge: sourceBadge,
     source_id: firstParam(params, 'source_id') || 'sample-image-pair',

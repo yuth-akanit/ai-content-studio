@@ -72,6 +72,7 @@ export async function POST(request: NextRequest) {
       source_type: masterVideo.source_type,
       source_badge: masterVideo.source_badge,
       source_id: masterVideo.source_id || '',
+      video_asset_id: rawVideoRender?.ok ? rawVideoRender.asset_id : '',
       tts_script: masterVideo.tts_script,
       fallback_used: String(masterVideo.fallback_used),
       ready_for_distribution_preview: String(masterVideo.ready_for_distribution_preview),
