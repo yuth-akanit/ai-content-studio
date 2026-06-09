@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowRight, Film, ImagePlus, Loader2, ShieldCheck, Upload, Volume2 } from 'lucide-react';
+import { ArrowRight, Film, ImagePlus, Loader2, ShieldCheck, Sparkles, Upload, Volume2 } from 'lucide-react';
 import { PageHeader } from '@/components/shared/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -33,6 +33,18 @@ type UploadKind = 'raw_video' | 'before_image' | 'after_image' | 'voiceover_audi
 
 type AudioMixMode = 'voiceover_only' | 'duck_original_with_voiceover' | 'original_only';
 
+type TtsPreset = {
+  id: 'paa_air_service' | 'pa_cooling_solutions' | 'cold_room_refrigeration' | 'syncflow';
+  brand: string;
+  title: string;
+  segment: string;
+  provider: 'google';
+  voiceName: string;
+  voiceLabel: string;
+  script: string;
+  cta: string;
+};
+
 type MediaComposerUploadResponse = {
   ok: boolean;
   status?: 'upload_success';
@@ -59,6 +71,9 @@ type VoiceoverGenerateResponse = {
   media_type?: 'audio';
   mime_type?: string;
   source_badge?: 'generated_voiceover';
+  tts_provider?: string;
+  tts_model?: string;
+  key_present?: boolean;
   external_tts_calls_performed?: boolean;
   production_actions_performed?: false;
 };
@@ -66,6 +81,7 @@ type VoiceoverGenerateResponse = {
 type InputMode = 'existing' | 'upload';
 
 type InputState = {
+  brand: string;
   source_type: MediaComposerSourceType;
   before_image_url: string;
   after_image_url: string;
@@ -79,7 +95,57 @@ type InputState = {
   source_badge?: MediaComposerSourceBadge;
 };
 
+const THAI_TTS_PRESETS: TtsPreset[] = [
+  {
+    id: 'paa_air_service',
+    brand: 'PAA Air Service',
+    title: 'PAA Air Service',
+    segment: 'ล้างแอร์บ้าน/คอนโด',
+    provider: 'google',
+    voiceName: 'th-TH-Chirp3-HD-Charon',
+    voiceLabel: 'Thai male · Google Chirp3-HD Charon',
+    script: 'แอร์ไม่ค่อยเย็น มีกลิ่นอับ อาจถึงเวลาล้างแอร์แล้ว จองคิวกับพีเอเอได้เลย',
+    cta: 'ทัก PAA Air Service เพื่อจองคิวล้างแอร์',
+  },
+  {
+    id: 'pa_cooling_solutions',
+    brand: 'PA Cooling Solutions',
+    title: 'PA Cooling Solutions',
+    segment: 'งานระบบแอร์เชิงพาณิชย์',
+    provider: 'google',
+    voiceName: 'th-TH-Chirp3-HD-Puck',
+    voiceLabel: 'Thai male · Google Chirp3-HD Puck',
+    script: 'ระบบแอร์ร้านค้าไม่เย็นทั่วถึง ค่าไฟสูงขึ้น หรือเครื่องทำงานหนัก ให้พีเอคูลลิ่งช่วยตรวจและวางแผนแก้ไขได้',
+    cta: 'นัดสำรวจระบบแอร์กับ PA Cooling Solutions',
+  },
+  {
+    id: 'cold_room_refrigeration',
+    brand: 'Cold Room & Refrigeration',
+    title: 'ห้องเย็น / ระบบทำความเย็น',
+    segment: 'ร้านอาหาร โกดัง สินค้าแช่เย็น',
+    provider: 'google',
+    voiceName: 'th-TH-Chirp3-HD-Achird',
+    voiceLabel: 'Thai male · Google Chirp3-HD Achird',
+    script: 'ห้องเย็นอุณหภูมิไม่นิ่ง น้ำแข็งเกาะ หรือคอมเพรสเซอร์ทำงานหนัก ควรตรวจระบบก่อนสินค้าเสียหาย',
+    cta: 'ขอคำปรึกษางานห้องเย็นและระบบทำความเย็น',
+  },
+  {
+    id: 'syncflow',
+    brand: 'SyncFlow',
+    title: 'SyncFlow',
+    segment: 'รับงาน-จัดช่าง-ออกบิล',
+    provider: 'google',
+    voiceName: 'th-TH-Chirp3-HD-Charon',
+    voiceLabel: 'Thai male · Google Chirp3-HD Charon',
+    script: 'งานบริการไม่ควรหลุดคิว SyncFlow ช่วยรับงาน จัดช่าง ติดตามสถานะ และออกบิลให้ทีมเห็นภาพเดียวกัน',
+    cta: 'ดูเดโม SyncFlow สำหรับทีมบริการภาคสนาม',
+  },
+];
+
+const defaultPreset = THAI_TTS_PRESETS[0];
+
 const defaultState: InputState = {
+  brand: defaultPreset.brand,
   source_type: 'image_pair',
   before_image_url: sampleMediaComposerImagePairInput.before_image_url,
   after_image_url: sampleMediaComposerImagePairInput.after_image_url,
@@ -87,8 +153,8 @@ const defaultState: InputState = {
   voiceover_audio_url: '',
   voiceover_enabled: true,
   audio_mix_mode: 'voiceover_only',
-  tts_script: sampleMediaComposerImagePairInput.tts_script,
-  cta_banner: sampleMediaComposerImagePairInput.cta_banner || 'ทัก PA Air Service เพื่อจองคิวล้างแอร์',
+  tts_script: defaultPreset.script,
+  cta_banner: defaultPreset.cta,
   source_id: 'sample-image-pair',
   source_badge: 'sample',
 };
@@ -120,7 +186,7 @@ function buildRequestBody(state: InputState) {
       after_image_url: state.after_image_url,
       tts_script: state.tts_script,
       cta_banner: state.cta_banner,
-      brand: 'PA Air Service',
+      brand: state.brand || 'PA Air Service',
       source_id: state.source_id,
       source_badge: state.source_badge,
     };
@@ -134,13 +200,14 @@ function buildRequestBody(state: InputState) {
     audio_mix_mode: state.audio_mix_mode || 'voiceover_only',
     tts_script: state.tts_script,
     cta_banner: state.cta_banner,
-    brand: 'PA Air Service',
+    brand: state.brand || 'PA Air Service',
     source_id: state.source_id,
     source_badge: state.source_badge,
   };
 }
 export default function MediaComposerPage() {
   const [state, setState] = useState<InputState>(defaultState);
+  const [activePresetId, setActivePresetId] = useState<TtsPreset['id']>(defaultPreset.id);
   const [inputMode, setInputMode] = useState<InputMode>('existing');
   const [loading, setLoading] = useState(false);
   const [loadingSources, setLoadingSources] = useState(true);
@@ -164,6 +231,14 @@ export default function MediaComposerPage() {
     () => sourceOptions.find((option) => option.id === selectedSourceId),
     [sourceOptions, selectedSourceId],
   );
+
+  const activePreset = useMemo(
+    () => THAI_TTS_PRESETS.find((preset) => preset.id === activePresetId) || defaultPreset,
+    [activePresetId],
+  );
+
+  const scriptCharacterCount = Array.from(state.tts_script || '').length;
+  const scriptLimit = 350;
 
   useEffect(() => {
     let cancelled = false;
@@ -197,6 +272,7 @@ export default function MediaComposerPage() {
     setSelectedSourceId(option.id);
     if (option.input.source_type === 'image_pair') {
       setState({
+        brand: currentBrand(),
         source_type: 'image_pair',
         before_image_url: option.input.before_image_url,
         after_image_url: option.input.after_image_url,
@@ -213,6 +289,7 @@ export default function MediaComposerPage() {
     }
 
     setState({
+      brand: currentBrand(),
       source_type: 'raw_video',
       before_image_url: sampleMediaComposerImagePairInput.before_image_url,
       after_image_url: sampleMediaComposerImagePairInput.after_image_url,
@@ -225,6 +302,21 @@ export default function MediaComposerPage() {
       source_id: option.input.source_id || option.id,
       source_badge: option.input.source_badge || option.source_badge,
     });
+  }
+
+  function currentBrand(): string {
+    return state.brand || activePreset.brand || defaultPreset.brand;
+  }
+
+  function applyTtsPreset(preset: TtsPreset) {
+    setActivePresetId(preset.id);
+    setState((current) => ({
+      ...current,
+      brand: preset.brand,
+      tts_script: preset.script,
+      cta_banner: preset.cta,
+    }));
+    setVoiceoverResult(null);
   }
 
   async function uploadDirectFile(kind: UploadKind, file: File | null) {
@@ -325,7 +417,7 @@ export default function MediaComposerPage() {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           tts_script: state.tts_script,
-          voice: 'thai_natural_female',
+          voice: 'thai_natural_male',
           language: 'th-TH',
           source_badge: 'generated_voiceover',
         }),
@@ -502,9 +594,41 @@ export default function MediaComposerPage() {
               <Field label="raw_video_url" value={state.raw_video_url} onChange={(value) => setState((current) => ({ ...current, raw_video_url: value }))} />
             )}
 
+            <div className="space-y-3 rounded-2xl border border-sky-100 bg-sky-50/70 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2 text-sm font-black text-sky-950"><Sparkles className="h-4 w-4 text-sky-700" /> Brand / Script / TTS presets</div>
+                  <p className="mt-1 text-sm leading-6 text-sky-900">เลือกการ์ดเพื่อเติมสคริปต์ภาษาไทย แล้วแก้ไข preview ได้ก่อน Generate Voiceover</p>
+                </div>
+                <Badge variant="outline" className="border-sky-200 bg-white text-sky-800">provider={activePreset.provider} · voice={activePreset.voiceName}</Badge>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {THAI_TTS_PRESETS.map((preset) => (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    onClick={() => applyTtsPreset(preset)}
+                    className={`rounded-2xl border p-4 text-left transition ${activePresetId === preset.id ? 'border-sky-500 bg-white ring-2 ring-sky-100' : 'border-sky-100 bg-white/70 hover:bg-white'}`}
+                  >
+                    <div className="font-black text-slate-950">{preset.title}</div>
+                    <div className="mt-1 text-xs font-bold text-sky-700">{preset.segment}</div>
+                    <div className="mt-2 text-xs text-slate-600">{preset.voiceLabel}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className="space-y-2">
-              <Label htmlFor="tts-script">tts_script</Label>
-              <Textarea id="tts-script" value={state.tts_script} onChange={(event) => setState((current) => ({ ...current, tts_script: event.target.value }))} className="min-h-28" />
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <Label htmlFor="tts-script">Editable script preview</Label>
+                <span className={`text-xs font-black ${scriptCharacterCount > scriptLimit ? 'text-red-600' : 'text-slate-500'}`}>{scriptCharacterCount}/{scriptLimit} chars</span>
+              </div>
+              <Textarea id="tts-script" value={state.tts_script} onChange={(event) => setState((current) => ({ ...current, tts_script: event.target.value }))} className="min-h-32 text-base leading-7" />
+              <div className="grid gap-2 text-xs text-slate-700 sm:grid-cols-3">
+                <div className="rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">brand: <b>{state.brand}</b></div>
+                <div className="rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">provider: <b>{activePreset.provider}</b></div>
+                <div className="rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">voice: <b>{activePreset.voiceName}</b></div>
+              </div>
             </div>
 
             <div className="rounded-2xl border border-indigo-100 bg-indigo-50/70 p-4 text-sm text-indigo-950">
@@ -530,6 +654,11 @@ export default function MediaComposerPage() {
                   Generate Thai Voiceover Preview
                 </Button>
               </div>
+              {voiceoverResult?.ok ? (
+                <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-emerald-900">
+                  voiceover generated · provider={voiceoverResult.tts_provider || activePreset.provider} · voice/model={voiceoverResult.tts_model || activePreset.voiceName} · external_tts_calls_performed={String(voiceoverResult.external_tts_calls_performed)}
+                </div>
+              ) : null}
               {voiceoverResult && !voiceoverResult.ok ? (
                 <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900">
                   {voiceoverResult.error}: {voiceoverResult.message || 'ไม่เรียก external TTS'} · external_tts_calls_performed=false
