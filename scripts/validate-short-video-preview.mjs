@@ -20,6 +20,10 @@ const files = {
   mediaComposerUploadRoute: path.join(root, 'src/app/api/media-composer/assets/upload/route.ts'),
   mediaComposerVoiceoverRoute: path.join(root, 'src/app/api/media-composer/voiceover/generate/route.ts'),
   mediaComposerTtsLib: path.join(root, 'src/lib/media-composer-tts.ts'),
+  realVideoQualityGateLib: path.join(root, 'src/lib/short-video-distribution/real-video-quality-gate.ts'),
+  publishReadinessLib: path.join(root, 'src/lib/short-video-distribution/publish-readiness.ts'),
+  publishLib: path.join(root, 'src/lib/short-video-distribution/publish.ts'),
+  publishRoute: path.join(root, 'src/app/api/short-video-distribution/publish/route.ts'),
 };
 
 function read(file) {
@@ -44,6 +48,11 @@ const mediaComposerRenderRoute = read(files.mediaComposerRenderRoute);
 const mediaComposerUploadRoute = read(files.mediaComposerUploadRoute);
 const mediaComposerVoiceoverRoute = read(files.mediaComposerVoiceoverRoute);
 const mediaComposerTtsLib = read(files.mediaComposerTtsLib);
+const realVideoQualityGateLib = read(files.realVideoQualityGateLib);
+const publishReadinessLib = read(files.publishReadinessLib);
+const publishLib = read(files.publishLib);
+const publishRoute = read(files.publishRoute);
+const shortVideoAutopilotV2Module = `${realVideoQualityGateLib}\n${publishReadinessLib}\n${publishLib}\n${publishRoute}\n${page}`;
 const combinedNewModule = `${page}\n${planner}\n${fixture}`;
 const ownerDecisionModule = `${ownerDecisionLib}\n${ownerDecisionRoute}\n${ownerDecisionPanel}`;
 const manualPublishModule = `${manualPublishLib}\n${manualPublishRoute}\n${manualPublishPanel}`;
@@ -119,7 +128,9 @@ for (const pattern of forbiddenPatterns) {
   if (pattern.test(combinedNewModule)) throw new Error(`Forbidden pattern found in preview module: ${pattern}`);
 }
 
-if (/<button\b/i.test(page)) throw new Error('Preview page must not expose server-rendered action buttons.');
+if (!page.includes('Publish Now') || !page.includes('disabled={!publishReadiness.publish_allowed}')) {
+  throw new Error('Preview page must expose a disabled Publish Now button when readiness is blocked.');
+}
 if (!sidebar.includes('/short-video-distribution')) throw new Error('Sidebar link missing for preview module.');
 if (!fixture.includes("approval_status: 'approved'")) throw new Error('Fixture must represent an approved master video.');
 if (!fixture.includes("asset_type: 'vertical_mp4'")) throw new Error('Fixture must represent a vertical MP4.');
@@ -362,6 +373,70 @@ if (/external_tts_calls_performed\s*:\s*true/i.test(mediaComposerVoiceoverRoute)
   throw new Error('external_tts_calls_performed=true is only allowed inside the gated TTS adapter library');
 }
 
+const autopilotV2RequiredSnippets = [
+  'real_video_quality_gate_v2',
+  'ffprobe_performed',
+  'frames_extracted',
+  'audio_analyzed',
+  'vision_model_called',
+  'video_frames_analyzed',
+  'technical_video_score',
+  'คะแนนนี้ยังไม่ใช่การวิเคราะห์วิดีโอจริง',
+  'Publish Readiness Gate',
+  'owner_approved',
+  'real_video_quality_gate_passed',
+  'provider_connected',
+  'target_selected',
+  'video_url_200',
+  'caption_present',
+  'publish_allowed',
+  'blocked_reasons',
+  'Publish Now',
+  'POST(request: Request)',
+  'youtube_shorts',
+  'facebook_reels',
+  'instagram_reels',
+  'tiktok',
+  'dry_run',
+  'owner_manual_click',
+  'REAL_SOCIAL_PUBLISH_ENABLED',
+  'YOUTUBE_SHORTS_PUBLISH_ENABLED',
+  'FACEBOOK_REELS_PUBLISH_ENABLED',
+  'INSTAGRAM_REELS_PUBLISH_ENABLED',
+  'TIKTOK_PUBLISH_ENABLED',
+  'ShortVideoPostedProof',
+  'quality_gate_snapshot',
+  'caption_checksum',
+  'external_api_calls_performed: false',
+  'no_scheduler: true',
+  'no_auto_post: true',
+  'no_background_publish: true',
+  'real_platform_api_called: false',
+];
+
+for (const snippet of autopilotV2RequiredSnippets) {
+  if (!shortVideoAutopilotV2Module.includes(snippet)) throw new Error(`Missing autopilot v2 snippet: ${snippet}`);
+}
+
+const forbiddenAutopilotV2Patterns = [
+  /graph\.facebook\.com/i,
+  /business_discovery/i,
+  /videos\.insert/i,
+  /api\.tiktok/i,
+  /LINE_BROADCAST_API/i,
+  /setInterval\s*\(/,
+  /cron/i,
+  /scheduler_enabled\s*:\s*true/i,
+  /line_broadcast_enabled\s*:\s*true/i,
+  /publish_attempted\s*:\s*true/i,
+  /external_api_calls_performed\s*:\s*true/i,
+  /production_actions_performed\s*:\s*true/i,
+];
+
+for (const pattern of forbiddenAutopilotV2Patterns) {
+  if (pattern.test(shortVideoAutopilotV2Module)) throw new Error(`Forbidden pattern found in autopilot v2 layer: ${pattern}`);
+}
+
 console.log(JSON.stringify({
   ok: true,
   route: '/short-video-distribution',
@@ -377,6 +452,12 @@ console.log(JSON.stringify({
   manual_publish_package_api: '/api/short-video-distribution/manual-publish-package',
   manual_publish_package_safety_flags_false: true,
   media_composer_real_render_v2: true,
+  short_video_autopilot_v2: true,
+  real_video_quality_gate_v2: true,
+  publish_readiness_gate_v1: true,
+  owner_click_publish_route: '/api/short-video-distribution/publish',
+  real_platform_api_called: false,
+  no_scheduler: true,
   allowed_owner_decisions: ['approve', 'reject', 'request_changes'],
   decision_audit_log: 'runtime/short-video-preview-owner-decisions.jsonl',
   all_decision_safety_flags_false: true,

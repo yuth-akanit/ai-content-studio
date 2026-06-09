@@ -13,6 +13,8 @@ import {
   buildManualPublishPackages,
   buildShortVideoPreviewSourceMetadata,
 } from '@/lib/short-video-distribution/manual-publish-package';
+import { buildRealVideoQualityGateV2, type RealVideoQualityGateV2 } from '@/lib/short-video-distribution/real-video-quality-gate';
+import { buildShortVideoPublishReadiness, type ShortVideoPublishReadiness } from '@/lib/short-video-distribution/publish-readiness';
 
 type ShortVideoDistributionSearchParams = Promise<Record<string, string | string[] | undefined>>;
 
@@ -124,13 +126,21 @@ function SafetyFlagDetails({ variant }: { variant: ShortVideoPlatformVariant }) 
 function PlatformCard({
   variant,
   ownerDecisionState,
+  realVideoQualityGate,
+  publishReadiness,
 }: {
   variant: ShortVideoPlatformVariant;
   ownerDecisionState?: ShortVideoOwnerReviewDecisionState | null;
+  realVideoQualityGate: RealVideoQualityGateV2;
+  publishReadiness: ShortVideoPublishReadiness;
 }) {
   const postText = mainPostText(variant.metadata);
   const metadataList = metadataEntries(variant.metadata);
-  const decisionClass = decisionStyleMap[variant.creative_quality_gate.decision] || 'border-slate-200 bg-slate-50 text-slate-700';
+  const displayedScore = realVideoQualityGate.real_video_quality_gate_v2 ? realVideoQualityGate.quality_score : variant.creative_quality_gate.creative_score;
+  const displayedDecision = realVideoQualityGate.real_video_quality_gate_v2
+    ? (realVideoQualityGate.decision === 'passed' ? 'ready_for_owner_review' : realVideoQualityGate.decision === 'needs_review' ? 'needs_improvement' : 'blocked_from_publish')
+    : variant.creative_quality_gate.decision;
+  const decisionClass = decisionStyleMap[displayedDecision] || 'border-slate-200 bg-slate-50 text-slate-700';
 
   return (
     <Card className={`overflow-hidden bg-gradient-to-br shadow-sm ${platformAccentMap[variant.platform] || 'border-slate-200 from-white to-slate-50'}`}>
@@ -172,28 +182,41 @@ function PlatformCard({
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2 text-sm font-bold text-indigo-950">
               <Award className="h-4 w-4" />
-              คะแนนคุณภาพคอนเทนต์
+              {realVideoQualityGate.real_video_quality_gate_v2 ? 'Real Video Quality Gate v2' : 'Preview heuristic score'}
               {/* Creative Quality Gate v1 */}
             </div>
             <Badge variant="outline" className={decisionClass}>
-              {thaiDecision(variant.creative_quality_gate.decision)}
+              {thaiDecision(displayedDecision)}
             </Badge>
           </div>
           <div className="mt-4 grid gap-3 md:grid-cols-[160px_1fr]">
             <div className="rounded-2xl bg-indigo-50 p-4 text-center ring-1 ring-indigo-100">
               <div className="text-xs font-bold text-indigo-500">คะแนนรวม</div>
-              <div className={`mt-1 text-5xl font-black ${scoreTone(variant.creative_quality_gate.creative_score)}`}>
-                {variant.creative_quality_gate.creative_score}
+              <div className={`mt-1 text-5xl font-black ${scoreTone(displayedScore)}`}>
+                {displayedScore}
               </div>
-              <div className="text-xs text-slate-500">ผ่านเกณฑ์ที่ 80 คะแนน</div>
+              <div className="text-xs text-slate-500">{realVideoQualityGate.score_label}</div>
             </div>
             <div className="grid gap-2 sm:grid-cols-2">
-              <ScorePill label="ฮุกเปิดคลิป" value={variant.creative_quality_gate.hook_score} />
-              <ScorePill label="ภาพและความชัดเจน" value={variant.creative_quality_gate.visual_clarity_score} />
-              <ScorePill label="เหมาะกับแพลตฟอร์ม" value={variant.creative_quality_gate.platform_fit_score} />
-              <ScorePill label="พลังของแคปชัน" value={variant.creative_quality_gate.caption_strength_score} />
+              <ScorePill label="ฮุกเปิดคลิป" value={realVideoQualityGate.real_video_quality_gate_v2 ? realVideoQualityGate.hook_score : variant.creative_quality_gate.hook_score} />
+              <ScorePill label="ภาพและความชัดเจน" value={realVideoQualityGate.real_video_quality_gate_v2 ? realVideoQualityGate.visual_clarity_score : variant.creative_quality_gate.visual_clarity_score} />
+              <ScorePill label="เสียง" value={realVideoQualityGate.real_video_quality_gate_v2 ? realVideoQualityGate.audio_quality_score : variant.creative_quality_gate.caption_strength_score} />
+              <ScorePill label="เหมาะกับแพลตฟอร์ม" value={realVideoQualityGate.real_video_quality_gate_v2 ? realVideoQualityGate.platform_fit_score : variant.creative_quality_gate.platform_fit_score} />
               <ScorePill label="คำชวนติดต่อ" value={variant.creative_quality_gate.cta_score} />
             </div>
+          </div>
+          <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm leading-6 text-slate-700">
+            {realVideoQualityGate.real_video_quality_gate_v2 ? (
+              <>
+                <p><span className="font-bold">ffprobe_performed:</span> {String(realVideoQualityGate.ffprobe_performed)} · <span className="font-bold">frames_extracted:</span> {String(realVideoQualityGate.frames_extracted)} · <span className="font-bold">audio_analyzed:</span> {String(realVideoQualityGate.audio_analyzed)}</p>
+                <p><span className="font-bold">video:</span> {realVideoQualityGate.width}x{realVideoQualityGate.height}, {realVideoQualityGate.duration_seconds}s, aspect={realVideoQualityGate.aspect_ratio}</p>
+                <p><span className="font-bold">audio:</span> has_audio={String(realVideoQualityGate.audio.has_audio)}, loudness_not_silent={String(realVideoQualityGate.audio.loudness_not_silent)}, clipping_risk={String(realVideoQualityGate.audio.clipping_risk)}</p>
+                <p><span className="font-bold">vision_model_called:</span> {String(realVideoQualityGate.vision_model_called)} · <span className="font-bold">video_frames_analyzed:</span> {realVideoQualityGate.video_frames_analyzed}</p>
+                {realVideoQualityGate.score_label === 'technical_video_score' ? <p className="font-bold text-amber-800">Vision ปิดอยู่: คะแนนนี้คือ technical_video_score ไม่ใช่ vision score</p> : null}
+              </>
+            ) : (
+              <p className="font-bold text-amber-800">คะแนนนี้ยังไม่ใช่การวิเคราะห์วิดีโอจริง</p>
+            )}
           </div>
           <div className="mt-4 rounded-2xl bg-indigo-50 p-4 ring-1 ring-indigo-100">
             <div className="flex items-center gap-2 text-sm font-bold text-indigo-950">
@@ -209,25 +232,41 @@ function PlatformCard({
         </div>
 
         <div className="grid gap-3 md:grid-cols-2">
-          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
-            <div className="flex items-center gap-2 text-sm font-bold text-emerald-900">
+          <div className={`rounded-2xl border p-4 ${publishReadiness.publish_allowed ? 'border-emerald-200 bg-emerald-50' : 'border-red-200 bg-red-50'}`}>
+            <div className="flex items-center gap-2 text-sm font-bold text-slate-950">
               <CheckCircle2 className="h-4 w-4" />
-              ความพร้อมก่อนโพสต์
+              Publish Readiness Gate
             </div>
-            <div className="mt-2 space-y-1 text-sm leading-6 text-emerald-950">
-              <p>พร้อมให้แอดมินรีวิว: {variant.publish_readiness_report.ready_for_manual_review ? 'พร้อม' : 'ยังไม่พร้อม'}</p>
-              <p>พร้อมโพสต์ผ่าน API: {thaiBoolean(variant.publish_readiness_report.ready_for_api_publish_phase)}</p>
-              <p>ข้อมูลที่ยังขาด: {variant.publish_readiness_report.missing_fields.length ? `${variant.publish_readiness_report.missing_fields.length} รายการ` : 'ไม่มี'}</p>
+            <div className="mt-2 space-y-1 text-sm leading-6 text-slate-950">
+              <p>owner_approved: {thaiBoolean(publishReadiness.owner_approved)}</p>
+              <p>real_video_quality_gate_passed: {thaiBoolean(publishReadiness.real_video_quality_gate_passed)}</p>
+              <p>provider_connected: {thaiBoolean(publishReadiness.provider_connected)}</p>
+              <p>target_selected: {thaiBoolean(publishReadiness.target_selected)}</p>
+              <p>video_url_200: {thaiBoolean(publishReadiness.video_url_200)}</p>
+              <p>caption_present: {thaiBoolean(publishReadiness.caption_present)}</p>
+              <p className="font-black">publish_allowed: {thaiBoolean(publishReadiness.publish_allowed)}</p>
             </div>
+            {publishReadiness.blocked_reasons.length ? (
+              <ul className="mt-3 list-disc space-y-1 pl-5 text-sm font-semibold leading-6 text-red-900">
+                {publishReadiness.blocked_reasons.map((reason) => <li key={reason}>{reason}</li>)}
+              </ul>
+            ) : null}
           </div>
           <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
             <div className="flex items-center gap-2 text-sm font-bold text-amber-900">
               <AlertTriangle className="h-4 w-4" />
-              ยังไม่เปิดโพสต์จริง
+              Owner-click publish flow
             </div>
             <p className="mt-2 text-sm leading-6 text-amber-950">
-              โมดูลนี้เป็นโหมดดูตัวอย่างเท่านั้น การโพสต์ผ่าน API จะเปิดได้เฉพาะเฟสอนาคตที่ได้รับอนุมัติแยกต่างหาก
+              ไม่มี scheduler / auto-post / background publish ปุ่มจะกดได้เฉพาะเมื่อ gate ผ่านและเจ้าของคลิกเอง
             </p>
+            <button
+              type="button"
+              disabled={!publishReadiness.publish_allowed}
+              className="mt-3 min-h-11 rounded-2xl bg-slate-300 px-4 font-black text-white disabled:cursor-not-allowed disabled:opacity-70"
+            >
+              Publish Now
+            </button>
           </div>
         </div>
 
@@ -270,6 +309,7 @@ export default async function ShortVideoDistributionPage({ searchParams }: { sea
       : `ใช้ metadata จริงจาก Media Composer render: ${sourceMetadata.source_badge} / ${sourceMetadata.source_id}`,
   };
   const preview = buildShortVideoPreviewQueue(masterVideoForPreview);
+  const realVideoQualityGate = buildRealVideoQualityGateV2(masterVideoForPreview.video_url);
   const ownerDecisionStateByVariant = await loadShortVideoOwnerDecisionState();
   const manualPublishPackages = buildManualPublishPackages(sourceMetadata, ownerDecisionStateByVariant);
   const readyLabel = `${preview.summary.ready_count} พร้อม / ${preview.summary.needs_improvement_count} ควรปรับ / ${preview.summary.blocked_count} ยังไม่ควรโพสต์`;
@@ -335,6 +375,8 @@ export default async function ShortVideoDistributionPage({ searchParams }: { sea
               <p><span className="font-semibold">source_type:</span> {sourceMetadata.source_type}</p>
               <p><span className="font-semibold">ready_for_distribution_preview:</span> true</p>
               <p><span className="font-semibold">creative_quality_gate_v1:</span> true</p>
+              <p><span className="font-semibold">real_video_quality_gate_v2:</span> {String(realVideoQualityGate.real_video_quality_gate_v2)}</p>
+              <p><span className="font-semibold">score_label:</span> {realVideoQualityGate.score_label}</p>
               <p className="line-clamp-2"><span className="font-semibold">tts_script:</span> {sourceMetadata.tts_script}</p>
             </div>
           </div>
@@ -368,13 +410,19 @@ export default async function ShortVideoDistributionPage({ searchParams }: { sea
       <ManualPublishPackagePanel packages={manualPublishPackages} />
 
       <section className="grid gap-4 xl:grid-cols-2" aria-label="ข้อความตัวอย่างแยกตามแพลตฟอร์ม">
-        {preview.preview_queue.map((variant) => (
-          <PlatformCard
-            key={variant.variant_id}
-            variant={variant}
-            ownerDecisionState={ownerDecisionStateByVariant[variant.variant_id] || null}
-          />
-        ))}
+        {preview.preview_queue.map((variant) => {
+          const ownerDecisionState = ownerDecisionStateByVariant[variant.variant_id] || null;
+          const publishReadiness = buildShortVideoPublishReadiness(variant, realVideoQualityGate, ownerDecisionState);
+          return (
+            <PlatformCard
+              key={variant.variant_id}
+              variant={variant}
+              ownerDecisionState={ownerDecisionState}
+              realVideoQualityGate={realVideoQualityGate}
+              publishReadiness={publishReadiness}
+            />
+          );
+        })}
       </section>
     </div>
   );
