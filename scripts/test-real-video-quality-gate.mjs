@@ -181,7 +181,7 @@ const variant = {
 const readiness = buildShortVideoPublishReadiness(variant, validGate, null);
 assert.equal(readiness.publish_allowed, false, 'publish readiness remains blocked without owner/provider readiness');
 
-const publishResult = publishShortVideoDistribution({ platform: 'facebook_reels', dry_run: true, publish_readiness: readiness, real_video_quality_gate_v2: validGate });
+const publishResult = await publishShortVideoDistribution({ platform: 'facebook_reels', dry_run: true, publish_readiness: readiness, real_video_quality_gate_v2: validGate });
 assert.equal(publishResult.external_api_calls_performed, false, 'social adapters are not invoked');
 assert.equal(publishResult.publish_attempted, false, 'publish not attempted');
 

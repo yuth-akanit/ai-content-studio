@@ -19,6 +19,7 @@ import {
 } from '@/lib/short-video-distribution/manual-publish-package';
 import { buildRealVideoQualityGateV2, type RealVideoQualityGateV2 } from '@/lib/short-video-distribution/real-video-quality-gate';
 import { buildShortVideoPublishReadiness, type ShortVideoPublishReadiness } from '@/lib/short-video-distribution/publish-readiness';
+import { getSupabaseServerClient } from '@/lib/supabase/client';
 
 type ShortVideoDistributionSearchParams = Promise<Record<string, string | string[] | undefined>>;
 
@@ -132,11 +133,13 @@ function PlatformCard({
   ownerDecisionState,
   realVideoQualityGate,
   publishReadiness,
+  channels,
 }: {
   variant: ShortVideoPlatformVariant;
   ownerDecisionState?: ShortVideoOwnerReviewDecisionState | null;
   realVideoQualityGate: RealVideoQualityGateV2;
   publishReadiness: ShortVideoPublishReadiness;
+  channels: any[];
 }) {
   const postText = mainPostText(variant.metadata);
   const metadataList = metadataEntries(variant.metadata);
@@ -310,6 +313,11 @@ function PlatformCard({
           hashtags={metadataHashtags(variant.metadata)}
           cta={metadataCta(variant.metadata)}
           isManualReady={isManualReady}
+          channels={channels}
+          previewId={variant.variant_id}
+          contentId={variant.master_video_id}
+          realVideoQualityGate={realVideoQualityGate}
+          publishReadiness={publishReadiness}
         />
 
         <OwnerReviewDecisionPanel
@@ -359,6 +367,12 @@ export default async function ShortVideoDistributionPage({ searchParams }: { sea
     audio_expectation: sourceMetadata.audio_expectation,
   });
   const ownerDecisionStateByVariant = await loadShortVideoOwnerDecisionState();
+  const supabase = getSupabaseServerClient();
+  const { data: channelsData } = await supabase
+    .from('inbox_channels')
+    .select('id,name,provider,status')
+    .eq('status', 'active');
+  const channels = channelsData || [];
   const manualPublishPackages = buildManualPublishPackages(sourceMetadata, ownerDecisionStateByVariant);
   const readyLabel = `${preview.summary.ready_count} พร้อม / ${preview.summary.needs_improvement_count} ควรปรับ / ${preview.summary.blocked_count} ยังไม่ควรโพสต์`;
   const sourceBadgeTone = sourceMetadata.fallback_used
@@ -470,7 +484,7 @@ export default async function ShortVideoDistributionPage({ searchParams }: { sea
       <section className="grid gap-4 xl:grid-cols-2" aria-label="ข้อความตัวอย่างแยกตามแพลตฟอร์ม">
         {preview.preview_queue.map((variant) => {
           const ownerDecisionState = ownerDecisionStateByVariant[variant.variant_id] || null;
-          const publishReadiness = buildShortVideoPublishReadiness(variant, realVideoQualityGate, ownerDecisionState);
+          const publishReadiness = buildShortVideoPublishReadiness(variant, realVideoQualityGate, ownerDecisionState, channels);
           return (
             <PlatformCard
               key={variant.variant_id}
@@ -478,6 +492,7 @@ export default async function ShortVideoDistributionPage({ searchParams }: { sea
               ownerDecisionState={ownerDecisionState}
               realVideoQualityGate={realVideoQualityGate}
               publishReadiness={publishReadiness}
+              channels={channels}
             />
           );
         })}

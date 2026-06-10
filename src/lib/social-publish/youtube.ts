@@ -1,3 +1,5 @@
+import crypto from 'crypto';
+
 export type YouTubeUploadInput = {
   accessToken: string;
   videoUrl: string;

@@ -9,7 +9,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: 'invalid_json' }, { status: 400 });
   }
 
-  const result = publishShortVideoDistribution(payload);
+  const result = await publishShortVideoDistribution(payload);
   const status = result.mode === 'blocked' ? 409 : 200;
   return NextResponse.json({
     short_video_publish_route_v1: true,

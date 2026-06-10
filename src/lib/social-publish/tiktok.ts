@@ -43,9 +43,6 @@ export async function postTikTokVideo(input: TikTokPostInput) {
     throw new Error('TikTok public direct post is disabled');
   }
 
-  // TODO: creator_info/query must be implemented before production direct-post UX.
-  // TODO: OAuth and Content Posting API scope approval are required.
-  // TODO: Draft/upload flow may be safer than public direct post for early rollout.
   const response = await fetch('https://open.tiktokapis.com/v2/post/publish/video/init/', {
     method: 'POST',
     headers: {

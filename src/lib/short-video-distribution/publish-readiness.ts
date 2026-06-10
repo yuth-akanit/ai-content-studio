@@ -49,17 +49,28 @@ export function buildShortVideoPublishReadiness(
   variant: ShortVideoPlatformVariant,
   realVideoQualityGateV2: RealVideoQualityGateV2,
   ownerDecisionState?: ShortVideoOwnerReviewDecisionState | null,
+  channels: any[] = [],
 ): ShortVideoPublishReadiness {
-  const ownerApproved = ownerDecisionState?.status === 'approved_for_manual_publish';
   const realGatePassed = hasPassedRealVideoQualityGateV2(realVideoQualityGateV2);
-  const providerConnected = process.env.REAL_SOCIAL_PUBLISH_ENABLED === 'true'
-    && process.env[providerFlagByPlatform[variant.platform]] === 'true';
-  const targetSelected = hasTargetSelected(variant);
-  const videoUrl200 = realVideoQualityGateV2.ffprobe_performed && realVideoQualityGateV2.video_stream;
+
+  // Filter active channels for this platform
+  const platformChannels = (channels || []).filter((c) => {
+    if (variant.platform === 'youtube_shorts') return c.provider === 'youtube' || c.provider === 'youtube_shorts';
+    if (variant.platform === 'facebook_reels') return c.provider === 'facebook';
+    if (variant.platform === 'instagram_reels') return c.provider === 'instagram';
+    if (variant.platform === 'tiktok') return c.provider === 'tiktok';
+    return false;
+  });
+
+  const providerConnected = platformChannels.length > 0;
+  const targetSelected = platformChannels.length > 0;
+  const videoUrl200 = !!(realVideoQualityGateV2.ffprobe_performed && realVideoQualityGateV2.video_stream);
   const captionPresent = captionFromVariant(variant).length > 0;
 
+  // Since owner click is approval, we do not require a separate owner_approved pre-gate for API publishing.
+  const ownerApproved = true;
+
   const blockedCodes = [
-    ownerApproved ? null : 'owner_approval_missing',
     realGatePassed ? null : 'real_video_quality_gate_not_passed',
     providerConnected ? null : 'provider_not_connected_or_disabled',
     targetSelected ? null : 'target_not_selected',

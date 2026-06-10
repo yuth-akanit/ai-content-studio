@@ -1,9 +1,9 @@
 import { createHmac, timingSafeEqual } from 'crypto';
 import { SupabaseClient } from '@supabase/supabase-js';
 import {
-  SocialAccountToken,
   updateSocialAccountToken,
   upsertSocialAccountToken,
+  type SocialAccountToken,
 } from '@/lib/repositories/social-account-tokens';
 
 const YOUTUBE_UPLOAD_SCOPE = 'https://www.googleapis.com/auth/youtube.upload';
