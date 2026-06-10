@@ -81,7 +81,7 @@ export interface GeneratedContent {
   asset_type: string | null;
   visual_direction: string | null;
   platform_constraints: Record<string, unknown>;
-  status: 'draft' | 'saved' | 'published' | 'archived';
+  status: 'draft' | 'draft_ready_for_caption' | 'saved' | 'published' | 'archived';
   metadata?: Record<string, unknown>;
   model_name: string | null;
   prompt_version: string;
@@ -349,6 +349,8 @@ export interface GenerationInput {
   image_analysis?: string;
   video_analysis?: string;
   video_transcript?: string;
+  source_content_id?: string;
+  source_module?: string;
 }
 
 export interface ContentOutput {

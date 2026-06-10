@@ -13,6 +13,7 @@ import { ManualPublishPackControls } from '@/components/short-video-distribution
 import {
   buildManualPublishPackages,
   buildShortVideoPreviewSourceMetadata,
+  type ShortVideoPreviewSourceMetadata,
   metadataCaption,
   metadataHashtags,
   metadataCta,
@@ -134,12 +135,14 @@ function PlatformCard({
   realVideoQualityGate,
   publishReadiness,
   channels,
+  sourceMetadata,
 }: {
   variant: ShortVideoPlatformVariant;
   ownerDecisionState?: ShortVideoOwnerReviewDecisionState | null;
   realVideoQualityGate: RealVideoQualityGateV2;
   publishReadiness: ShortVideoPublishReadiness;
   channels: any[];
+  sourceMetadata: ShortVideoPreviewSourceMetadata;
 }) {
   const postText = mainPostText(variant.metadata);
   const metadataList = metadataEntries(variant.metadata);
@@ -318,6 +321,11 @@ function PlatformCard({
           contentId={variant.master_video_id}
           realVideoQualityGate={realVideoQualityGate}
           publishReadiness={publishReadiness}
+          videoAssetId={sourceMetadata.analyzed_video_asset_id || sourceMetadata.video_asset_id}
+          finalMasterAssetId={sourceMetadata.final_master_video_asset_id || undefined}
+          transcript={sourceMetadata.tts_script}
+          serviceType={sampleApprovedMasterVerticalVideo.service}
+          targetArea={sampleApprovedMasterVerticalVideo.service_area}
         />
 
         <OwnerReviewDecisionPanel
@@ -493,6 +501,7 @@ export default async function ShortVideoDistributionPage({ searchParams }: { sea
               realVideoQualityGate={realVideoQualityGate}
               publishReadiness={publishReadiness}
               channels={channels}
+              sourceMetadata={sourceMetadata}
             />
           );
         })}

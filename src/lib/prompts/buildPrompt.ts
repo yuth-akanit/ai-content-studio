@@ -10,7 +10,7 @@ export interface BuiltPrompt {
   promptVersion: string;
 }
 
-const PROMPT_VERSION = 'v1.1';
+const PROMPT_VERSION = 'v1.2';
 
 function buildSystemPrompt(
   profile: BusinessProfile,
@@ -53,6 +53,10 @@ QUALITY RULES:
 - youtube version must be search-optimized, engaging, and suitable for video descriptions or community posts.
 - If IMAGE CONTEXT, VIDEO CONTEXT, or VIDEO TRANSCRIPT is provided, it is the PRIMARY source for the post angle. Do not let the generic HVAC template override what is visibly shown.
 - Every generation must feel unique to the uploaded media and user-entered details. Avoid reusable generic openings, sentence patterns, and service lists.
+
+CUSTOMER CAPTION SAFETY RULE (CRITICAL):
+- Never expose internal production wording to customers. Rewrite or omit these words/phrases everywhere in captions, hashtags, CTA, keywords, titles, descriptions, and platform copy: master video, TTS, แปลงไฟล์ต้นทาง, ตรวจทานก่อนกระจายคลิป, quality gate, provider, API Publish, generated asset.
+- If those terms appear in the source draft/transcript/operator notes, treat them as internal context only and convert to customer-safe phrasing such as วิดีโอพร้อมโพสต์, เสียงบรรยาย, ตรวจข้อความก่อนโพสต์, or ไฟล์วิดีโอ.
 
 VISUAL-FIRST RULES (CRITICAL WHEN MEDIA CONTEXT EXISTS):
 - Start from the actual visual evidence first: visible dirt, coil condition, water leak, technician action, tools, before/after state, equipment type, or customer situation.
@@ -216,6 +220,7 @@ function buildUserPrompt(
   if (input.keyword) parts.push(`Include keyword: ${input.keyword}`);
   if (input.visual_direction) parts.push(`Visual direction: ${input.visual_direction}`);
   if (input.content_goal) parts.push(`Content goal: ${input.content_goal}`);
+  if (input.source_module === 'short_video_distribution') parts.push(`Source: Short Video Distribution finished clip handoff. Regenerate all customer-facing caption/hashtags/CTA/keywords/title/description from the finished clip. Treat previous caption as draft context only.`);
   if (input.custom_notes) parts.push(`Additional notes: ${input.custom_notes}`);
 
   // Tone

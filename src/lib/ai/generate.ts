@@ -1,6 +1,7 @@
 import { BusinessProfile, GenerationInput, ContentOutput } from '@/types/database';
 import { buildPrompt } from '@/lib/prompts/buildPrompt';
 import { getAIProvider, AIMessage } from './provider';
+import { sanitizeContentOutputForCustomers } from '@/lib/caption-safety';
 
 export interface GenerationResult {
   output: ContentOutput;
@@ -53,7 +54,7 @@ function parseAndValidateOutput(raw: string, platform: string): ContentOutput {
     output.hashtags = [];
   }
 
-  return output;
+  return sanitizeContentOutputForCustomers(output);
 }
 
 export async function generateContent(

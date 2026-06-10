@@ -14,7 +14,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { LoadingSpinner } from '@/components/shared/loading-spinner';
 import { EmptyState } from '@/components/shared/empty-state';
 import { OutputDisplay } from '@/components/content/output-display';
-import { Sparkles, Loader2, Save, RefreshCw, Building2, X, Upload, Video, Globe, Store, MessageCircle, MoreHorizontal } from 'lucide-react';
+import { Sparkles, Loader2, Save, RefreshCw, Building2, X, Upload, Video, Globe, Store, MessageCircle, MoreHorizontal, Library } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   Platform,
@@ -51,6 +51,20 @@ interface SocialPage {
     is_instagram?: boolean;
   };
 }
+
+type ShortVideoContentDraft = GeneratedContent & {
+  metadata?: {
+    source_module?: string;
+    video_url?: string;
+    transcript?: string;
+    current_caption?: string;
+    hashtags?: string[];
+    cta?: string;
+    service_type?: string;
+    target_area?: string;
+    [key: string]: unknown;
+  };
+};
 
 const defaultInput: GenerationInput = {
   platform: 'facebook',
@@ -290,6 +304,9 @@ function GeneratePageInner() {
   const [videoTranscriptUpdatedAt, setVideoTranscriptUpdatedAt] = useState<Date | null>(null);
   const [generationAnalysisUsedAt, setGenerationAnalysisUsedAt] = useState<Date | null>(null);
   const [activeStep, setActiveStep] = useState(1);
+  const [shortVideoDrafts, setShortVideoDrafts] = useState<ShortVideoContentDraft[]>([]);
+  const [selectedShortVideoDraftId, setSelectedShortVideoDraftId] = useState<string>('');
+  const [draftLoading, setDraftLoading] = useState(false);
 
   const normalizedTranscript = normalizeTranscript(videoTranscript);
   const hasTranscriptText = normalizedTranscript.length > 0;
@@ -318,6 +335,21 @@ function GeneratePageInner() {
     }
   }, [profile?.id]);
 
+useEffect(() => {
+  if (profile?.id) {
+    loadShortVideoDrafts(profile.id);
+  }
+}, [profile?.id]);
+
+useEffect(() => {
+  const draftId = searchParams.get('draft_id');
+  if (draftId && profile?.id) {
+    importShortVideoDraft(draftId);
+  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [profile?.id, searchParams]);
+
+
   async function loadSocialPages() {
     try {
       const res = await fetch('/api/social-pages');
@@ -327,6 +359,68 @@ function GeneratePageInner() {
       }
     } catch (err) {
       console.error('Failed to load social pages', err);
+    }
+  }
+
+
+  async function loadShortVideoDrafts(pid: string) {
+    try {
+      const params = new URLSearchParams({
+        profile_id: pid,
+        source_module: 'short_video_distribution',
+        status: 'draft_ready_for_caption',
+        limit: '25',
+        fields: '*',
+      });
+      const res = await fetch(`/api/content?${params}`);
+      const data = await res.json();
+      setShortVideoDrafts(Array.isArray(data.data) ? data.data : []);
+    } catch (err) {
+      console.error('Failed to load Short Video drafts', err);
+    }
+  }
+
+  async function importShortVideoDraft(draftId: string) {
+    if (!draftId) return;
+    setDraftLoading(true);
+    try {
+      const res = await fetch(`/api/content/${draftId}`);
+      const draft = await res.json() as ShortVideoContentDraft & { error?: string };
+      if (!res.ok || !draft?.id) {
+        throw new Error(draft.error || 'ไม่พบ Draft');
+      }
+      const draftInput = draft.input_payload || defaultInput;
+      const metadata = draft.metadata || {};
+      setSelectedShortVideoDraftId(draft.id);
+      setInput({
+        ...defaultInput,
+        ...draftInput,
+        platform: draft.platform,
+        content_type: draft.content_type,
+        service_type: (metadata.service_type as string) || draft.service_type || draftInput.service_type,
+        location: (metadata.target_area as string) || draftInput.location,
+        video_url: (metadata.video_url as string) || draftInput.video_url,
+        video_transcript: (metadata.transcript as string) || draftInput.video_transcript,
+        source_content_id: draft.id,
+        source_module: 'short_video_distribution',
+        custom_notes: [
+          draftInput.custom_notes,
+          'Imported from Short Video Distribution draft. Regenerate all customer-facing caption, hashtags, CTA, keywords, platform-specific copy, title, and description from the finished clip.',
+          metadata.current_caption ? `Current caption context: ${metadata.current_caption}` : '',
+          Array.isArray(metadata.hashtags) && metadata.hashtags.length ? `Current hashtags: ${metadata.hashtags.join(' ')}` : '',
+          metadata.cta ? `Current CTA: ${metadata.cta}` : '',
+        ].filter(Boolean).join('\n'),
+      });
+      setVideoPreview(String(metadata.video_url || draftInput.video_url || ''));
+      setVideoTranscript(String(metadata.transcript || draftInput.video_transcript || ''));
+      setUseTranscriptForGeneration(Boolean(metadata.transcript || draftInput.video_transcript));
+      setVideoAnalysisSummary('นำเข้า Draft จาก Short Video Distribution แล้ว ระบบจะใช้คลิปสุดท้ายและบริบทเดิมเพื่อสร้างข้อความลูกค้าใหม่แบบปลอดคำภายใน');
+      setActiveStep(3);
+      toast.success('นำเข้า Short Video Draft แล้ว พร้อมสร้างแคปชันใหม่');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'นำเข้า Draft ไม่สำเร็จ');
+    } finally {
+      setDraftLoading(false);
     }
   }
 
@@ -734,6 +828,48 @@ function GeneratePageInner() {
         title="สร้างคอนเทนต์ด้วย AI"
         description="สร้างเนื้อหาการตลาดสำหรับแพลตฟอร์มต่าง ๆ โดยอิงจากข้อมูลธุรกิจของคุณ"
       />
+
+
+<Card className="mb-6 border-emerald-100 bg-emerald-50/50 rounded-2xl overflow-hidden shadow-sm">
+  <CardHeader className="pb-3 bg-white/60 border-b border-emerald-100">
+    <CardTitle className="text-sm font-semibold text-emerald-950 flex items-center gap-2">
+      <Library className="h-4 w-4 text-emerald-600" />
+      นำเข้า Draft จาก Short Video Distribution
+    </CardTitle>
+  </CardHeader>
+  <CardContent className="space-y-3 pt-4">
+    <p className="text-xs font-semibold leading-relaxed text-emerald-800">
+      เลือกคลิปที่ส่งมาจากหน้า Short Video เพื่อสร้างแคปชัน แฮชแท็ก CTA คีย์เวิร์ด title/description และ platform copy ใหม่จากวิดีโอสุดท้าย
+    </p>
+    <div className="flex flex-col gap-2 sm:flex-row">
+      <select
+        className="flex h-10 min-w-0 flex-1 rounded-md border border-emerald-200 bg-white px-3 py-1 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+        value={selectedShortVideoDraftId}
+        onChange={(event) => setSelectedShortVideoDraftId(event.target.value)}
+        disabled={draftLoading}
+      >
+        <option value="">-- เลือก Short Video Draft --</option>
+        {shortVideoDrafts.map((draft) => (
+          <option key={draft.id} value={draft.id}>
+            {(draft.metadata?.platform as string) || draft.platform} · {draft.service_type || draft.metadata?.service_type || draft.topic || draft.id}
+          </option>
+        ))}
+      </select>
+      <Button
+        type="button"
+        onClick={() => importShortVideoDraft(selectedShortVideoDraftId)}
+        disabled={!selectedShortVideoDraftId || draftLoading}
+        className="bg-emerald-600 text-white hover:bg-emerald-700"
+      >
+        {draftLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Sparkles className="h-4 w-4 mr-2" />}
+        นำเข้าเพื่อสร้างแคปชันใหม่
+      </Button>
+    </div>
+    {shortVideoDrafts.length === 0 && (
+      <p className="text-[11px] font-medium text-emerald-700">ยังไม่มี Draft จาก Short Video Distribution หรือรายการถูกสร้างในโปรไฟล์อื่น</p>
+    )}
+  </CardContent>
+</Card>
 
       {isTikTokReviewContext && (
         <Card className="mb-6 border-amber-200 bg-amber-50 rounded-2xl overflow-hidden shadow-sm">

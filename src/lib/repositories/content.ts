@@ -9,6 +9,7 @@ export interface ContentFilters {
   project_id?: string;
   status?: string;
   search?: string;
+  source_module?: string;
   limit?: number;
   offset?: number;
 }
@@ -30,6 +31,7 @@ export async function getContents(
   if (filters.project_id) query = query.eq('project_id', filters.project_id);
   if (filters.status) query = query.eq('status', filters.status);
   if (filters.search) query = query.or(`topic.ilike.%${filters.search}%,service_type.ilike.%${filters.search}%`);
+  if (filters.source_module) query = query.eq('metadata->>source_module', filters.source_module);
 
   const limit = filters.limit || 20;
   const offset = filters.offset || 0;

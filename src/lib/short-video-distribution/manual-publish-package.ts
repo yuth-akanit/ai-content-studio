@@ -7,6 +7,7 @@ import {
 import { sampleApprovedMasterVerticalVideo } from '@/lib/short-video-distribution/sample-fixture';
 import { sampleMediaComposerMasterVideoRecord } from '@/lib/media-composer';
 import type { ShortVideoOwnerReviewDecisionState } from '@/lib/short-video-distribution/owner-review-decisions';
+import { rewriteInternalCaptionWording } from '@/lib/caption-safety';
 
 export type ShortVideoPreviewSourceMetadata = {
   master_video_id: string;
@@ -101,9 +102,9 @@ function hashtagsFromText(text: string): string[] {
 
 export function metadataCaption(metadata: PlatformMetadata): string {
   const record = metadata as Record<string, unknown>;
-  if (typeof record.caption === 'string') return record.caption;
-  if (typeof record.description === 'string') return record.description;
-  if (typeof record.title === 'string') return record.title;
+  if (typeof record.caption === 'string') return rewriteInternalCaptionWording(record.caption);
+  if (typeof record.description === 'string') return rewriteInternalCaptionWording(record.description);
+  if (typeof record.title === 'string') return rewriteInternalCaptionWording(record.title);
   return JSON.stringify(metadata);
 }
 
@@ -116,9 +117,9 @@ export function metadataHashtags(metadata: PlatformMetadata): string[] {
 
 export function metadataCta(metadata: PlatformMetadata): string {
   const record = metadata as Record<string, unknown>;
-  if (typeof record.cta === 'string') return record.cta;
+  if (typeof record.cta === 'string') return rewriteInternalCaptionWording(record.cta);
   const caption = metadataCaption(metadata);
-  return caption.split('\n').map((line) => line.trim()).find((line) => /ทัก|จอง|ติดต่อ|book/i.test(line)) || 'ตรวจข้อความแล้วนำไปโพสต์เองแบบ manual เท่านั้น';
+  return rewriteInternalCaptionWording(caption.split('\n').map((line) => line.trim()).find((line) => /ทัก|จอง|ติดต่อ|book/i.test(line)) || 'ตรวจข้อความแล้วนำไปโพสต์เองแบบ manual เท่านั้น');
 }
 
 function manualStepsForPlatform(platformLabel: string): string[] {

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Copy, ExternalLink, Check, Link, MessageSquare, Hash, Share2, Clipboard } from 'lucide-react';
+import { Copy, ExternalLink, Check, Link, MessageSquare, Hash, Share2, Clipboard, Sparkles, Library } from 'lucide-react';
 import type { ShortVideoPlatform } from '@/lib/short-video-distribution/planner';
 import type { RealVideoQualityGateV2 } from '@/lib/short-video-distribution/real-video-quality-gate';
 import type { ShortVideoPublishReadiness } from '@/lib/short-video-distribution/publish-readiness';
@@ -19,6 +19,11 @@ type ManualPublishPackControlsProps = {
   contentId: string;
   realVideoQualityGate: RealVideoQualityGateV2;
   publishReadiness: ShortVideoPublishReadiness;
+  videoAssetId?: string;
+  finalMasterAssetId?: string;
+  transcript?: string;
+  serviceType?: string;
+  targetArea?: string;
 };
 
 const PLATFORM_UPLOAD_URLS: Record<ShortVideoPlatform, string> = {
@@ -40,6 +45,11 @@ export function ManualPublishPackControls({
   contentId,
   realVideoQualityGate,
   publishReadiness,
+  videoAssetId,
+  finalMasterAssetId,
+  transcript,
+  serviceType,
+  targetArea,
 }: ManualPublishPackControlsProps) {
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
@@ -66,6 +76,7 @@ export function ManualPublishPackControls({
   const [publishing, setPublishing] = useState(false);
   const [publishResult, setPublishResult] = useState<any | null>(null);
   const [publishError, setPublishError] = useState<string | null>(null);
+  const [draftSaving, setDraftSaving] = useState<'caption' | 'library' | null>(null);
 
   const isApiReady = !!(
     publishReadiness.publish_allowed &&
@@ -121,6 +132,49 @@ export function ManualPublishPackControls({
     const combinedText = `ลิงก์วิดีโอ: ${videoUrl}\n\nแคปชัน: ${caption}\n\nแฮชแท็ก: ${hashtagText}\n\nCTA: ${cta}`;
     await handleCopy('all', combinedText);
   };
+
+
+
+const handleCreateContentDraft = async (action: 'caption_handoff' | 'save_library') => {
+  setDraftSaving(action === 'caption_handoff' ? 'caption' : 'library');
+  try {
+    const res = await fetch('/api/short-video-distribution/content-drafts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action,
+        platform,
+        video_url: videoUrl,
+        video_asset_id: videoAssetId,
+        final_master_asset_id: finalMasterAssetId,
+        transcript,
+        current_caption: caption,
+        hashtags,
+        cta,
+        service_type: serviceType,
+        target_area: targetArea,
+        quality_gate_snapshot: {
+          real_video_quality_gate_v2: realVideoQualityGate,
+          publish_readiness: publishReadiness,
+        },
+        preview_id: previewId,
+        content_id: contentId,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) {
+      throw new Error(data.error || 'สร้าง Content Draft ไม่สำเร็จ');
+    }
+    toast.success(action === 'caption_handoff' ? 'ส่งไปสร้างแคปชันแล้ว' : 'บันทึกเข้าคลังเนื้อหาแล้ว');
+    if (action === 'caption_handoff' && data.redirect_url) {
+      window.location.href = data.redirect_url;
+    }
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : 'สร้าง Content Draft ไม่สำเร็จ');
+  } finally {
+    setDraftSaving(null);
+  }
+};
 
   const handlePublishNow = async () => {
     if (!isApiReady) return;
@@ -264,7 +318,46 @@ export function ManualPublishPackControls({
         )}
       </div>
 
-      {/* 2. Manual Copying / Fallback Package */}
+
+{/* 2. Content Draft Handoff */}
+<div className="rounded-2xl border border-emerald-100 bg-emerald-50/40 p-4 space-y-3 shadow-2xs">
+  <div className="flex flex-wrap items-start justify-between gap-2">
+    <div>
+      <h5 className="text-sm font-bold text-emerald-950 flex items-center gap-1.5">
+        <Sparkles className="h-4 w-4 text-emerald-600" />
+        ส่งต่อไปสร้างแคปชันใหม่จากคลิปที่เสร็จแล้ว
+      </h5>
+      <p className="mt-1 text-xs font-semibold leading-relaxed text-emerald-800">
+        ใช้คลิปสุดท้ายเป็นแหล่งข้อมูล แล้วให้หน้า “สร้างคอนเทนต์ด้วย AI” เขียนแคปชัน แฮชแท็ก CTA คีย์เวิร์ด และคำอธิบายใหม่แบบปลอดคำภายใน
+      </p>
+    </div>
+    <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-emerald-700 ring-1 ring-emerald-200">
+      draft_ready_for_caption
+    </span>
+  </div>
+  <div className="grid gap-2 sm:grid-cols-2">
+    <button
+      type="button"
+      onClick={() => handleCreateContentDraft('caption_handoff')}
+      disabled={!videoUrl || !!draftSaving}
+      className="min-h-11 inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-black text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400 shadow-sm transition-colors"
+    >
+      {draftSaving === 'caption' ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" /> : <Sparkles className="h-4 w-4" />}
+      <span>ส่งไปสร้างแคปชัน</span>
+    </button>
+    <button
+      type="button"
+      onClick={() => handleCreateContentDraft('save_library')}
+      disabled={!videoUrl || !!draftSaving}
+      className="min-h-11 inline-flex items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-white px-4 py-2.5 text-sm font-black text-emerald-800 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50 shadow-2xs transition-colors"
+    >
+      {draftSaving === 'library' ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-emerald-600 border-t-transparent" /> : <Library className="h-4 w-4" />}
+      <span>บันทึกเข้าคลังเนื้อหา</span>
+    </button>
+  </div>
+</div>
+
+      {/* 3. Manual Copying / Fallback Package */}
       <div className="flex items-center justify-between border-t border-slate-100 pt-3">
         <div className="flex items-center gap-2">
           <Clipboard className="h-5 w-5 text-slate-600" />

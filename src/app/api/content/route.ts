@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'profile_id is required' }, { status: 400 });
     }
 
-    const fields = searchParams.get('fields') || 'id,business_profile_id,project_id,platform,platform_variant,content_type,topic,service_type,output_payload,language,tone,content_goal,post_length,asset_type,visual_direction,status,created_at';
+    const fields = searchParams.get('fields') || 'id,business_profile_id,project_id,platform,platform_variant,content_type,topic,service_type,output_payload,language,tone,content_goal,post_length,asset_type,visual_direction,status,metadata,created_at';
 
     const result = await getContents(profileId, {
       platform: searchParams.get('platform') || undefined,
@@ -18,6 +18,7 @@ export async function GET(request: NextRequest) {
       project_id: searchParams.get('project_id') || undefined,
       status: searchParams.get('status') || undefined,
       search: searchParams.get('search') || undefined,
+      source_module: searchParams.get('source_module') || undefined,
       limit: searchParams.get('limit') ? parseInt(searchParams.get('limit')!) : 20,
       offset: searchParams.get('offset') ? parseInt(searchParams.get('offset')!) : 0,
     }, fields);

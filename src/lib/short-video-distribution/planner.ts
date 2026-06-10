@@ -1,3 +1,4 @@
+import { rewriteInternalCaptionWording } from '@/lib/caption-safety';
 export type ShortVideoPlatform = 'youtube_shorts' | 'facebook_reels' | 'instagram_reels' | 'tiktok';
 
 export type MasterVerticalVideo = {
@@ -196,9 +197,9 @@ function generatePlatformMetadata(masterVideo: MasterVerticalVideo): Record<Shor
   const brand = cleanText(masterVideo.brand, 'PA Air Service');
   const service = cleanText(masterVideo.service, 'ล้างแอร์บ้าน');
   const area = cleanText(masterVideo.service_area, 'สมุทรปราการ');
-  const title = cleanText(masterVideo.title, `${brand} ${service}`);
-  const valueProp = cleanText(masterVideo.value_prop, 'ทีมช่างท้องถิ่น นัดหมายง่าย ดูแลแอร์ให้เย็นไวและสะอาดขึ้น');
-  const cta = cleanText(masterVideo.cta, 'ทักเพื่อจองคิวล้างแอร์กับ PA Air Service');
+  const title = rewriteInternalCaptionWording(cleanText(masterVideo.title, `${brand} ${service}`));
+  const valueProp = rewriteInternalCaptionWording(cleanText(masterVideo.value_prop, 'ทีมช่างท้องถิ่น นัดหมายง่าย ดูแลแอร์ให้เย็นไวและสะอาดขึ้น'));
+  const cta = rewriteInternalCaptionWording(cleanText(masterVideo.cta, 'ทักเพื่อจองคิวล้างแอร์กับ PA Air Service'));
   const tags = uniqueTags([
     ...masterVideo.tags,
     'PAAirService',
@@ -215,21 +216,21 @@ function generatePlatformMetadata(masterVideo: MasterVerticalVideo): Record<Shor
   return {
     youtube_shorts: {
       title: truncate(`${title} | #Shorts`, 100),
-      description: truncate(`${opener}\n${benefit}\n\n${cta}\n\n${hash.slice(0, 6).join(' ')}`, 5000),
+      description: rewriteInternalCaptionWording(truncate(`${opener}\n${benefit}\n\n${cta}\n\n${hash.slice(0, 6).join(' ')}`, 5000)),
       tags: tags.slice(0, 15),
       privacy_status: masterVideo.youtube_privacy_status || 'unlisted',
     },
     facebook_reels: {
-      caption: truncate(`${opener}\n\n${benefit}\n\n${cta}`, 2200),
+      caption: rewriteInternalCaptionWording(truncate(`${opener}\n\n${benefit}\n\n${cta}`, 2200)),
       cta,
       page_id: 'FACEBOOK_PAGE_ID_PLACEHOLDER',
     },
     instagram_reels: {
-      caption: truncate(`${opener}\n\n${benefit}\n\n${hash.slice(0, 10).join(' ')}`, 2200),
+      caption: rewriteInternalCaptionWording(truncate(`${opener}\n\n${benefit}\n\n${hash.slice(0, 10).join(' ')}`, 2200)),
       hashtags: hash.slice(0, 10),
     },
     tiktok: {
-      caption: truncate(`${hook} เริ่มจากคลิปนี้ 👇 ${brand} ช่วยดูแล${service}ใน${area} | ${cta} ${hash.slice(0, 5).join(' ')}`, 2200),
+      caption: rewriteInternalCaptionWording(truncate(`${hook} เริ่มจากคลิปนี้ 👇 ${brand} ช่วยดูแล${service}ใน${area} | ${cta} ${hash.slice(0, 5).join(' ')}`, 2200)),
       publish_mode: 'manual_review',
     },
   };
