@@ -146,6 +146,7 @@ export function ManualPublishPackControls({
           real_video_quality_gate_v2: realVideoQualityGate,
           owner_confirmed: true,
           publish_mode: 'owner_manual_click',
+          dry_run: false,
         }),
       });
 

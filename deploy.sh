@@ -67,6 +67,7 @@ docker run -d \
   --env-file "$ENV_FILE" \
   -e "GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_TTS_CREDENTIALS_CONTAINER_PATH}" \
   -v "${GOOGLE_TTS_CREDENTIALS_HOST_ABS}:${GOOGLE_TTS_CREDENTIALS_CONTAINER_PATH}:ro" \
+  -v "/var/lib/ai-content-studio/runtime:/app/runtime" \
   "$IMAGE_NAME" >/dev/null
 
 echo "==> Waiting for health check"

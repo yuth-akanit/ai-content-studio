@@ -16,7 +16,7 @@ export async function POST(request: Request) {
     no_scheduler: true,
     no_auto_post: true,
     no_background_publish: true,
-    real_platform_api_called: false,
+    real_platform_api_called: result.external_api_calls_performed, // real_platform_api_called: false
     ...result,
   }, { status });
 }
