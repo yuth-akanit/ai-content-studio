@@ -16,6 +16,18 @@ const execFileAsync = promisify(execFile);
 const OUTPUT_MIME_TYPE = 'video/mp4';
 const OUTPUT_EXTENSION = '.mp4';
 const MAX_OVERLAY_TEXT_CHARS = 56;
+const LOUDNORM_TARGET_I = -16;
+const LOUDNORM_TARGET_TP = -1.5;
+const LOUDNORM_TARGET_LRA = 9;
+const LOUDNORM_INTEGRATED_TOLERANCE = 1;
+
+type LoudnormMeasurement = {
+  inputIntegratedLufs: number;
+  inputTruePeakDbtp: number;
+  inputLra: number;
+  inputThreshold: number;
+  targetOffset: number;
+};
 
 type MediaComposerRawVideoInputWithVoiceover = MediaComposerRawVideoInput & {
   voiceover_audio_url?: string;
@@ -196,6 +208,138 @@ async function ffprobeHasAudio(inputPath: string): Promise<boolean> {
   }
 }
 
+function finiteLoudnormMetric(record: Record<string, unknown>, key: string): number | null {
+  const rawValue = record[key];
+  if (typeof rawValue !== 'string' && typeof rawValue !== 'number') return null;
+
+  const value = Number(rawValue);
+  return Number.isFinite(value) ? value : null;
+}
+
+function parseLoudnormMeasurement(stderr: string): LoudnormMeasurement {
+  const jsonBlocks = stderr.match(/\{[\s\S]*?\}/g) ?? [];
+
+  for (let index = jsonBlocks.length - 1; index >= 0; index -= 1) {
+    const jsonBlock = jsonBlocks[index];
+    if (!jsonBlock) continue;
+
+    let parsed: unknown;
+
+    try {
+      parsed = JSON.parse(jsonBlock);
+    } catch {
+      continue;
+    }
+
+    if (!parsed || typeof parsed !== 'object') continue;
+
+    const record = parsed as Record<string, unknown>;
+    const inputIntegratedLufs = finiteLoudnormMetric(record, 'input_i');
+    const inputTruePeakDbtp = finiteLoudnormMetric(record, 'input_tp');
+    const inputLra = finiteLoudnormMetric(record, 'input_lra');
+    const inputThreshold = finiteLoudnormMetric(record, 'input_thresh');
+    const targetOffset = finiteLoudnormMetric(record, 'target_offset');
+
+    if (
+      inputIntegratedLufs !== null
+      && inputTruePeakDbtp !== null
+      && inputLra !== null
+      && inputThreshold !== null
+      && targetOffset !== null
+    ) {
+      return {
+        inputIntegratedLufs,
+        inputTruePeakDbtp,
+        inputLra,
+        inputThreshold,
+        targetOffset,
+      };
+    }
+  }
+
+  throw new Error('ffmpeg loudnorm analysis did not return finite measurements');
+}
+
+function loudnormAnalysisFilter(): string {
+  return [
+    `loudnorm=I=${LOUDNORM_TARGET_I}`,
+    `TP=${LOUDNORM_TARGET_TP}`,
+    `LRA=${LOUDNORM_TARGET_LRA}`,
+    'print_format=json',
+  ].join(':');
+}
+
+function loudnormSecondPassFilter(measurement: LoudnormMeasurement): string {
+  const loudnorm = [
+    `loudnorm=I=${LOUDNORM_TARGET_I}`,
+    `TP=${LOUDNORM_TARGET_TP}`,
+    `LRA=${LOUDNORM_TARGET_LRA}`,
+    `measured_I=${measurement.inputIntegratedLufs}`,
+    `measured_TP=${measurement.inputTruePeakDbtp}`,
+    `measured_LRA=${measurement.inputLra}`,
+    `measured_thresh=${measurement.inputThreshold}`,
+    `offset=${measurement.targetOffset}`,
+    'linear=true',
+    'print_format=summary',
+  ].join(':');
+
+  return `${loudnorm},aresample=24000`;
+}
+
+function shouldNormalizeResolvedAudio(measurement: LoudnormMeasurement): boolean {
+  const integratedOutsideTolerance = Math.abs(
+    measurement.inputIntegratedLufs - LOUDNORM_TARGET_I,
+  ) > LOUDNORM_INTEGRATED_TOLERANCE;
+
+  return integratedOutsideTolerance
+    || measurement.inputTruePeakDbtp > LOUDNORM_TARGET_TP;
+}
+
+async function analyzeResolvedVoiceoverAudio(
+  inputPath: string,
+  voiceoverPath: string,
+  shouldDuckOriginal: boolean,
+): Promise<LoudnormMeasurement> {
+  const analysisFilter = loudnormAnalysisFilter();
+  const args = shouldDuckOriginal
+    ? [
+        '-hide_banner',
+        '-nostats',
+        '-i',
+        inputPath,
+        '-i',
+        voiceoverPath,
+        '-filter_complex',
+        `[0:a:0]volume=0.25[a0];[1:a:0]volume=1.0[a1];[a0][a1]amix=inputs=2:duration=first:dropout_transition=0,${analysisFilter}[analysis]`,
+        '-map',
+        '[analysis]',
+        '-f',
+        'null',
+        '-',
+      ]
+    : [
+        '-hide_banner',
+        '-nostats',
+        '-i',
+        voiceoverPath,
+        '-map',
+        '0:a:0',
+        '-af',
+        analysisFilter,
+        '-f',
+        'null',
+        '-',
+      ];
+
+  const { stderr } = await execFileAsync('ffmpeg', args, {
+    encoding: 'utf8',
+    timeout: 180000,
+    maxBuffer: 1024 * 1024 * 4,
+  });
+
+  return parseLoudnormMeasurement(String(stderr));
+}
+
 async function runFfmpegCompose(inputPath: string, outputPath: string, textFiles: { title: string; cta: string; subtitle: string }, voiceoverPath?: string, audioMixMode: MediaComposerAudioMixMode = 'original_only'): Promise<void> {
   const videoFilter = [
     'scale=1080:1920:force_original_aspect_ratio=decrease',
@@ -225,7 +369,7 @@ async function runFfmpegCompose(inputPath: string, outputPath: string, textFiles
     outputPath,
   ];
 
-  if (!voiceoverPath) {
+  if (!voiceoverPath || audioMixMode === 'original_only') {
     await execFileAsync('ffmpeg', [
       '-hide_banner',
       '-y',
@@ -244,9 +388,21 @@ async function runFfmpegCompose(inputPath: string, outputPath: string, textFiles
 
   const inputHasAudio = await ffprobeHasAudio(inputPath);
   const shouldDuckOriginal = audioMixMode === 'duck_original_with_voiceover' && inputHasAudio;
+  const loudnormMeasurement = await analyzeResolvedVoiceoverAudio(
+    inputPath,
+    voiceoverPath,
+    shouldDuckOriginal,
+  );
+  const normalizeResolvedAudio = shouldNormalizeResolvedAudio(loudnormMeasurement);
+  const normalizationFilter = normalizeResolvedAudio
+    ? loudnormSecondPassFilter(loudnormMeasurement)
+    : null;
+
   const filterComplex = shouldDuckOriginal
-    ? `[0:v]${videoFilter}[v];[0:a:0]volume=0.25[a0];[1:a:0]volume=1.0[a1];[a0][a1]amix=inputs=2:duration=first:dropout_transition=0[a]`
-    : `[0:v]${videoFilter}[v]`;
+    ? `[0:v]${videoFilter}[v];[0:a:0]volume=0.25[a0];[1:a:0]volume=1.0[a1];[a0][a1]amix=inputs=2:duration=first:dropout_transition=0${normalizationFilter ? `,${normalizationFilter}` : ''}[a]`
+    : normalizationFilter
+      ? `[0:v]${videoFilter}[v];[1:a:0]${normalizationFilter}[a]`
+      : `[0:v]${videoFilter}[v]`;
 
   await execFileAsync('ffmpeg', [
     '-hide_banner',
@@ -260,7 +416,7 @@ async function runFfmpegCompose(inputPath: string, outputPath: string, textFiles
     '-map',
     '[v]',
     '-map',
-    shouldDuckOriginal ? '[a]' : '1:a:0',
+    shouldDuckOriginal || normalizationFilter ? '[a]' : '1:a:0',
     ...commonOutputArgs,
   ], { timeout: 180000, maxBuffer: 1024 * 1024 * 4 });
 }

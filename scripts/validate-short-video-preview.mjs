@@ -317,7 +317,7 @@ const mediaComposerRealRenderV2RequiredSnippets = [
   'master_video_url_is_original_upload: false',
   'ffprobeDurationSeconds',
   'voiceover audio is required for voiceover_only',
-  "shouldDuckOriginal ? '[a]' : '1:a:0'",
+  "shouldDuckOriginal || normalizationFilter ? '[a]' : '1:a:0'",
 ];
 
 for (const snippet of mediaComposerRealRenderV2RequiredSnippets) {

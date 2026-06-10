@@ -65,6 +65,7 @@ export type RealVideoQualityGateV2 = {
     mean_volume_db: number | null;
     max_volume_db: number | null;
     integrated_loudness_lufs: number | null;
+    true_peak_dbtp: number | null;
     opening_silence: boolean;
     clipping_risk: boolean;
   };
@@ -312,6 +313,7 @@ function analyzeAudio(localPath: string, hasAudio: boolean): RealVideoQualityGat
       mean_volume_db: null,
       max_volume_db: null,
       integrated_loudness_lufs: null,
+      true_peak_dbtp: null,
       opening_silence: false,
       clipping_risk: false,
     };
@@ -331,8 +333,25 @@ function analyzeAudio(localPath: string, hasAudio: boolean): RealVideoQualityGat
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
   });
-  const integrated = parseIntegratedLoudness(String(loudness.stderr || ''));
-  const loudnessNotSilent = parsed.mean !== null ? parsed.mean > -50 : integrated !== null ? integrated > -50 : false;
+  const loudnessText = String(loudness.stderr || '');
+  const integrated = parseIntegratedLoudness(loudnessText);
+  const truePeakMatches = [
+    ...loudnessText.matchAll(
+      /True peak:\s*Peak:\s*([+-]?(?:\d+(?:\.\d+)?|inf))\s*dBFS/gi,
+    ),
+  ];
+  const lastTruePeakMatch = truePeakMatches[truePeakMatches.length - 1];
+  const truePeakText = lastTruePeakMatch?.[1];
+  const parsedTruePeak = truePeakText ? Number(truePeakText) : Number.NaN;
+  const truePeakDbtp = Number.isFinite(parsedTruePeak)
+    ? parsedTruePeak
+    : null;
+  const loudnessNotSilent = parsed.mean !== null
+    ? parsed.mean > -50
+    : integrated !== null
+      ? integrated > -50
+      : false;
+
   return {
     has_audio: true,
     loudness_not_silent: loudnessNotSilent,
@@ -340,8 +359,13 @@ function analyzeAudio(localPath: string, hasAudio: boolean): RealVideoQualityGat
     mean_volume_db: parsed.mean,
     max_volume_db: parsed.max,
     integrated_loudness_lufs: integrated,
+    true_peak_dbtp: truePeakDbtp,
     opening_silence: detectsOpeningSilence(String(silence.stderr || '')),
-    clipping_risk: parsed.max !== null ? parsed.max > -1 : false,
+    clipping_risk: truePeakDbtp !== null
+      ? truePeakDbtp > -1
+      : parsed.max !== null
+        ? parsed.max > -1
+        : false,
   };
 }
 
@@ -402,6 +426,7 @@ function buildBase(masterVideoUrl: string, resolverSource: RealVideoAssetResolve
       mean_volume_db: null,
       max_volume_db: null,
       integrated_loudness_lufs: null,
+      true_peak_dbtp: null,
       opening_silence: false,
       clipping_risk: false,
     },
