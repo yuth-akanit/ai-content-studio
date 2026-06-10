@@ -181,7 +181,7 @@ export const THAI_UI_LABELS = {
   tiktok_script: 'บท TikTok',
   service_page: 'หน้าหลักบริการ',
   new_campaign: 'แคมเปญใหม่',
-  welcome_title: 'ยินดีต้อนรับสู่ AI Content Studio',
+  welcome_title: 'ยินดีต้อนรับสู่ PAA Air Content Studio',
   welcome_desc: 'เริ่มต้นด้วยการตั้งค่าข้อมูลธุรกิจของคุณเพื่อสร้างคอนเทนต์การตลาด',
   create_profile_btn: 'สร้างข้อมูลธุรกิจ',
   loading_dashboard: 'กำลังโหลดแดชบอร์ด...',

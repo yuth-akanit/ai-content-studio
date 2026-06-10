@@ -3,29 +3,29 @@ import Image from 'next/image';
 import Link from 'next/link';
 
 export const metadata: Metadata = {
-  title: 'Terms of Service | AI Content Studio',
-  description: 'Terms of Service for AI Content Studio.',
+  title: 'Terms of Service | PAA Air Content Studio',
+  description: 'Terms of Service for PAA Air Content Studio.',
 };
 
 const sections = [
   {
     title: '1. Service Overview',
     body: [
-      'AI Content Studio is a web app for businesses to create, schedule, and manage short-form video content. The service helps teams prepare content workflows for platforms including YouTube and TikTok.',
+      'PAA Air Content Studio is a web app for businesses to create, schedule, and manage short-form video content. The service helps teams prepare content workflows for platforms including YouTube and TikTok.',
       'The app may include tools for content generation, media management, scheduling, and publishing workflows. Availability of specific features may depend on platform API access, user permissions, and account configuration.',
     ],
   },
   {
     title: '2. Your Responsibilities',
     body: [
-      'You are responsible for the content you create, upload, schedule, publish, or manage through AI Content Studio. You must make sure your content complies with applicable laws, platform rules, advertising requirements, intellectual property rights, and privacy obligations.',
+      'You are responsible for the content you create, upload, schedule, publish, or manage through PAA Air Content Studio. You must make sure your content complies with applicable laws, platform rules, advertising requirements, intellectual property rights, and privacy obligations.',
       'You must not use the service to publish illegal, misleading, harmful, infringing, or unauthorized content.',
     ],
   },
   {
     title: '3. Platform Integrations',
     body: [
-      'AI Content Studio integrates with YouTube and TikTok through OAuth. When you connect a platform account, you authorize the app to access only the permissions approved during the OAuth flow.',
+      'PAA Air Content Studio integrates with YouTube and TikTok through OAuth. When you connect a platform account, you authorize the app to access only the permissions approved during the OAuth flow.',
       'Platform publishing, creator information, scheduling, and related features may fail or become unavailable if a platform changes its API, revokes permissions, limits access, or rejects content.',
     ],
   },
@@ -39,7 +39,7 @@ const sections = [
   {
     title: '5. Revoking Access and Deletion',
     body: [
-      'You can revoke AI Content Studio access from your YouTube or TikTok platform settings at any time. After revocation, connected features may stop working until you reconnect your account.',
+      'You can revoke PAA Air Content Studio access from your YouTube or TikTok platform settings at any time. After revocation, connected features may stop working until you reconnect your account.',
       'You may also request deletion of connected account data or stored integration tokens by contacting admin@paaair.com.',
     ],
   },
@@ -47,7 +47,7 @@ const sections = [
     title: '6. AI-Generated Content',
     body: [
       'AI-assisted outputs may require human review. You are responsible for reviewing generated content before using, scheduling, or publishing it.',
-      'AI Content Studio does not guarantee that generated content will be accurate, complete, lawful, or suitable for a specific campaign.',
+      'PAA Air Content Studio does not guarantee that generated content will be accurate, complete, lawful, or suitable for a specific campaign.',
     ],
   },
   {
@@ -66,7 +66,7 @@ const sections = [
   {
     title: '9. TikTok Integration Review',
     body: [
-      'AI Content Studio uses TikTok Login Kit and Content Posting API for official account connection and video upload preparation workflows.',
+      'PAA Air Content Studio uses TikTok Login Kit and Content Posting API for official account connection and video upload preparation workflows.',
       'The user.info.basic scope is used to identify the connected TikTok account. The video.upload scope is used for video upload preparation through the official TikTok API. Public posting remains disabled by default unless explicitly enabled after approval.',
     ],
   },
@@ -79,14 +79,14 @@ export default function TermsPage() {
         <div className="mb-5 flex items-center gap-3">
           <Image
             src="/app-icon.png"
-            alt="AI Content Studio app icon"
+            alt="PAA Air Content Studio app icon"
             width={48}
             height={48}
             priority
             className="rounded-xl"
           />
           <div>
-            <p className="text-sm font-medium text-blue-600">AI Content Studio</p>
+            <p className="text-sm font-medium text-blue-600">PAA Air Content Studio</p>
             <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-500">
               <Link href="/" className="hover:text-blue-600 hover:underline">
                 Homepage

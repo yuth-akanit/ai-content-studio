@@ -3,8 +3,8 @@ import Image from 'next/image';
 import Link from 'next/link';
 
 export const metadata: Metadata = {
-  title: 'TikTok Review Demo | AI Content Studio',
-  description: 'Sandbox review demo for AI Content Studio TikTok Login Kit and Content Posting API.',
+  title: 'TikTok Review Demo | PAA Air Content Studio',
+  description: 'Sandbox review demo for PAA Air Content Studio TikTok Login Kit and Content Posting API.',
 };
 
 const reviewSections = [
@@ -58,14 +58,14 @@ export default function TikTokReviewDemoPage() {
           <div className="flex items-center gap-3">
             <Image
               src="/app-icon.png"
-              alt="AI Content Studio app icon"
+              alt="PAA Air Content Studio app icon"
               width={56}
               height={56}
               priority
               className="rounded-2xl"
             />
             <div>
-              <p className="text-sm font-medium text-blue-600">AI Content Studio</p>
+              <p className="text-sm font-medium text-blue-600">PAA Air Content Studio</p>
               <h1 className="text-2xl font-semibold tracking-tight text-gray-950">
                 TikTok Review Demo
               </h1>

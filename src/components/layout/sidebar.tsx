@@ -60,7 +60,7 @@ export function Sidebar({ open, onOpenChange }: { open: boolean, onOpenChange: (
                 <Sparkles className="h-4 w-4 text-white" />
               </div>
               <div>
-                <h1 className="text-sm font-extrabold tracking-tight text-slate-950">AI Content Studio</h1>
+                <h1 className="text-sm font-extrabold tracking-tight text-slate-950">PAA Air Content Studio</h1>
                 <p className="text-[10px] font-medium text-slate-500">Service Business</p>
               </div>
             </Link>
@@ -93,7 +93,7 @@ export function Sidebar({ open, onOpenChange }: { open: boolean, onOpenChange: (
           <div className="border-t border-slate-200/70 px-4 py-4">
             <div className="rounded-2xl bg-slate-950/5 px-3 py-2.5 text-center">
               <p className="text-[10px] font-semibold text-slate-500">
-                AI Content Studio v1.0
+                PAA Air Content Studio v1.0
               </p>
             </div>
           </div>

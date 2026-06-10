@@ -18,7 +18,6 @@ import {
   ArrowRight,
   LayoutDashboard,
   ExternalLink,
-  History,
   Clock,
   RefreshCw,
   XCircle,
@@ -309,7 +308,7 @@ export default function DashboardPage() {
   if (!profileLoading && !profile) {
     return (
       <div>
-        <PageHeader title={THAI_UI_LABELS.dashboard} description="AI Content Studio for Service Business" />
+        <PageHeader title={THAI_UI_LABELS.dashboard} description="PAA Air Content Studio for Service Business" />
         <EmptyState
           icon={LayoutDashboard}
           title={THAI_UI_LABELS.welcome_title}

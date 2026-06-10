@@ -29,7 +29,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <Sparkles className="h-3.5 w-3.5 text-white" />
             </div>
             <div className="leading-tight">
-              <span className="block text-[13px] font-extrabold tracking-tight text-slate-950">AI Content Studio</span>
+              <span className="block text-[13px] font-extrabold tracking-tight text-slate-950">PAA Air Content Studio</span>
               <span className="block text-[10px] font-medium text-slate-500">สร้างคอนเทนต์ง่ายบนมือถือ</span>
             </div>
           </div>

@@ -20,7 +20,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "AI Content Studio",
+  title: "PAA Air Content Studio",
   description: "Create, schedule, and manage short-form video content for businesses.",
   icons: {
     icon: "/app-icon.png",

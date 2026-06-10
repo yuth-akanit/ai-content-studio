@@ -98,7 +98,7 @@ export function getPublicAppBaseUrl() {
 
 export function getTikTokRedirectUri() {
   const configuredUri = process.env.TIKTOK_REDIRECT_URI;
-  const fallbackUri = `${getPublicAppBaseUrl()}/api/oauth/tiktok/callback`;
+  const fallbackUri = `${getPublicAppBaseUrl()}/api/oauth/callback`;
   const redirectUri = configuredUri || fallbackUri;
 
   try {
