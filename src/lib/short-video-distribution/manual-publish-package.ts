@@ -99,7 +99,7 @@ function hashtagsFromText(text: string): string[] {
   return [...new Set((text.match(/#[\p{L}\p{N}_-]+/gu) || []).map((tag) => tag.trim()).filter(Boolean))];
 }
 
-function metadataCaption(metadata: PlatformMetadata): string {
+export function metadataCaption(metadata: PlatformMetadata): string {
   const record = metadata as Record<string, unknown>;
   if (typeof record.caption === 'string') return record.caption;
   if (typeof record.description === 'string') return record.description;
@@ -107,14 +107,14 @@ function metadataCaption(metadata: PlatformMetadata): string {
   return JSON.stringify(metadata);
 }
 
-function metadataHashtags(metadata: PlatformMetadata): string[] {
+export function metadataHashtags(metadata: PlatformMetadata): string[] {
   const record = metadata as Record<string, unknown>;
   if (Array.isArray(record.hashtags)) return record.hashtags.map((tag) => cleanText(tag)).filter(Boolean);
   if (Array.isArray(record.tags)) return record.tags.map((tag) => `#${cleanText(tag).replace(/^#/, '').replace(/\s+/g, '')}`).filter((tag) => tag !== '#');
   return hashtagsFromText(metadataCaption(metadata));
 }
 
-function metadataCta(metadata: PlatformMetadata): string {
+export function metadataCta(metadata: PlatformMetadata): string {
   const record = metadata as Record<string, unknown>;
   if (typeof record.cta === 'string') return record.cta;
   const caption = metadataCaption(metadata);

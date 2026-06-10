@@ -9,9 +9,13 @@ import { sampleMediaComposerMasterVideoRecord } from '@/lib/media-composer';
 import { loadShortVideoOwnerDecisionState, type ShortVideoOwnerReviewDecisionState } from '@/lib/short-video-distribution/owner-review-decisions';
 import { OwnerReviewDecisionPanel } from '@/components/short-video-distribution/owner-review-decision-panel';
 import { ManualPublishPackagePanel } from '@/components/short-video-distribution/manual-publish-package-panel';
+import { ManualPublishPackControls } from '@/components/short-video-distribution/manual-publish-pack-controls';
 import {
   buildManualPublishPackages,
   buildShortVideoPreviewSourceMetadata,
+  metadataCaption,
+  metadataHashtags,
+  metadataCta,
 } from '@/lib/short-video-distribution/manual-publish-package';
 import { buildRealVideoQualityGateV2, type RealVideoQualityGateV2 } from '@/lib/short-video-distribution/real-video-quality-gate';
 import { buildShortVideoPublishReadiness, type ShortVideoPublishReadiness } from '@/lib/short-video-distribution/publish-readiness';
@@ -142,6 +146,12 @@ function PlatformCard({
     : variant.creative_quality_gate.decision;
   const decisionClass = decisionStyleMap[displayedDecision] || 'border-slate-200 bg-slate-50 text-slate-700';
 
+  const isManualReady = !!(
+    publishReadiness.real_video_quality_gate_passed &&
+    publishReadiness.video_url_200 &&
+    publishReadiness.caption_present
+  );
+
   return (
     <Card className={`overflow-hidden bg-gradient-to-br shadow-sm ${platformAccentMap[variant.platform] || 'border-slate-200 from-white to-slate-50'}`}>
       <CardHeader className="border-b border-white/80 pb-4">
@@ -254,6 +264,25 @@ function PlatformCard({
                 {publishReadiness.blocked_reasons.map((reason) => <li key={reason}>{reason}</li>)}
               </ul>
             ) : null}
+
+            {/* API and Manual Publish Pack statuses */}
+            <div className="mt-3 pt-3 border-t border-dashed border-slate-200 space-y-1 text-xs">
+              <div className="flex items-center justify-between font-bold">
+                <span className="text-slate-600">API Publish:</span>
+                <span className="text-red-600">not connected</span>
+              </div>
+              <div className="flex items-center justify-between font-bold">
+                <span className="text-slate-600">Manual Publish Pack:</span>
+                <span className={isManualReady ? 'text-emerald-600' : 'text-red-600'}>
+                  {isManualReady ? 'ready' : 'not ready'}
+                </span>
+              </div>
+              {isManualReady && (
+                <p className="mt-2 text-[11px] leading-relaxed font-semibold text-emerald-800 bg-emerald-50/50 p-1.5 rounded-lg border border-emerald-100">
+                  API Publish ยังไม่เชื่อมต่อ แต่สามารถโพสต์เองได้ทันที
+                </p>
+              )}
+            </div>
           </div>
           <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
             <div className="flex items-center gap-2 text-sm font-bold text-amber-900">
@@ -272,6 +301,16 @@ function PlatformCard({
             </button>
           </div>
         </div>
+
+        {/* Manual Publish Pack Controls Section */}
+        <ManualPublishPackControls
+          platform={variant.platform}
+          videoUrl={variant.video_url || realVideoQualityGate.master_video_url || ''}
+          caption={metadataCaption(variant.metadata)}
+          hashtags={metadataHashtags(variant.metadata)}
+          cta={metadataCta(variant.metadata)}
+          isManualReady={isManualReady}
+        />
 
         <OwnerReviewDecisionPanel
           variantId={variant.variant_id}
