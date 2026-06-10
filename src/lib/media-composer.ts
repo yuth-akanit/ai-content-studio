@@ -51,12 +51,27 @@ export type MediaComposerMasterVideoOverrides = {
   fallback_used?: boolean;
   master_video_url_is_original_upload?: boolean;
   visible_overlays?: MediaComposerVisibleOverlays;
+  raw_video_asset_id?: string;
+  voiceover_asset_id?: string | null;
+  final_master_video_asset_id?: string;
+  final_master_video_url?: string;
+  generated_voiceover_used?: boolean;
+  voiceover_audio_used?: boolean;
+  audio_expectation?: 'required' | 'optional';
 };
 
 export type MediaComposerMasterVideoRecord = {
   id: string;
   record_type: 'master_video';
   master_video_url: string;
+  final_master_video_url: string;
+  raw_video_asset_id?: string;
+  voiceover_asset_id?: string | null;
+  final_master_video_asset_id?: string;
+  asset_role?: 'final_master_video';
+  generated_voiceover_used?: boolean;
+  voiceover_audio_used?: boolean;
+  audio_expectation?: 'required' | 'optional';
   duration_seconds: number;
   source_type: MediaComposerSourceType;
   tts_script: string;
@@ -166,6 +181,14 @@ export function buildMediaComposerMasterVideoRecord(input: MediaComposerInput, o
     id: `master_video_media_composer_${input.source_type}_preview_001`,
     record_type: 'master_video',
     master_video_url: masterVideoUrl,
+    final_master_video_url: overrides.final_master_video_url || masterVideoUrl,
+    raw_video_asset_id: overrides.raw_video_asset_id,
+    voiceover_asset_id: overrides.voiceover_asset_id,
+    final_master_video_asset_id: overrides.final_master_video_asset_id,
+    asset_role: overrides.final_master_video_asset_id ? 'final_master_video' : undefined,
+    generated_voiceover_used: overrides.generated_voiceover_used,
+    voiceover_audio_used: overrides.voiceover_audio_used,
+    audio_expectation: overrides.audio_expectation,
     duration_seconds: overrides.duration_seconds || 5.4,
     source_type: input.source_type,
     tts_script: ttsScript,

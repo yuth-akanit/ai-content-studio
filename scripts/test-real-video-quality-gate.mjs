@@ -27,6 +27,9 @@ const {
 } = await import(modulePath);
 const { buildShortVideoPublishReadiness } = await import(readinessPath);
 const { publishShortVideoDistribution } = await import(publishPath);
+const {
+  buildShortVideoPreviewSourceMetadata,
+} = await import('../src/lib/short-video-distribution/manual-publish-package.ts');
 
 function run(command, args) {
   execFileSync(command, args, { stdio: ['ignore', 'pipe', 'pipe'], timeout: 60000 });
@@ -98,9 +101,52 @@ assert.equal(validGate.score_label, 'technical_video_score', 'vision-disabled re
 assert.ok(validGate.quality_score > 0, 'technical score > 0');
 assert.deepEqual(beforeTmp, afterTmp, 'temporary frame directory cleaned');
 
-const noAudioGate = await buildRealVideoQualityGateV2(`https://studio.paaair.online/api/product-video/assets/${noAudioAssetId}`);
+const noAudioGate = await buildRealVideoQualityGateV2(`https://studio.paaair.online/api/product-video/assets/${noAudioAssetId}`, {
+  audio_expectation: 'required',
+});
 assert.equal(noAudioGate.audio_analyzed, true, 'no-audio inspection completed');
 assert.equal(noAudioGate.audio.has_audio, false, 'no-audio file returns has_audio=false');
+assert.equal(noAudioGate.decision, 'blocked', 'required audio missing blocks gate');
+assert.equal(noAudioGate.ready_for_publish, false, 'required audio missing keeps publish unready');
+assert.equal(noAudioGate.recommendations.includes('วิดีโอสุดท้ายไม่มีเสียง ทั้งที่ตั้งค่าให้ใช้เสียงบรรยาย'), true, 'required audio missing returns Thai hard-fail reason');
+
+const finalMasterAssetId = 'finalmaster001';
+const rawSourceAssetId = 'rawsource001';
+const finalMasterPath = path.join(uploadRoot, `${finalMasterAssetId}.mp4`);
+run('ffmpeg', [
+  '-y', '-f', 'lavfi', '-i', 'testsrc2=size=1080x1920:rate=24:duration=4',
+  '-f', 'lavfi', '-i', 'sine=frequency=1200:duration=4',
+  '-vf', 'hue=s=0.7', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest', finalMasterPath,
+]);
+await fsp.appendFile(metadataLog, metadata({ asset_id: finalMasterAssetId, saved_filename: `${finalMasterAssetId}.mp4`, mime_type: 'video/mp4', media_type: 'video', size_bytes: fs.statSync(finalMasterPath).size, local_asset_path: finalMasterPath, asset_role: 'final_master_video' }) + '\n');
+const sourceMetadata = buildShortVideoPreviewSourceMetadata({
+  master_video_id: 'master-video-id',
+  raw_video_asset_id: rawSourceAssetId,
+  final_master_video_asset_id: finalMasterAssetId,
+  video_asset_id: rawSourceAssetId,
+  master_video_url: `https://studio.paaair.online/api/product-video/assets/${rawSourceAssetId}`,
+  final_master_video_url: `https://studio.paaair.online/api/product-video/assets/${finalMasterAssetId}`,
+  audio_expectation: 'required',
+  source_badge: 'uploaded_asset',
+});
+assert.equal(sourceMetadata.raw_video_asset_id, rawSourceAssetId, 'raw source id is preserved separately');
+assert.equal(sourceMetadata.final_master_video_asset_id, finalMasterAssetId, 'final master id is preserved separately');
+assert.notEqual(sourceMetadata.raw_video_asset_id, sourceMetadata.final_master_video_asset_id, 'raw and final master IDs are distinct');
+assert.equal(sourceMetadata.analyzed_video_asset_id, finalMasterAssetId, 'distribution prefers final master for analysis');
+assert.equal(sourceMetadata.master_video_url, `https://studio.paaair.online/api/product-video/assets/${finalMasterAssetId}`, 'trusted final master URL overrides raw source URL');
+const finalMasterGate = await buildRealVideoQualityGateV2(sourceMetadata.master_video_url, {
+  final_master_video_asset_id: sourceMetadata.final_master_video_asset_id,
+  video_asset_id: sourceMetadata.analyzed_video_asset_id,
+  raw_video_asset_id: sourceMetadata.raw_video_asset_id,
+  audio_expectation: sourceMetadata.audio_expectation,
+});
+assert.equal(finalMasterGate.resolved_asset_id, finalMasterAssetId, 'quality gate analyzes final master asset id');
+assert.equal(finalMasterGate.analyzed_asset_id, finalMasterAssetId, 'analyzed asset id is final master');
+assert.equal(finalMasterGate.asset_role, 'final_master_video', 'asset role is final master');
+assert.equal(finalMasterGate.audio.has_audio, true, 'final master with audio passes audio presence');
+assert.equal(finalMasterGate.decision, 'passed', 'valid final master with audio passes technical analysis');
+assert.equal(finalMasterGate.ready_for_publish, true, 'valid final master is technically publish-ready before owner/provider gates');
+assert.notEqual(finalMasterGate.video_sha256_prefix, validGate.video_sha256_prefix, 'changed final master invalidates previous checksum');
 
 const invalidGate = await buildRealVideoQualityGateV2(`https://studio.paaair.online/api/product-video/assets/${invalidAssetId}`);
 assert.equal(invalidGate.ffprobe_performed, false, 'invalid video cannot ffprobe');
@@ -151,6 +197,11 @@ console.log(JSON.stringify({
     'ffprobe parser populates real media facts',
     'frame timestamps clamp and deduplicate',
     'no-audio returns audio_analyzed=true and has_audio=false',
+    'required audio missing blocks Gate with Thai hard-fail reason',
+    'distribution prefers final master over raw video',
+    'final master and raw IDs are distinct',
+    'valid final master with audio passes technical analysis',
+    'changed final master invalidates previous Gate/checksum',
     'invalid video cannot pass',
     'analysis runs once and is reused by page',
     'vision-disabled result uses technical_video_score',

@@ -208,8 +208,9 @@ function PlatformCard({
           <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm leading-6 text-slate-700">
             {realVideoQualityGate.real_video_quality_gate_v2 ? (
               <>
-                <p><span className="font-bold">resolver:</span> {realVideoQualityGate.asset_resolver_source} · <span className="font-bold">asset_id:</span> {realVideoQualityGate.resolved_asset_id ? `${realVideoQualityGate.resolved_asset_id.slice(0, 8)}…` : 'none'} · <span className="font-bold">sha:</span> {realVideoQualityGate.video_sha256_prefix || 'none'}</p>
+                <p><span className="font-bold">resolver:</span> {realVideoQualityGate.asset_resolver_source} · <span className="font-bold">final_master_asset_id:</span> {realVideoQualityGate.final_master_video_asset_id ? `${realVideoQualityGate.final_master_video_asset_id.slice(0, 8)}…` : 'none'} · <span className="font-bold">analyzed_asset_id:</span> {realVideoQualityGate.analyzed_asset_id ? `${realVideoQualityGate.analyzed_asset_id.slice(0, 8)}…` : 'none'} · <span className="font-bold">sha:</span> {realVideoQualityGate.video_sha256_prefix || 'none'}</p>
                 <p><span className="font-bold">ffprobe_performed:</span> {String(realVideoQualityGate.ffprobe_performed)} · <span className="font-bold">frames_extracted:</span> {String(realVideoQualityGate.frames_extracted)} · <span className="font-bold">audio_analyzed:</span> {String(realVideoQualityGate.audio_analyzed)}</p>
+                <p><span className="font-bold">score_kind:</span> {realVideoQualityGate.score_kind} · <span className="font-bold">analysis_timestamp:</span> {realVideoQualityGate.analysis_timestamp}</p>
                 <p><span className="font-bold">video:</span> {realVideoQualityGate.width}x{realVideoQualityGate.height}, {realVideoQualityGate.duration_seconds}s, aspect={realVideoQualityGate.aspect_ratio}, codec={realVideoQualityGate.video_codec || 'none'}</p>
                 <p><span className="font-bold">audio:</span> has_audio={String(realVideoQualityGate.audio.has_audio)}, codec={realVideoQualityGate.audio_codec || 'none'}, sample_rate={realVideoQualityGate.audio_sample_rate || 'none'}, channels={realVideoQualityGate.audio_channels || 'none'}</p>
                 <p><span className="font-bold">audio checks:</span> loudness_not_silent={String(realVideoQualityGate.audio.loudness_not_silent)}, opening_silence={String(realVideoQualityGate.audio.opening_silence)}, clipping_risk={String(realVideoQualityGate.audio.clipping_risk)}</p>
@@ -312,8 +313,11 @@ export default async function ShortVideoDistributionPage({ searchParams }: { sea
   };
   const preview = buildShortVideoPreviewQueue(masterVideoForPreview);
   const realVideoQualityGate = await buildRealVideoQualityGateV2(masterVideoForPreview.video_url, {
-    video_asset_id: sourceMetadata.video_asset_id,
+    final_master_video_asset_id: sourceMetadata.final_master_video_asset_id,
+    video_asset_id: sourceMetadata.analyzed_video_asset_id,
+    raw_video_asset_id: sourceMetadata.raw_video_asset_id,
     source_id: sourceMetadata.source_id,
+    audio_expectation: sourceMetadata.audio_expectation,
   });
   const ownerDecisionStateByVariant = await loadShortVideoOwnerDecisionState();
   const manualPublishPackages = buildManualPublishPackages(sourceMetadata, ownerDecisionStateByVariant);
@@ -374,6 +378,10 @@ export default async function ShortVideoDistributionPage({ searchParams }: { sea
               <p><span className="font-semibold">source_badge:</span> <Badge variant="outline" className={sourceBadgeTone}>{sourceMetadata.source_badge}</Badge></p>
               <p><span className="font-semibold">source_id:</span> {sourceMetadata.source_id}</p>
               <p><span className="font-semibold">video_asset_id:</span> {sourceMetadata.video_asset_id ? `${sourceMetadata.video_asset_id.slice(0, 8)}…` : 'not provided'}</p>
+              <p><span className="font-semibold">raw_video_asset_id:</span> {sourceMetadata.raw_video_asset_id ? `${sourceMetadata.raw_video_asset_id.slice(0, 8)}…` : 'not provided'}</p>
+              <p><span className="font-semibold">final_master_video_asset_id:</span> {sourceMetadata.final_master_video_asset_id ? `${sourceMetadata.final_master_video_asset_id.slice(0, 8)}…` : 'not provided'}</p>
+              <p><span className="font-semibold">analyzed_video_asset_id:</span> {sourceMetadata.analyzed_video_asset_id ? `${sourceMetadata.analyzed_video_asset_id.slice(0, 8)}…` : 'not provided'}</p>
+              <p><span className="font-semibold">audio_expectation:</span> {sourceMetadata.audio_expectation}</p>
             </div>
             <div>
               <div className="mb-2 font-black text-slate-950">Preview video reference</div>
@@ -404,6 +412,10 @@ export default async function ShortVideoDistributionPage({ searchParams }: { sea
                 <p><span className="font-semibold">source_badge:</span> {sourceMetadata.source_badge}</p>
                 <p><span className="font-semibold">source_id:</span> {sourceMetadata.source_id}</p>
                 <p><span className="font-semibold">video_asset_id:</span> {sourceMetadata.video_asset_id ? `${sourceMetadata.video_asset_id.slice(0, 8)}…` : 'not provided'}</p>
+              <p><span className="font-semibold">raw_video_asset_id:</span> {sourceMetadata.raw_video_asset_id ? `${sourceMetadata.raw_video_asset_id.slice(0, 8)}…` : 'not provided'}</p>
+              <p><span className="font-semibold">final_master_video_asset_id:</span> {sourceMetadata.final_master_video_asset_id ? `${sourceMetadata.final_master_video_asset_id.slice(0, 8)}…` : 'not provided'}</p>
+              <p><span className="font-semibold">analyzed_video_asset_id:</span> {sourceMetadata.analyzed_video_asset_id ? `${sourceMetadata.analyzed_video_asset_id.slice(0, 8)}…` : 'not provided'}</p>
+              <p><span className="font-semibold">audio_expectation:</span> {sourceMetadata.audio_expectation}</p>
                 <p><span className="font-semibold">ready_for_distribution_preview:</span> {String(sampleMediaComposerMasterVideoRecord.ready_for_distribution_preview)}</p>
                 <Link href="/media-composer" className="inline-flex min-h-10 items-center rounded-2xl border border-indigo-200 bg-indigo-50 px-4 font-black text-indigo-700 hover:bg-indigo-100">
                   เปิด Media Composer

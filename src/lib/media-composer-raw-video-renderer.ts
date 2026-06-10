@@ -32,6 +32,13 @@ export type RawVideoRenderResult = {
   status: RawVideoRendererStatus;
   render_mode: 'composed_preview_mp4';
   asset_id: string;
+  raw_video_asset_id: string;
+  voiceover_asset_id: string | null;
+  final_master_video_asset_id: string;
+  final_master_video_url: string;
+  master_video_url: string;
+  asset_role: 'final_master_video';
+  audio_expectation: 'required';
   saved_filename: string;
   local_asset_path: string;
   public_media_url: string;
@@ -139,6 +146,14 @@ function buildOutputMetadata(request: Request, original: ProductVideoUploadedAss
     media_urls: [publicMediaUrl],
     media_type: 'video',
     uploaded_at: new Date().toISOString(),
+    asset_role: 'final_master_video',
+    raw_video_asset_id: original.asset_id,
+    voiceover_asset_id: null,
+    final_master_video_asset_id: assetId,
+    generated_voiceover_used: false,
+    voiceover_audio_used: false,
+    audio_mix_mode: 'voiceover_only',
+    audio_expectation: 'required',
   };
 }
 
@@ -323,6 +338,10 @@ export async function renderUploadedRawVideoPreview(input: MediaComposerRawVideo
     await mkdir(workDir, { recursive: true });
     const textFiles = await writeOverlayTextFiles(workDir, input);
     await runFfmpegCompose(original.local_asset_path, output.local_asset_path, textFiles, voiceoverPath, audioMixMode);
+    output.voiceover_asset_id = voiceoverAssetId;
+    output.generated_voiceover_used = voiceoverOriginal?.source_badge === 'generated_voiceover';
+    output.voiceover_audio_used = Boolean(voiceoverPath);
+    output.audio_mix_mode = audioMixMode;
     const durationSeconds = await ffprobeDurationSeconds(output.local_asset_path);
     const { size } = await import('node:fs/promises').then(({ stat }) => stat(output.local_asset_path));
     await appendRenderedMetadata(output, size);
@@ -333,6 +352,13 @@ export async function renderUploadedRawVideoPreview(input: MediaComposerRawVideo
       status: 'rendered',
       render_mode: 'composed_preview_mp4',
       asset_id: output.asset_id,
+      raw_video_asset_id: original.asset_id,
+      voiceover_asset_id: voiceoverAssetId,
+      final_master_video_asset_id: output.asset_id,
+      final_master_video_url: output.public_media_url,
+      master_video_url: output.public_media_url,
+      asset_role: 'final_master_video',
+      audio_expectation: 'required',
       saved_filename: output.saved_filename,
       local_asset_path: output.local_asset_path,
       public_media_url: output.public_media_url,

@@ -23,6 +23,14 @@ export interface ProductVideoUploadedAssetMetadata {
   tts_model?: string;
   voice_name?: string;
   external_tts_calls_performed?: boolean;
+  asset_role?: 'raw_video' | 'voiceover_audio' | 'final_master_video';
+  raw_video_asset_id?: string;
+  voiceover_asset_id?: string | null;
+  final_master_video_asset_id?: string;
+  generated_voiceover_used?: boolean;
+  voiceover_audio_used?: boolean;
+  audio_mix_mode?: 'voiceover_only' | 'duck_original_with_voiceover' | 'original_only';
+  audio_expectation?: 'required' | 'optional';
 }
 
 const SAFE_ASSET_ID_RE = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,180}$/;
@@ -155,6 +163,14 @@ function parseMetadataLine(line: string): ProductVideoUploadedAssetMetadata | nu
       tts_model: typeof parsed.tts_model === 'string' ? parsed.tts_model : undefined,
       voice_name: typeof parsed.voice_name === 'string' ? parsed.voice_name : undefined,
       external_tts_calls_performed: typeof parsed.external_tts_calls_performed === 'boolean' ? parsed.external_tts_calls_performed : undefined,
+      asset_role: parsed.asset_role === 'final_master_video' || parsed.asset_role === 'raw_video' || parsed.asset_role === 'voiceover_audio' ? parsed.asset_role : undefined,
+      raw_video_asset_id: typeof parsed.raw_video_asset_id === 'string' ? parsed.raw_video_asset_id : undefined,
+      voiceover_asset_id: typeof parsed.voiceover_asset_id === 'string' ? parsed.voiceover_asset_id : null,
+      final_master_video_asset_id: typeof parsed.final_master_video_asset_id === 'string' ? parsed.final_master_video_asset_id : undefined,
+      generated_voiceover_used: typeof parsed.generated_voiceover_used === 'boolean' ? parsed.generated_voiceover_used : undefined,
+      voiceover_audio_used: typeof parsed.voiceover_audio_used === 'boolean' ? parsed.voiceover_audio_used : undefined,
+      audio_mix_mode: parsed.audio_mix_mode === 'voiceover_only' || parsed.audio_mix_mode === 'duck_original_with_voiceover' || parsed.audio_mix_mode === 'original_only' ? parsed.audio_mix_mode : undefined,
+      audio_expectation: parsed.audio_expectation === 'required' || parsed.audio_expectation === 'optional' ? parsed.audio_expectation : undefined,
       image_urls: Array.isArray(parsed.image_urls) ? parsed.image_urls : (mediaType === 'image' ? [publicMediaUrl].filter(Boolean) : []),
     } as ProductVideoUploadedAssetMetadata;
   } catch {

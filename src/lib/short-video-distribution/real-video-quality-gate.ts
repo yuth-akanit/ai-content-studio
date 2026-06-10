@@ -30,10 +30,18 @@ export type RealVideoAssetResolverError =
 export type RealVideoQualityGateV2 = {
   real_video_quality_gate_v2: true;
   score_label: 'technical_video_score' | 'vision_score';
+  score_kind: 'technical_video_score' | 'vision_score';
+  analysis_timestamp: string;
   master_video_url: string;
   local_video_path: string | null;
   asset_resolver_source: RealVideoAssetResolverSource;
   resolved_asset_id: string | null;
+  analyzed_asset_id: string | null;
+  raw_video_asset_id: string | null;
+  final_master_video_asset_id: string | null;
+  asset_role: 'final_master_video' | 'raw_video' | 'unknown';
+  audio_expectation: 'required' | 'optional';
+  ready_for_publish: boolean;
   video_sha256_prefix: string | null;
   ffprobe_performed: boolean;
   frames_extracted: boolean;
@@ -90,6 +98,9 @@ type FfprobePayload = {
 type BuildGateOptions = {
   video_asset_id?: string | null;
   source_id?: string | null;
+  raw_video_asset_id?: string | null;
+  final_master_video_asset_id?: string | null;
+  audio_expectation?: 'required' | 'optional' | string | null;
 };
 
 type SafeResolvedVideoAsset = {
@@ -206,6 +217,9 @@ async function resolveUploadedAsset(assetId: string, source: RealVideoAssetResol
 }
 
 async function resolveTrustedVideoAsset(masterVideoUrl: string, options: BuildGateOptions = {}): Promise<SafeResolvedVideoAsset> {
+  const explicitFinalMasterId = cleanText(options.final_master_video_asset_id);
+  if (explicitFinalMasterId) return resolveUploadedAsset(explicitFinalMasterId, 'explicit_video_asset_id');
+
   const explicitAssetId = cleanText(options.video_asset_id);
   if (explicitAssetId) return resolveUploadedAsset(explicitAssetId, 'explicit_video_asset_id');
 
@@ -344,15 +358,27 @@ function sha256Prefix(localPath: string): string | null {
   }
 }
 
-function buildBase(masterVideoUrl: string, resolverSource: RealVideoAssetResolverSource = 'blocked', assetId: string | null = null): RealVideoQualityGateV2 {
+function buildBase(masterVideoUrl: string, resolverSource: RealVideoAssetResolverSource = 'blocked', assetId: string | null = null, options: BuildGateOptions = {}): RealVideoQualityGateV2 {
   const visionEnabled = process.env.SHORT_VIDEO_VISION_ANALYSIS_APPROVED === 'true';
+  const scoreLabel = visionEnabled ? 'vision_score' : 'technical_video_score';
+  const finalMasterAssetId = cleanText(options.final_master_video_asset_id) || null;
+  const rawVideoAssetId = cleanText(options.raw_video_asset_id) || null;
+  const audioExpectation = options.audio_expectation === 'optional' ? 'optional' : 'required';
   return {
     real_video_quality_gate_v2: true,
-    score_label: visionEnabled ? 'vision_score' : 'technical_video_score',
+    score_label: scoreLabel,
+    score_kind: scoreLabel,
+    analysis_timestamp: new Date().toISOString(),
     master_video_url: masterVideoUrl,
     local_video_path: null,
     asset_resolver_source: resolverSource,
     resolved_asset_id: assetId,
+    analyzed_asset_id: assetId,
+    raw_video_asset_id: rawVideoAssetId,
+    final_master_video_asset_id: finalMasterAssetId,
+    asset_role: finalMasterAssetId && assetId === finalMasterAssetId ? 'final_master_video' : rawVideoAssetId && assetId === rawVideoAssetId ? 'raw_video' : 'unknown',
+    audio_expectation: audioExpectation,
+    ready_for_publish: false,
     video_sha256_prefix: null,
     ffprobe_performed: false,
     frames_extracted: false,
@@ -394,7 +420,7 @@ function buildBase(masterVideoUrl: string, resolverSource: RealVideoAssetResolve
 
 export async function buildRealVideoQualityGateV2(masterVideoUrl: string, options: BuildGateOptions = {}): Promise<RealVideoQualityGateV2> {
   const resolved = await resolveTrustedVideoAsset(masterVideoUrl, options);
-  const base = buildBase(masterVideoUrl, resolved.source, resolved.ok ? resolved.assetId : null);
+  const base = buildBase(masterVideoUrl, resolved.source, resolved.ok ? resolved.assetId : null, options);
 
   if (!resolved.ok) {
     base.errors.push(resolved.error);
@@ -403,6 +429,10 @@ export async function buildRealVideoQualityGateV2(masterVideoUrl: string, option
   }
 
   base.local_video_path = resolved.safeDisplayPath;
+  base.analyzed_asset_id = resolved.assetId;
+  base.asset_role = base.final_master_video_asset_id && resolved.assetId === base.final_master_video_asset_id
+    ? 'final_master_video'
+    : (resolved.metadata?.asset_role === 'final_master_video' ? 'final_master_video' : base.asset_role);
   base.video_sha256_prefix = sha256Prefix(resolved.canonicalPath);
 
   try {
@@ -438,16 +468,25 @@ export async function buildRealVideoQualityGateV2(masterVideoUrl: string, option
     const durationOk = Boolean(base.duration_seconds && base.duration_seconds > 0 && base.duration_seconds <= 90);
     const verticalOk = base.aspect_ratio === '9:16' || (base.width === 1080 && base.height === 1920);
     const framesOk = base.video_frames_analyzed >= 2;
-    const audioOk = !base.audio.has_audio || (base.audio.loudness_not_silent && !base.audio.clipping_risk);
+    const requiredAudioMissing = base.audio_expectation === 'required' && !base.audio.has_audio;
+    const audioOk = requiredAudioMissing ? false : (!base.audio.has_audio || (base.audio.loudness_not_silent && !base.audio.clipping_risk));
 
     base.hook_score = clampScore((durationOk ? 70 : 35) + (framesOk ? 20 : 0) + (base.duration_seconds && base.duration_seconds <= 15 ? 10 : 0));
     base.visual_clarity_score = clampScore((base.video_stream ? 45 : 0) + (verticalOk ? 35 : 10) + (framesOk ? 20 : 0));
-    base.audio_quality_score = clampScore(base.audio.has_audio
-      ? ((base.audio.loudness_not_silent ? 70 : 25) + (!base.audio.clipping_risk ? 20 : 0) + (!base.audio.opening_silence ? 10 : 0))
-      : 65);
+    base.audio_quality_score = clampScore(requiredAudioMissing
+      ? 0
+      : (base.audio.has_audio
+        ? ((base.audio.loudness_not_silent ? 70 : 25) + (!base.audio.clipping_risk ? 20 : 0) + (!base.audio.opening_silence ? 10 : 0))
+        : 65));
     base.platform_fit_score = clampScore((verticalOk ? 45 : 0) + (durationOk ? 35 : 0) + (base.video_stream ? 20 : 0));
     base.quality_score = clampScore((base.hook_score + base.visual_clarity_score + base.audio_quality_score + base.platform_fit_score) / 4);
-    base.decision = base.quality_score >= 80 ? 'passed' : base.quality_score >= 60 ? 'needs_review' : 'blocked';
+    base.decision = requiredAudioMissing ? 'blocked' : (base.quality_score >= 80 ? 'passed' : base.quality_score >= 60 ? 'needs_review' : 'blocked');
+    base.ready_for_publish = base.decision === 'passed';
+
+    if (requiredAudioMissing) {
+      base.recommendations.push('วิดีโอสุดท้ายไม่มีเสียง ทั้งที่ตั้งค่าให้ใช้เสียงบรรยาย');
+      base.errors.push('required_audio_missing');
+    }
 
     if (base.score_label === 'technical_video_score') {
       base.vision_model_called = false;
@@ -467,5 +506,5 @@ export async function buildRealVideoQualityGateV2(masterVideoUrl: string, option
 }
 
 export function hasPassedRealVideoQualityGateV2(gate: RealVideoQualityGateV2 | null | undefined): boolean {
-  return Boolean(gate?.real_video_quality_gate_v2 && gate.ffprobe_performed && gate.frames_extracted && gate.audio_analyzed && gate.video_stream && gate.decision === 'passed' && gate.quality_score >= 80);
+  return Boolean(gate?.real_video_quality_gate_v2 && gate.ffprobe_performed && gate.frames_extracted && gate.audio_analyzed && gate.video_stream && gate.ready_for_publish && gate.decision === 'passed' && gate.quality_score >= 80);
 }

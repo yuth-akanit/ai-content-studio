@@ -11,7 +11,17 @@ import type { ShortVideoOwnerReviewDecisionState } from '@/lib/short-video-distr
 export type ShortVideoPreviewSourceMetadata = {
   master_video_id: string;
   master_video_url: string;
+  final_master_video_url: string;
   video_asset_id: string;
+  raw_video_asset_id: string;
+  voiceover_asset_id: string;
+  final_master_video_asset_id: string;
+  analyzed_video_asset_id: string;
+  asset_role: string;
+  generated_voiceover_used: boolean;
+  voiceover_audio_used: boolean;
+  audio_mix_mode: string;
+  audio_expectation: 'required' | 'optional';
   source_type: string;
   source_badge: string;
   source_id: string;
@@ -124,14 +134,26 @@ export function buildShortVideoPreviewSourceMetadata(
   params: Record<string, string | string[] | undefined>,
 ): ShortVideoPreviewSourceMetadata {
   const requestedMasterVideoUrl = firstParam(params, 'master_video_url');
-  const masterVideoUrl = isHttpOrLocalVideoReference(requestedMasterVideoUrl)
-    ? requestedMasterVideoUrl
-    : sampleApprovedMasterVerticalVideo.video_url;
+  const requestedFinalMasterVideoUrl = firstParam(params, 'final_master_video_url');
+  const rawVideoAssetId = firstParam(params, 'raw_video_asset_id');
+  const finalMasterVideoAssetId = firstParam(params, 'final_master_video_asset_id');
+  const videoAssetId = firstParam(params, 'video_asset_id');
+  const audioExpectation = firstParam(params, 'audio_expectation') === 'optional' ? 'optional' : 'required';
+  const finalCompositionExpected = audioExpectation === 'required' && Boolean(rawVideoAssetId);
+  const trustedFinalMasterUrl = isHttpOrLocalVideoReference(requestedFinalMasterVideoUrl) ? requestedFinalMasterVideoUrl : '';
+  const trustedRequestedMasterUrl = isHttpOrLocalVideoReference(requestedMasterVideoUrl) ? requestedMasterVideoUrl : '';
+  const analyzedVideoAssetId = finalMasterVideoAssetId || (finalCompositionExpected ? '' : videoAssetId);
+  const masterVideoUrl = trustedFinalMasterUrl
+    || (finalMasterVideoAssetId ? `https://studio.paaair.online/api/product-video/assets/${encodeURIComponent(finalMasterVideoAssetId)}` : '')
+    || (finalCompositionExpected ? '' : trustedRequestedMasterUrl)
+    || sampleApprovedMasterVerticalVideo.video_url;
   const sourceBadge = firstParam(params, 'source_badge') || sampleMediaComposerMasterVideoRecord.source_badge;
   const hasRealPreviewMetadata = Boolean(
     firstParam(params, 'master_video_id')
       || firstParam(params, 'source_id')
       || requestedMasterVideoUrl
+      || requestedFinalMasterVideoUrl
+      || finalMasterVideoAssetId
       || firstParam(params, 'tts_script'),
   ) && sourceBadge !== 'sample';
   const fallbackUsed = boolFromParam(firstParam(params, 'fallback_used'), !hasRealPreviewMetadata);
@@ -139,7 +161,17 @@ export function buildShortVideoPreviewSourceMetadata(
   return {
     master_video_id: firstParam(params, 'master_video_id') || sampleApprovedMasterVerticalVideo.id,
     master_video_url: masterVideoUrl,
-    video_asset_id: firstParam(params, 'video_asset_id') || '',
+    final_master_video_url: trustedFinalMasterUrl || (finalMasterVideoAssetId ? masterVideoUrl : ''),
+    video_asset_id: videoAssetId || analyzedVideoAssetId,
+    raw_video_asset_id: rawVideoAssetId,
+    voiceover_asset_id: firstParam(params, 'voiceover_asset_id'),
+    final_master_video_asset_id: finalMasterVideoAssetId,
+    analyzed_video_asset_id: analyzedVideoAssetId,
+    asset_role: firstParam(params, 'asset_role') || (finalMasterVideoAssetId ? 'final_master_video' : ''),
+    generated_voiceover_used: boolFromParam(firstParam(params, 'generated_voiceover_used'), false),
+    voiceover_audio_used: boolFromParam(firstParam(params, 'voiceover_audio_used'), false),
+    audio_mix_mode: firstParam(params, 'audio_mix_mode') || 'voiceover_only',
+    audio_expectation: audioExpectation,
     source_type: firstParam(params, 'source_type') || sampleMediaComposerMasterVideoRecord.source_type,
     source_badge: sourceBadge,
     source_id: firstParam(params, 'source_id') || 'sample-image-pair',
