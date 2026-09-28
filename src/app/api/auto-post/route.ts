@@ -4,7 +4,7 @@ import { normalizeImageUrls, normalizeVideoUrl } from '@/lib/server/media-storag
 import { getSocialAccountTokenByPageId } from '@/lib/repositories/social-account-tokens';
 import { uploadYouTubeShort } from '@/lib/social-publish/youtube';
 import { postTikTokVideo, type TikTokPrivacyLevel } from '@/lib/social-publish/tiktok';
-import { getValidYouTubeAccessToken } from '@/lib/oauth/youtube-oauth';
+import { getValidYouTubeAccessToken, YouTubeReconnectRequiredError } from '@/lib/oauth/youtube-oauth';
 import { postToFacebookPage, type PostResult, type ErrorType, type ErrorStage } from '@/lib/social-publish/facebook';
 import { postToInstagram } from '@/lib/social-publish/instagram';
 
@@ -546,6 +546,10 @@ export async function POST(request: NextRequest) {
           };
         }
       } catch (err) {
+        const youtubeReconnectRequired =
+          provider === 'youtube' && err instanceof YouTubeReconnectRequiredError;
+        const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+
         return {
           page_id: page.id,
           page_name: page.name,
@@ -553,9 +557,11 @@ export async function POST(request: NextRequest) {
           success: false,
           post_id: '',
           post_external_id: '',
-          error: err instanceof Error ? err.message : 'Unknown error',
-          error_message: err instanceof Error ? err.message : 'Unknown error',
-          error_type: 'meta_publish',
+          error: errorMessage,
+          error_message: errorMessage,
+          error_code: youtubeReconnectRequired ? 'youtube_reconnect_required' : undefined,
+          needs_reconnect: youtubeReconnectRequired,
+          error_type: youtubeReconnectRequired ? 'preflight' : 'meta_publish',
           error_stage: normalizeProviderErrorStage(provider),
           comments_posted: 0,
         };
