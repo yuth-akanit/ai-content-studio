@@ -17,6 +17,7 @@ interface PostRequest {
   message?: string;
   image_urls?: string[];
   video_url?: string | null;
+  location_name?: string;
   scheduled_post_id?: string;
   privacy_status?: string;
   youtube_privacy_status?: string;
@@ -85,7 +86,15 @@ function normalizeTikTokPrivacyLevel(value?: string): TikTokPrivacyLevel | null 
   return TIKTOK_PRIVACY_LEVELS.has(value as TikTokPrivacyLevel) ? value as TikTokPrivacyLevel : null;
 }
 
+function normalizeLocationName(value?: string): string {
+  return value?.replace(/\s+/g, ' ').trim().slice(0, 180) || '';
+}
 
+function appendWorkLocation(message: string, locationName: string): string {
+  const trimmedMessage = message.trim();
+  if (!locationName || trimmedMessage.includes(locationName)) return trimmedMessage;
+  return `${trimmedMessage}\n\n📍 พื้นที่หน้างาน: ${locationName}`;
+}
 
 async function postCommentToFacebook(
   pageAccessToken: string,
@@ -206,6 +215,7 @@ export async function POST(request: NextRequest) {
       message,
       image_urls,
       video_url,
+      location_name,
       scheduled_post_id,
       privacy_status,
       youtube_privacy_status,
@@ -217,8 +227,10 @@ export async function POST(request: NextRequest) {
     const videoUrl = video_url || undefined;
     const requestedYouTubePrivacyStatus = normalizeYouTubePrivacyStatus(youtube_privacy_status || privacy_status);
     const requestedTikTokPrivacyLevel = normalizeTikTokPrivacyLevel(tiktok_privacy_level || privacy_level);
+    const normalizedLocationName = normalizeLocationName(location_name);
+    const publishMessage = appendWorkLocation(message || '', normalizedLocationName);
 
-    if (!content_id || !pageIds.length || !message?.trim()) {
+    if (!content_id || !pageIds.length || !publishMessage) {
       return NextResponse.json(
         {
           error: 'content_id, page_ids, and message are required',
@@ -301,7 +313,7 @@ export async function POST(request: NextRequest) {
           const postResult = await postToInstagram(
             token,
             page.external_id,
-            message,
+            publishMessage,
             publicImageUrls,
             publicVideoUrl,
           );
@@ -323,7 +335,7 @@ export async function POST(request: NextRequest) {
           const postResult = await postToFacebookPage(
             token,
             page.external_id,
-            message,
+            publishMessage,
             publicImageUrls,
             publicVideoUrl,
           );
@@ -359,7 +371,7 @@ export async function POST(request: NextRequest) {
         } else if (provider === 'line') {
           const postResult = await postToLineOA(
             token,
-            message,
+            publishMessage,
             publicImageUrls,
             publicVideoUrl,
           );
@@ -431,8 +443,8 @@ export async function POST(request: NextRequest) {
           const postResult = await uploadYouTubeShort({
             accessToken: youtubeAccessToken,
             videoUrl: publicVideoUrl,
-            title: buildVideoTitle(message),
-            description: message,
+            title: buildVideoTitle(publishMessage),
+            description: publishMessage,
             privacyStatus: requestedYouTubePrivacyStatus,
           });
 
@@ -517,7 +529,7 @@ export async function POST(request: NextRequest) {
           const postResult = await postTikTokVideo({
             accessToken: accountToken.access_token,
             videoUrl: publicVideoUrl,
-            caption: message,
+            caption: publishMessage,
             privacyLevel: requestedTikTokPrivacyLevel,
           });
 

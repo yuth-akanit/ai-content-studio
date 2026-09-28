@@ -1463,9 +1463,12 @@ useEffect(() => {
                     <Input
                       value={input.location || ''}
                       onChange={(e) => updateInput('location', e.target.value)}
-                      placeholder="เช่น กรุงเทพฯ และปริมณฑล"
+                      placeholder="เช่น บางโฉลง, บางพลี, สมุทรปราการ"
                       className="h-10"
                     />
+                    <p className="text-[10px] text-gray-400">
+                      ระบุพื้นที่หน้างานระดับตำบล/อำเภอ/จังหวัด ระบบจะนำไปใส่ในโพสต์อัตโนมัติ
+                    </p>
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-gray-700 font-medium">{THAI_UI_LABELS.promotion_offer}</Label>
@@ -1643,6 +1646,7 @@ useEffect(() => {
                   contentId={result.content?.id}
                   imageUrls={imagePreviews}
                   videoUrl={videoPreview || undefined}
+                  location={input.location || undefined}
                 />
               </div>
             )}

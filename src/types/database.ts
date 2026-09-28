@@ -134,6 +134,7 @@ export interface ScheduledPostPublishPayload {
   message: string;
   image_urls: string[];
   video_url: string | null;
+  location_name?: string;
   page_ids?: string[];
   social_page_id?: string;
   created_from: 'schedule_ui';
