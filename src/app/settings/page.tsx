@@ -42,11 +42,18 @@ const tiktokPrivacyOptions = [
   ['PUBLIC_TO_EVERYONE', 'disabled until TikTok approval and server enablement'],
 ] as const;
 
+interface YouTubeSocialPage {
+  id: string;
+  name: string;
+  provider: string;
+}
+
 export default function SettingsPage() {
   const [tab, setTab] = useState('tone');
   const [loading, setLoading] = useState(true);
   const [tiktokOAuthStatus, setTikTokOAuthStatus] = useState<'connected' | 'error' | null>(null);
   const [youtubeOAuthStatus, setYouTubeOAuthStatus] = useState<'connected' | 'error' | null>(null);
+  const [youtubePages, setYouTubePages] = useState<YouTubeSocialPage[]>([]);
   const [tonePresets, setTonePresets] = useState<TonePreset[]>([]);
   const [ctaPresets, setCTAPresets] = useState<CTAPreset[]>([]);
   const [platformPresets, setPlatformPresets] = useState<PlatformPreset[]>([]);
@@ -76,16 +83,22 @@ export default function SettingsPage() {
   async function loadAll() {
     setLoading(true);
     try {
-      const [t, c, p, pr] = await Promise.all([
+      const [t, c, p, pr, pages] = await Promise.all([
         fetch('/api/presets?type=tone').then(r => r.json()),
         fetch('/api/presets?type=cta').then(r => r.json()),
         fetch('/api/presets?type=platform').then(r => r.json()),
         fetch('/api/presets?type=prompt').then(r => r.json()),
+        fetch('/api/social-pages').then(r => r.json()),
       ]);
       setTonePresets(Array.isArray(t) ? t : []);
       setCTAPresets(Array.isArray(c) ? c : []);
       setPlatformPresets(Array.isArray(p) ? p : []);
       setPromptPresets(Array.isArray(pr) ? pr : []);
+      setYouTubePages(
+        Array.isArray(pages)
+          ? pages.filter((page: YouTubeSocialPage) => ['youtube', 'youtube_shorts'].includes(page.provider))
+          : [],
+      );
     } catch {
       // ok
     } finally {
@@ -192,6 +205,43 @@ export default function SettingsPage() {
           เชื่อม YouTube ไม่สำเร็จ กรุณาลองเชื่อมใหม่อีกครั้ง
         </div>
       )}
+
+      <Card className="mb-6 border-red-100 bg-white">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">YouTube Connection</CardTitle>
+          <p className="text-sm text-gray-500">
+            ใช้สำหรับ YouTube Shorts / Upload API หากขึ้น invalid_grant ให้เชื่อมบัญชีใหม่จากตรงนี้
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {youtubePages.length === 0 ? (
+            <p className="text-sm text-gray-500">ยังไม่พบช่อง YouTube ใน Social Pages</p>
+          ) : (
+            youtubePages.map((page) => (
+              <div
+                key={page.id}
+                className="flex flex-col gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div>
+                  <p className="text-sm font-medium text-gray-900">{page.name}</p>
+                  <p className="text-xs text-gray-500">OAuth token เก็บฝั่ง server และจะไม่แสดงในหน้านี้</p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    const url =
+                      `/api/oauth/youtube/connect?social_page_id=${encodeURIComponent(page.id)}&return_to=/settings`;
+                    window.location.assign(url);
+                  }}
+                >
+                  เชื่อม / เชื่อมใหม่
+                </Button>
+              </div>
+            ))
+          )}
+        </CardContent>
+      </Card>
 
       <Card className="mb-6 border-gray-200 bg-white">
         <CardHeader className="pb-3">
