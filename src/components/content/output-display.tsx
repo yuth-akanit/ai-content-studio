@@ -508,12 +508,13 @@ export function OutputDisplay({ output, platform, contentId, imageUrls, videoUrl
       });
 
       const data = await res.json();
-      if (data.success) {
+      const failedResult = (data.results as AutoPostResult[] | undefined)?.find((r) => !r.success);
+
+      if (data.success && !failedResult) {
         setPostProgress(100);
         setPostStatusMessage('โพสต์สำเร็จแล้ว');
         toast.success(`${THAI_UI_LABELS.post_success} (${data.posted}/${data.total})`);
       } else {
-        const failedResult = (data.results as AutoPostResult[] | undefined)?.find((r) => !r.success);
         const errorType = (failedResult?.error_type || data.error_type || 'meta_publish') as ErrorType;
         const errorStage = failedResult?.error_stage || data.error_stage;
         const errorMsg = failedResult?.error || data.error || THAI_UI_LABELS.post_failed;
@@ -524,7 +525,12 @@ export function OutputDisplay({ output, platform, contentId, imageUrls, videoUrl
             ? 'ต้องเชื่อม YouTube ใหม่'
             : `${mapErrorTypeLabel(errorType)} ล้มเหลว`,
         );
-        toast.error(`โพสต์ไม่สำเร็จ: ${errorMsg}`);
+
+        if (Number(data.posted) > 0) {
+          toast.error(`โพสต์สำเร็จ ${data.posted}/${data.total} ช่องทาง แต่มีบางช่องทางไม่สำเร็จ: ${errorMsg}`);
+        } else {
+          toast.error(`โพสต์ไม่สำเร็จ: ${errorMsg}`);
+        }
       }
     } catch (error: unknown) {
       const errorRecord = error && typeof error === 'object' ? error as Record<string, unknown> : {};
