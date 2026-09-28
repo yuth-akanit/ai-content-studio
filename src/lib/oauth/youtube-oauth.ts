@@ -34,6 +34,15 @@ interface GoogleTokenResponse {
   error_description?: string;
 }
 
+export class YouTubeReconnectRequiredError extends Error {
+  readonly code = 'youtube_reconnect_required';
+
+  constructor(message = 'การเชื่อมต่อ YouTube หมดอายุหรือถูกยกเลิก กรุณาเชื่อม YouTube ใหม่แล้วลองโพสต์อีกครั้ง') {
+    super(message);
+    this.name = 'YouTubeReconnectRequiredError';
+  }
+}
+
 function getYouTubeOAuthConfig(): YouTubeOAuthConfig {
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
@@ -197,7 +206,7 @@ export async function refreshYouTubeAccessToken(
   token: SocialAccountToken,
 ) {
   if (!token.refresh_token) {
-    throw new Error('YouTube token expired and refresh token is missing');
+    throw new YouTubeReconnectRequiredError('ไม่พบ YouTube refresh token กรุณาเชื่อม YouTube ใหม่แล้วลองโพสต์อีกครั้ง');
   }
 
   const config = getYouTubeOAuthConfig();
@@ -214,6 +223,9 @@ export async function refreshYouTubeAccessToken(
 
   const payload = await parseGoogleTokenResponse(response);
   if (!response.ok || !payload.access_token) {
+    if (payload.error === 'invalid_grant') {
+      throw new YouTubeReconnectRequiredError();
+    }
     throw new Error(`YouTube token refresh failed: ${sanitizeGoogleError(payload)}`);
   }
 
