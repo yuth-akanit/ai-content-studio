@@ -18,6 +18,7 @@ interface OutputDisplayProps {
   contentId?: string;
   imageUrls?: string[];
   videoUrl?: string;
+  location?: string;
 }
 
 interface SocialPage {
@@ -51,6 +52,7 @@ interface AutoPostPayload {
   message: string;
   image_urls?: string[];
   video_url?: string;
+  location_name?: string;
   privacy_status?: YouTubePrivacyStatus;
 }
 
@@ -96,7 +98,7 @@ function ContentBlock({ label, content, copyable = true }: { label: string; cont
   );
 }
 
-export function OutputDisplay({ output, platform, contentId, imageUrls, videoUrl }: OutputDisplayProps) {
+export function OutputDisplay({ output, platform, contentId, imageUrls, videoUrl, location }: OutputDisplayProps) {
   const [socialPages, setSocialPages] = useState<SocialPage[]>([]);
   const [selectedPageIds, setSelectedPageIds] = useState<string[]>([]);
   const [posting, setPosting] = useState(false);
@@ -111,6 +113,7 @@ export function OutputDisplay({ output, platform, contentId, imageUrls, videoUrl
   const [loadingScheduledPosts, setLoadingScheduledPosts] = useState(false);
   const [rescheduleValues, setRescheduleValues] = useState<Record<string, string>>({});
   const [youtubePrivacyStatus, setYoutubePrivacyStatus] = useState<YouTubePrivacyStatus>('unlisted');
+  const normalizedLocation = location?.replace(/\s+/g, ' ').trim() || '';
   
   const [activeTab, setActiveTab] = useState('medium');
   const hashtagLine = output.hashtags && output.hashtags.length > 0 ? output.hashtags.join(' ') : '';
@@ -451,6 +454,7 @@ export function OutputDisplay({ output, platform, contentId, imageUrls, videoUrl
         content_id: contentId,
         page_ids: selectedPageIds,
         message: finalTextPreview,
+        location_name: normalizedLocation || undefined,
       };
 
       if (imageUrls && imageUrls.length > 0) {
@@ -532,6 +536,7 @@ export function OutputDisplay({ output, platform, contentId, imageUrls, videoUrl
         message: finalTextPreview,
         image_urls: imageUrls || [],
         video_url: resolvedVideoUrl || null,
+        location_name: normalizedLocation || undefined,
         page_ids: selectedPageIds,
         created_from: 'schedule_ui',
         snapshot_version: 1,
@@ -876,6 +881,13 @@ export function OutputDisplay({ output, platform, contentId, imageUrls, videoUrl
                       </option>
                     ))}
                   </select>
+                </div>
+              )}
+              {normalizedLocation && (
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800 space-y-1">
+                  <p className="font-semibold">📍 พื้นที่หน้างาน: {normalizedLocation}</p>
+                  <p>ระบบจะเติมพื้นที่นี้ท้ายข้อความตอนโพสต์และตอนตั้งเวลาโพสต์โดยอัตโนมัติ</p>
+                  <p className="text-emerald-700">TikTok และ Facebook Video จะใช้พื้นที่ในข้อความโพสต์ เพราะ API ที่ใช้อยู่ไม่มีช่อง native location สำหรับ flow นี้</p>
                 </div>
               )}
               <div className="flex flex-wrap gap-2">
