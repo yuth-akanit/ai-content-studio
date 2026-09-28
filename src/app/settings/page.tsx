@@ -83,22 +83,27 @@ export default function SettingsPage() {
   async function loadAll() {
     setLoading(true);
     try {
-      const [t, c, p, pr, pages] = await Promise.all([
+      const [t, c, p, pr] = await Promise.all([
         fetch('/api/presets?type=tone').then(r => r.json()),
         fetch('/api/presets?type=cta').then(r => r.json()),
         fetch('/api/presets?type=platform').then(r => r.json()),
         fetch('/api/presets?type=prompt').then(r => r.json()),
-        fetch('/api/social-pages').then(r => r.json()),
       ]);
       setTonePresets(Array.isArray(t) ? t : []);
       setCTAPresets(Array.isArray(c) ? c : []);
       setPlatformPresets(Array.isArray(p) ? p : []);
       setPromptPresets(Array.isArray(pr) ? pr : []);
-      setYouTubePages(
-        Array.isArray(pages)
-          ? pages.filter((page: YouTubeSocialPage) => ['youtube', 'youtube_shorts'].includes(page.provider))
-          : [],
-      );
+
+      try {
+        const pages = await fetch('/api/social-pages').then(r => r.json());
+        setYouTubePages(
+          Array.isArray(pages)
+            ? pages.filter((page: YouTubeSocialPage) => ['youtube', 'youtube_shorts'].includes(page.provider))
+            : [],
+        );
+      } catch {
+        setYouTubePages([]);
+      }
     } catch {
       // ok
     } finally {
