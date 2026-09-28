@@ -46,6 +46,7 @@ export default function SettingsPage() {
   const [tab, setTab] = useState('tone');
   const [loading, setLoading] = useState(true);
   const [tiktokOAuthStatus, setTikTokOAuthStatus] = useState<'connected' | 'error' | null>(null);
+  const [youtubeOAuthStatus, setYouTubeOAuthStatus] = useState<'connected' | 'error' | null>(null);
   const [tonePresets, setTonePresets] = useState<TonePreset[]>([]);
   const [ctaPresets, setCTAPresets] = useState<CTAPreset[]>([]);
   const [platformPresets, setPlatformPresets] = useState<PlatformPreset[]>([]);
@@ -59,9 +60,15 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    const oauthStatus = new URLSearchParams(window.location.search).get('tiktok_oauth');
-    if (oauthStatus === 'connected' || oauthStatus === 'error') {
-      setTikTokOAuthStatus(oauthStatus);
+    const searchParams = new URLSearchParams(window.location.search);
+    const tiktokStatus = searchParams.get('tiktok_oauth');
+    const youtubeStatus = searchParams.get('youtube_oauth');
+
+    if (tiktokStatus === 'connected' || tiktokStatus === 'error') {
+      setTikTokOAuthStatus(tiktokStatus);
+    }
+    if (youtubeStatus === 'connected' || youtubeStatus === 'error') {
+      setYouTubeOAuthStatus(youtubeStatus);
     }
     loadAll();
   }, []);
@@ -174,6 +181,17 @@ export default function SettingsPage() {
   return (
     <div>
       <PageHeader title={THAI_UI_LABELS.settings} description={THAI_UI_LABELS.settings_desc} />
+
+      {youtubeOAuthStatus === 'connected' && (
+        <div className="mb-4 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+          YouTube เชื่อมต่อใหม่สำเร็จแล้ว ปิดหน้านี้และกลับไปกด “ลองโพสต์อีกครั้ง” ได้เลย
+        </div>
+      )}
+      {youtubeOAuthStatus === 'error' && (
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+          เชื่อม YouTube ไม่สำเร็จ กรุณาลองเชื่อมใหม่อีกครั้ง
+        </div>
+      )}
 
       <Card className="mb-6 border-gray-200 bg-white">
         <CardHeader className="pb-3">
