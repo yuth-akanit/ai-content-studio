@@ -43,6 +43,8 @@ interface PublishErrorState {
   type: ErrorType;
   stage?: string;
   message: string;
+  code?: string;
+  reconnectPageId?: string;
 }
 
 interface AutoPostPayload {
@@ -56,9 +58,13 @@ interface AutoPostPayload {
 
 interface AutoPostResult {
   success: boolean;
+  page_id?: string;
+  provider?: string;
   error?: string;
   error_type?: ErrorType;
   error_stage?: string;
+  error_code?: string;
+  needs_reconnect?: boolean;
 }
 
 const YOUTUBE_PRIVACY_OPTIONS: Array<{ value: YouTubePrivacyStatus; label: string }> = [
@@ -310,11 +316,41 @@ export function OutputDisplay({ output, platform, contentId, imageUrls, videoUrl
     if (stage === 'meta_publish_facebook') return 'โพสต์ไป Facebook';
     if (stage === 'meta_publish_instagram') return 'โพสต์ไป Instagram';
     if (stage === 'meta_publish_line') return 'โพสต์ไป LINE OA';
+    if (stage === 'youtube_publish') return 'เชื่อมต่อ / โพสต์ไป YouTube';
+    if (stage === 'tiktok_publish') return 'โพสต์ไป TikTok';
     return 'กำลังดำเนินการ';
   }
 
-  function setStructuredError(type: ErrorType, message: string, stage?: string) {
-    setPublishError({ type, message, stage });
+  function setStructuredError(
+    type: ErrorType,
+    message: string,
+    stage?: string,
+    code?: string,
+    reconnectPageId?: string,
+  ) {
+    setPublishError({ type, message, stage, code, reconnectPageId });
+  }
+
+  function handleReconnectYouTube() {
+    const pageId =
+      publishError?.reconnectPageId ||
+      selectedPages.find((page) => isYouTubePage(page))?.id;
+
+    if (!pageId) {
+      toast.error('ไม่พบช่อง YouTube ที่ต้องเชื่อมใหม่');
+      return;
+    }
+
+    const connectUrl =
+      `/api/oauth/youtube/connect?social_page_id=${encodeURIComponent(pageId)}&return_to=/settings`;
+    const popup = window.open(connectUrl, 'youtube-oauth-reconnect', 'popup,width=560,height=760');
+
+    if (!popup) {
+      window.location.assign(connectUrl);
+      return;
+    }
+
+    toast.info('เปิดหน้าต่างเชื่อม YouTube ใหม่แล้ว หลังอนุญาตเสร็จให้กลับมาหน้านี้และกด “ลองโพสต์อีกครั้ง”');
   }
 
   function getVideoSourceKey(source?: string): string {
@@ -481,8 +517,13 @@ export function OutputDisplay({ output, platform, contentId, imageUrls, videoUrl
         const errorType = (failedResult?.error_type || data.error_type || 'meta_publish') as ErrorType;
         const errorStage = failedResult?.error_stage || data.error_stage;
         const errorMsg = failedResult?.error || data.error || THAI_UI_LABELS.post_failed;
-        setStructuredError(errorType, errorMsg, errorStage);
-        setPostStatusMessage(`${mapErrorTypeLabel(errorType)} ล้มเหลว`);
+        const errorCode = failedResult?.error_code;
+        setStructuredError(errorType, errorMsg, errorStage, errorCode, failedResult?.page_id);
+        setPostStatusMessage(
+          errorCode === 'youtube_reconnect_required'
+            ? 'ต้องเชื่อม YouTube ใหม่'
+            : `${mapErrorTypeLabel(errorType)} ล้มเหลว`,
+        );
         toast.error(`โพสต์ไม่สำเร็จ: ${errorMsg}`);
       }
     } catch (error: unknown) {
@@ -926,7 +967,17 @@ export function OutputDisplay({ output, platform, contentId, imageUrls, videoUrl
                 <p className={`text-[11px] ${publishError ? 'text-red-600' : 'text-gray-500'}`}>
                   {publishError ? mapStageLabel(publishError.stage) : postStatusMessage || 'กำลังเตรียมระบบ'}
                 </p>
-                {!posting && publishError && (
+                {!posting && publishError?.code === 'youtube_reconnect_required' && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="w-full bg-red-600 hover:bg-red-700 text-white"
+                    onClick={handleReconnectYouTube}
+                  >
+                    เชื่อม YouTube ใหม่
+                  </Button>
+                )}
+                {!posting && publishError && publishError.code !== 'youtube_reconnect_required' && (
                   <Button
                     type="button"
                     variant="outline"
@@ -936,6 +987,18 @@ export function OutputDisplay({ output, platform, contentId, imageUrls, videoUrl
                   >
                     <RefreshCw className="h-3 w-3 mr-2" />
                     ลองใหม่อีกครั้ง
+                  </Button>
+                )}
+                {!posting && publishError?.code === 'youtube_reconnect_required' && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
+                    onClick={handleRetryPost}
+                  >
+                    <RefreshCw className="h-3 w-3 mr-2" />
+                    ลองโพสต์อีกครั้งหลังเชื่อมแล้ว
                   </Button>
                 )}
               </div>
